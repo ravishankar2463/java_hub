@@ -4,6 +4,11 @@ export interface RoadmapTopic {
   details: string[];
 }
 
+export interface InterviewQuestion {
+  question: string;
+  expectation: string;
+}
+
 export interface RoadmapLevel {
   level: number;
   title: string;
