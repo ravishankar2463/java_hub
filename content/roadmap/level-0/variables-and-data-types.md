@@ -197,7 +197,35 @@ double pi = 3.14;
 int roundedPi = (int) pi; // Manual casting: roundedPi is 3 (loss of .14)
 ```
 
-## 7. Experimenting in the Terminal (JShell)
+## 7. Wrapper Classes & Autoboxing
+
+While primitive types are incredibly fast, they have a major limitation: **they are not objects**. This becomes a problem when you want to use advanced Java features like Collections (e.g., `ArrayList`), which *only* accept objects.
+
+To solve this, Java provides **Wrapper Classes** that "wrap" primitives inside a standard Heap-allocated Object:
+- `int` -> `Integer`
+- `double` -> `Double`
+- `boolean` -> `Boolean`
+- `char` -> `Character`
+
+### Autoboxing and Unboxing
+Java automatically converts between primitives and their wrapper classes behind the scenes. This compiler magic is called Autoboxing (primitive to object) and Unboxing (object to primitive).
+
+```java
+// Autoboxing: The compiler automatically converts the primitive '5' into an 'Integer' object.
+Integer myNumber = 5; 
+
+// Unboxing: The compiler automatically extracts the primitive '5' from the 'Integer' object.
+int nativeInt = myNumber; 
+```
+
+> [!CAUTION]
+> Because Wrapper Classes are objects, they can be `null`! If you try to unbox a `null` wrapper class into a primitive, it will instantly throw a `NullPointerException`.
+> ```java
+> Integer price = null;
+> int nativePrice = price; // CRASH! NullPointerException
+> ```
+
+## 8. Experimenting in the Terminal (JShell)
 
 You don't need to write a full `public static void main` class and compile it just to test how variables work! Java 9 introduced `jshell`, an interactive REPL.
 
@@ -228,3 +256,6 @@ jshell> /exit
 
 **What happens if you cast a `double` value like `9.99` to an `int`?**
 > *Answer:* The fractional part is truncated (chopped off entirely), not mathematically rounded. The resulting `int` will be `9`.
+
+**What is the difference between `int` and `Integer`?**
+> *Answer:* `int` is a primitive type stored on the Stack. It is fast and cannot be `null`. `Integer` is a Wrapper Class reference type stored on the Heap. It is an object, can be `null`, and is required when working with object-only structures like `ArrayList<Integer>`.

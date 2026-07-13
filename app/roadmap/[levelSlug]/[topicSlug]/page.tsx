@@ -12,6 +12,7 @@ import { TableOfContents } from "@/components/TableOfContents";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
+import GithubSlugger from "github-slugger";
 export const dynamicParams = false;
 
 export async function generateStaticParams() {
@@ -56,11 +57,12 @@ export default async function TopicPage({ params }: { params: Promise<{ levelSlu
   const doc = parseMarkdownFile(filePath);
   const markdownContent = doc ? doc.content : `## ${topicTitle}\n\nContent for this topic is currently being developed. The deep-dive details, code examples, and advanced insights will be published here soon.\n\n> **Check back shortly!**`;
 
+  const slugger = new GithubSlugger();
   const headingLines = markdownContent.split('\n').filter(line => line.match(/^#{2,3}\s/));
   const headings = headingLines.map(line => {
     const level = line.match(/^#+/)?.[0].length || 2;
     const text = line.replace(/^#+\s/, '');
-    const id = text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
+    const id = slugger.slug(text);
     return { id, text, level };
   });
 

@@ -8,6 +8,7 @@ import { TableOfContents } from "@/components/TableOfContents";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
+import GithubSlugger from "github-slugger";
 
 export async function generateStaticParams() {
   const articles = getArticles();
@@ -29,11 +30,12 @@ export default async function ArticlePage({ params }: { params: Promise<{ catego
     notFound();
   }
 
+  const slugger = new GithubSlugger();
   const headingLines = article.content.split('\n').filter(line => line.match(/^#{2,3}\s/));
   const headings = headingLines.map(line => {
     const level = line.match(/^#+/)?.[0].length || 2;
     const text = line.replace(/^#+\s/, '');
-    const id = text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-');
+    const id = slugger.slug(text);
     return { id, text, level };
   });
 

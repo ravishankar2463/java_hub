@@ -41,16 +41,20 @@ export const roadmapData: RoadmapLevel[] = [
         details: ["Classes and the `main` method", "Statements and Semicolons", "Comments (Single, Multi-line, Javadoc)", "Compilation process & Bytecode"]
       },
       {
-        title: "Intro to OOPS",
-        details: ["The Blueprint vs the Instance", "Constructors & Object Initialization", "The `this` Keyword Mechanics", "Functions vs Methods", "Object References & The `null` Value"]
-      },
-      {
         title: "Variables and Data Types",
-        details: ["Primitive vs Reference Types", "The 8 Primitive Types & Literal Suffixes", "The `String` Constant Pool", "Type Casting (Implicit vs Explicit)", "Block Scope & Variable Shadowing", "Local Variable Type Inference (`var`)"]
+        details: ["Primitive vs Reference Types", "The 8 Primitive Types", "Wrapper Classes & Autoboxing", "The `String` Constant Pool", "Type Casting", "Block Scope", "Local Variable Type Inference (`var`)"]
       },
       {
         title: "Control Flow",
         details: ["Conditional Branching (`if`/`else`)", "The Ternary Operator", "Modern `switch` Expressions (Java 14+)", "Iterative Loops (`for`, `while`, `do-while`)", "Enhanced `for-each` Loop", "Flow Disruption: `break`, `continue`, & Labels"]
+      },
+      {
+        title: "Arrays & 2D Matrices",
+        details: ["1D Arrays", "2D/Multidimensional Arrays", "Memory layout", "`ArrayIndexOutOfBoundsException`", "The `Arrays` utility class"]
+      },
+      {
+        title: "Intro to OOPS",
+        details: ["The Blueprint vs the Instance", "Constructors & Object Initialization", "The `this` Keyword Mechanics", "Functions vs Methods", "Object References & The `null` Value"]
       }
     ]
   },
@@ -67,6 +71,10 @@ export const roadmapData: RoadmapLevel[] = [
         details: ["The blueprint vs the instance", "Constructors (Default, Parameterized, No-Args)", "The `this` keyword", "Instance vs Class (static) variables"]
       },
       {
+        title: "Memory References & Copying",
+        details: ["Pass-by-Value vs Pass-by-Reference", "The Assignment Trap", "Shallow Copy & Object.clone()", "Deep Copy & Copy Constructors"]
+      },
+      {
         title: "Encapsulation & Access Modifiers",
         details: ["`private`, `default`, `protected`, `public`", "Getters and Setters", "Immutability concepts", "Information hiding principles"]
       },
@@ -75,43 +83,65 @@ export const roadmapData: RoadmapLevel[] = [
         details: ["The `extends` keyword", "The `super` keyword and constructor chaining", "Method Overriding vs Overloading", "The cosmic `Object` class"]
       },
       {
-        title: "Polymorphism",
-        details: ["Compile-time (Static) vs Run-time (Dynamic) Polymorphism", "Upcasting and Downcasting", "The `instanceof` operator", "Pattern Matching for `instanceof` (Java 16+)"]
-      },
-      {
         title: "Abstraction",
         details: ["Abstract Classes and Methods", "Interfaces", "Multiple inheritance of types", "Default and Static methods in Interfaces"]
       },
       {
-        title: "Advanced Class Design",
-        details: ["Nested / Inner Classes", "Anonymous Inner Classes", "Enums (Advanced: State and Behavior)", "Records (Java 14+) for immutable data carriers"]
+        title: "Composition over Inheritance",
+        details: ["The Fragile Base Class problem", "Deep inheritance pitfalls", "Using interfaces + composition for modular design"]
       },
       {
-        title: "SOLID Principles Basics",
-        details: ["Single Responsibility Principle", "Open/Closed Principle", "Liskov Substitution Principle", "Interface Segregation", "Dependency Inversion"]
+        title: "Polymorphism",
+        details: ["Compile-time (Static) vs Run-time (Dynamic) Polymorphism", "Upcasting and Downcasting", "The `instanceof` operator", "Pattern Matching for `instanceof` (Java 16+)"]
+      },
+      {
+        title: "Advanced Class Design",
+        details: ["Nested / Inner Classes", "Anonymous Inner Classes", "Records (Java 14+) for immutable data carriers"]
       }
     ]
   },
   {
     level: 2,
-    title: "Level 2: The Core Master",
-    subtitle: "Data Structures & JVM Internals",
-    description: "Move beyond syntax and understand how Java actually works under the hood. Master the tools provided by the standard library to handle data and errors.",
+    title: "Level 2: The Core Master (Part 1)",
+    subtitle: "I/O, Exceptions, and Utilities",
+    description: "Move beyond syntax and understand how to handle errors, work with files, and connect over networks.",
     color: "from-emerald-500/20 to-emerald-500/5",
     badge: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
     topics: [
       {
-        title: "JVM Architecture Internals",
-        details: ["Classloaders (Bootstrap, Platform, System)", "The Execution Engine (JIT Compiler, Interpreter)", "Memory Areas: Stack vs Heap vs Metaspace", "The String Constant Pool mechanics"]
-      },
-      {
-        title: "Garbage Collection Basics",
-        details: ["Reachability and the Object Lifecycle", "Minor vs Major GC Collections", "Stop-the-World events", "Understanding `System.gc()` and `finalize()` (and why to avoid them)"]
-      },
-      {
         title: "Exception Handling",
         details: ["The Throwable Hierarchy (`Error`, `Exception`, `RuntimeException`)", "Checked vs Unchecked Exceptions", "`try-catch-finally` blocks", "Try-with-resources and `AutoCloseable`", "Creating Custom Domain Exceptions"]
       },
+      {
+        title: "Enums",
+        details: ["Advanced: State and Behavior", "Using enums in switch statements", "Enum constructors and methods"]
+      },
+      {
+        title: "The String Constant Pool & StringBuilders",
+        details: ["String immutability", "String interning", "`StringBuilder` vs `StringBuffer`"]
+      },
+      {
+        title: "Modern Core APIs",
+        details: ["The `java.time` API (LocalDate, ZonedDateTime, Duration)", "String formatting and modern String methods (Java 11+)", "The `HttpClient` API (Java 11+)"]
+      },
+      {
+        title: "I/O and NIO.2",
+        details: ["ByteStreams vs CharacterStreams", "Reading and Writing Files", "The `java.nio.file` package (`Paths`, `Files`)", "Serialization and Deserialization"]
+      },
+      {
+        title: "Network Socket Programming",
+        details: ["`ServerSocket`", "`Socket`", "TCP vs UDP", "Blocking I/O network calls"]
+      }
+    ]
+  },
+  {
+    level: 3,
+    title: "Level 3: The Core Master (Part 2)",
+    subtitle: "Data Structures & JVM Magic",
+    description: "Master the tools provided by the standard library to handle data, and learn how Java actually works under the hood.",
+    color: "from-cyan-500/20 to-cyan-500/5",
+    badge: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+    topics: [
       {
         title: "Generics",
         details: ["Type Erasure", "Generic Classes and Methods", "Bounded Type Parameters (`<T extends Comparable>`)", "Wildcards (`?`, `? extends T`, `? super T`)"]
@@ -125,18 +155,22 @@ export const roadmapData: RoadmapLevel[] = [
         details: ["`HashMap` internals (Buckets, Collisions, Red-Black Trees)", "`TreeMap` for sorted keys", "`LinkedHashMap` for insertion order", "The `equals()` and `hashCode()` contract"]
       },
       {
-        title: "I/O and NIO.2",
-        details: ["ByteStreams vs CharacterStreams", "Reading and Writing Files", "The `java.nio.file` package (`Paths`, `Files`)", "Serialization and Deserialization"]
+        title: "JVM Architecture Internals",
+        details: ["Classloaders (Bootstrap, Platform, System)", "The Execution Engine (JIT Compiler, Interpreter)", "Memory Areas: Stack vs Heap vs Metaspace"]
       },
       {
-        title: "Modern Core APIs",
-        details: ["The `java.time` API (LocalDate, ZonedDateTime, Duration)", "String formatting and modern String methods (Java 11+)", "The `HttpClient` API (Java 11+)"]
+        title: "Garbage Collection Basics",
+        details: ["Reachability and the Object Lifecycle", "Minor vs Major GC Collections", "Stop-the-World events", "Understanding `System.gc()` and `finalize()` (and why to avoid them)"]
+      },
+      {
+        title: "Reflection API & Custom Annotations",
+        details: ["The `Class<?>` object", "Dynamic method invocation", "Building custom `@Annotations`", "The performance cost of reflection"]
       }
     ]
   },
   {
-    level: 3,
-    title: "Level 3: The Functional Java Dev",
+    level: 4,
+    title: "Level 4: The Functional Java Dev",
     subtitle: "Declarative Programming",
     description: "Java 8 changed everything. Learn to write clean, declarative, and easily parallelizable code using functional programming paradigms.",
     color: "from-teal-500/20 to-teal-500/5",
@@ -165,92 +199,8 @@ export const roadmapData: RoadmapLevel[] = [
     ]
   },
   {
-    level: 4,
-    title: "Level 4: The Data Wrangler",
-    subtitle: "Databases and ORM",
-    description: "Applications need data. Master relational databases, SQL, and how to elegantly map Java objects to database tables using Hibernate.",
-    color: "from-yellow-500/20 to-yellow-500/5",
-    badge: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-    topics: [
-      {
-        title: "Relational Database Fundamentals",
-        details: ["ACID Properties", "Normalization (1NF, 2NF, 3NF)", "Primary Keys, Foreign Keys, and Constraints", "Joins (Inner, Left, Right, Full)"]
-      },
-      {
-        title: "Advanced SQL",
-        details: ["Indexes and Query Execution Plans", "Group By and Having clauses", "Window Functions", "Transactions and Isolation Levels", "Stored Procedures vs Functions"]
-      },
-      {
-        title: "Database Migrations",
-        details: ["Why use Schema Migrations?", "Flyway setup and syntax", "Liquibase basics", "Versioning database changes"]
-      },
-      {
-        title: "JDBC and Connection Pooling",
-        details: ["`Connection`, `Statement`, `PreparedStatement`", "Preventing SQL Injection", "ResultSets and Mappers", "Connection Pooling with HikariCP"]
-      },
-      {
-        title: "JPA and Hibernate Basics",
-        details: ["Entities, `@Id`, `@Column`, `@Table`", "The `EntityManager` and Persistence Context", "Entity Lifecycle (Transient, Persistent, Detached, Removed)", "Generating schemas automatically"]
-      },
-      {
-        title: "Entity Relationships",
-        details: ["`@OneToOne`, `@OneToMany`, `@ManyToOne`, `@ManyToMany`", "Unidirectional vs Bidirectional mapping", "The `mappedBy` attribute", "Cascade types and orphan removal"]
-      },
-      {
-        title: "Hibernate Performance Tuning",
-        details: ["Fetch Types (`EAGER` vs `LAZY`)", "The N+1 Query Problem", "Solving N+1 with `JOIN FETCH` and `@EntityGraph`", "L1 and L2 Caching strategies", "Optimistic Locking with `@Version`"]
-      },
-      {
-        title: "NoSQL Databases",
-        details: ["When to use NoSQL vs SQL", "Document Stores (MongoDB)", "Key-Value Stores (Redis) for Caching", "Graph Databases (Neo4j) Basics"]
-      }
-    ]
-  },
-  {
     level: 5,
-    title: "Level 5: The Spring Boot Artisan",
-    subtitle: "Enterprise Web Development",
-    description: "Spring Boot is the industry standard. Learn how to build robust, secure, and production-ready RESTful APIs.",
-    color: "from-orange-500/20 to-orange-500/5",
-    badge: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-    topics: [
-      {
-        title: "Build Tools",
-        details: ["Maven (pom.xml, lifecycles, dependencies)", "Gradle (build.gradle, tasks)", "Transitive Dependencies and Dependency Management"]
-      },
-      {
-        title: "Spring Core Internals",
-        details: ["Inversion of Control (IoC) Principle", "Dependency Injection (Constructor vs Field injection)", "The Application Context and Bean Lifecycle", "Bean Scopes (Singleton, Prototype, Request)", "Auto-Configuration magic (`@EnableAutoConfiguration`)"]
-      },
-      {
-        title: "Aspect-Oriented Programming (AOP)",
-        details: ["Cross-cutting concerns", "Aspects, Pointcuts, and Advice", "Creating custom `@Loggable` annotations"]
-      },
-      {
-        title: "Building RESTful APIs",
-        details: ["Richardson Maturity Model", "Spring Web MVC architecture (`DispatcherServlet`)", "`@RestController`, `@RequestMapping`, `@PathVariable`, `@RequestBody`", "Data validation with Jakarta Validation API", "Global Exception Handling (`@ControllerAdvice` and `ProblemDetail`)"]
-      },
-      {
-        title: "Spring Data JPA",
-        details: ["Repository interfaces (`CrudRepository`, `JpaRepository`)", "Query derivation from method names", "Custom `@Query` (JPQL and Native SQL)", "Pagination and Sorting", "Auditing (`@CreatedDate`, `@LastModifiedDate`)"]
-      },
-      {
-        title: "Spring Security Architecture",
-        details: ["The FilterChainProxy and SecurityFilterChain", "Authentication vs Authorization", "UserDetailsService and PasswordEncoders", "Role-Based Access Control (RBAC) with `@PreAuthorize`"]
-      },
-      {
-        title: "Stateless Authentication (JWT)",
-        details: ["OAuth2 vs OIDC vs JWTs", "Structure of a JSON Web Token", "Implementing a custom JWT Authentication Filter", "Refresh token rotation strategies"]
-      },
-      {
-        title: "Automated Testing",
-        details: ["Unit Testing with JUnit 5 and AssertJ", "Mocking dependencies with Mockito (`@Mock`, `@InjectMocks`)", "Controller testing with `MockMvc`", "Integration testing with `@SpringBootTest`", "Database testing with **TestContainers**"]
-      }
-    ]
-  },
-  {
-    level: 6,
-    title: "Level 6: The Concurrency Expert",
+    title: "Level 5: The Concurrency Expert",
     subtitle: "Mastering Threads & Multicore",
     description: "Write code that handles millions of requests safely. Deep dive into the Java Memory Model, locks, and the revolutionary Project Loom.",
     color: "from-red-500/20 to-red-500/5",
@@ -283,8 +233,122 @@ export const roadmapData: RoadmapLevel[] = [
     ]
   },
   {
+    level: 6,
+    title: "Level 6: The Architect",
+    subtitle: "Design Patterns & Principles",
+    description: "Build enterprise muscle memory. Master the patterns that scale to millions of lines of code without collapsing.",
+    color: "from-indigo-500/20 to-indigo-500/5",
+    badge: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+    topics: [
+      {
+        title: "SOLID Principles Basics",
+        details: ["Single Responsibility Principle", "Open/Closed Principle", "Liskov Substitution Principle", "Interface Segregation", "Dependency Inversion"]
+      },
+      {
+        title: "Creational Patterns",
+        details: ["Singleton", "Factory Method", "Abstract Factory", "Builder", "Prototype"]
+      },
+      {
+        title: "Structural Patterns",
+        details: ["Adapter", "Decorator", "Facade", "Proxy", "Composite"]
+      },
+      {
+        title: "Behavioral Patterns",
+        details: ["Strategy", "Observer", "Command", "State", "Template Method"]
+      },
+      {
+        title: "Architectural Patterns",
+        details: ["Hexagonal Architecture (Ports and Adapters)", "Clean Architecture / Onion Architecture", "CQRS (Command Query Responsibility Segregation)", "Strangler Fig pattern for migrating monoliths"]
+      }
+    ]
+  },
+  {
     level: 7,
-    title: "Level 7: The Microservices Architect",
+    title: "Level 7: The Data Wrangler",
+    subtitle: "Databases and ORM",
+    description: "Applications need data. Master relational databases, SQL, and how to elegantly map Java objects to database tables using Hibernate.",
+    color: "from-yellow-500/20 to-yellow-500/5",
+    badge: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+    topics: [
+      {
+        title: "Relational Database Fundamentals & Advanced SQL",
+        details: ["ACID Properties", "Normalization", "Indexes and Query Execution Plans", "Window Functions"]
+      },
+      {
+        title: "Database Migrations",
+        details: ["Why use Schema Migrations?", "Flyway setup and syntax", "Liquibase basics", "Versioning database changes"]
+      },
+      {
+        title: "JDBC and Connection Pooling",
+        details: ["`Connection`, `Statement`, `PreparedStatement`", "Preventing SQL Injection", "ResultSets and Mappers", "Connection Pooling with HikariCP"]
+      },
+      {
+        title: "JPA and Hibernate Basics",
+        details: ["Entities, `@Id`, `@Column`, `@Table`", "The `EntityManager` and Persistence Context", "Entity Lifecycle (Transient, Persistent, Detached, Removed)", "Generating schemas automatically"]
+      },
+      {
+        title: "Entity Relationships",
+        details: ["`@OneToOne`, `@OneToMany`, `@ManyToOne`, `@ManyToMany`", "Unidirectional vs Bidirectional mapping", "The `mappedBy` attribute", "Cascade types and orphan removal"]
+      },
+      {
+        title: "Hibernate Performance Tuning",
+        details: ["Fetch Types (`EAGER` vs `LAZY`)", "The N+1 Query Problem", "Solving N+1 with `JOIN FETCH` and `@EntityGraph`", "L1 and L2 Caching strategies", "Optimistic Locking with `@Version`"]
+      },
+      {
+        title: "NoSQL Databases",
+        details: ["When to use NoSQL vs SQL", "Document Stores (MongoDB)", "Key-Value Stores (Redis) for Caching", "Graph Databases (Neo4j) Basics"]
+      }
+    ]
+  },
+  {
+    level: 8,
+    title: "Level 8: The Spring Boot Artisan",
+    subtitle: "Enterprise Web Development",
+    description: "Spring Boot is the industry standard. Learn how to build robust, secure, and production-ready RESTful APIs.",
+    color: "from-orange-500/20 to-orange-500/5",
+    badge: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+    topics: [
+      {
+        title: "Build Tools",
+        details: ["Maven (pom.xml, lifecycles, dependencies)", "Gradle (build.gradle, tasks)", "Transitive Dependencies and Dependency Management"]
+      },
+      {
+        title: "Spring Core Internals",
+        details: ["Inversion of Control (IoC) Principle", "Dependency Injection (Constructor vs Field injection)", "The Application Context and Bean Lifecycle", "Bean Scopes (Singleton, Prototype, Request)", "Auto-Configuration magic (`@EnableAutoConfiguration`)"]
+      },
+      {
+        title: "Aspect-Oriented Programming (AOP)",
+        details: ["Cross-cutting concerns", "Aspects, Pointcuts, and Advice", "Creating custom `@Loggable` annotations"]
+      },
+      {
+        title: "Building RESTful APIs",
+        details: ["Richardson Maturity Model", "Spring Web MVC architecture (`DispatcherServlet`)", "`@RestController`, `@RequestMapping`, `@PathVariable`, `@RequestBody`", "Data validation with Jakarta Validation API", "Global Exception Handling (`@ControllerAdvice` and `ProblemDetail`)"]
+      },
+      {
+        title: "Spring Data JPA",
+        details: ["Repository interfaces (`CrudRepository`, `JpaRepository`)", "Query derivation from method names", "Custom `@Query` (JPQL and Native SQL)", "Pagination and Sorting", "Auditing (`@CreatedDate`, `@LastModifiedDate`)"]
+      },
+      {
+        title: "Spring Events, Caching, & Scheduling",
+        details: ["`ApplicationEventPublisher`", "`@EventListener`", "`@Scheduled` (Cron expressions)", "`@Cacheable`"]
+      },
+      {
+        title: "Spring Security Architecture",
+        details: ["The FilterChainProxy and SecurityFilterChain", "Authentication vs Authorization", "UserDetailsService and PasswordEncoders", "Role-Based Access Control (RBAC) with `@PreAuthorize`"]
+      },
+      {
+        title: "Stateless Authentication (JWT)",
+        details: ["OAuth2 vs OIDC vs JWTs", "Structure of a JSON Web Token", "Implementing a custom JWT Authentication Filter", "Refresh token rotation strategies"]
+      },
+      {
+        title: "Automated Testing",
+        details: ["Unit Testing with JUnit 5 and AssertJ", "Mocking dependencies with Mockito (`@Mock`, `@InjectMocks`)", "Controller testing with `MockMvc`", "Integration testing with `@SpringBootTest`", "Database testing with **TestContainers**"]
+      }
+    ]
+  },
+  {
+    level: 9,
+    title: "Level 9: The Microservices Architect",
     subtitle: "Distributed Systems",
     description: "Break the monolith. Learn how to design, deploy, and manage a fleet of independently scalable microservices.",
     color: "from-purple-500/20 to-purple-500/5",
@@ -317,15 +381,15 @@ export const roadmapData: RoadmapLevel[] = [
     ]
   },
   {
-    level: 8,
-    title: "Level 8: The Java God",
-    subtitle: "System Design & Cloud Native",
+    level: 10,
+    title: "Level 10: The Cloud-Native Java God",
+    subtitle: "Performance, DevOps, and Scale",
     description: "The pinnacle of Java mastery. You are now architecting globally distributed systems, squeezing every drop of performance from the JVM, and deploying to Kubernetes.",
     color: "from-fuchsia-500/20 to-fuchsia-500/5",
     badge: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20",
     topics: [
       {
-        title: "Advanced JVM Tuning",
+        title: "Advanced JVM Tuning & Profiling",
         details: ["Understanding GC Logs", "Choosing the right GC (G1GC vs ZGC vs Shenandoah)", "Memory Leak detection with Heap Dumps (.hprof)", "Profiling with Java Flight Recorder (JFR) and VisualVM"]
       },
       {
@@ -347,10 +411,6 @@ export const roadmapData: RoadmapLevel[] = [
       {
         title: "System Design: Observability",
         details: ["The Three Pillars: Logs, Metrics, Traces", "Distributed Tracing with OpenTelemetry and Jaeger", "Centralized Logging (ELK/EFK stack)", "Metrics with Micrometer, Prometheus, and Grafana"]
-      },
-      {
-        title: "Architectural Patterns",
-        details: ["Hexagonal Architecture (Ports and Adapters)", "Clean Architecture / Onion Architecture", "CQRS (Command Query Responsibility Segregation)", "Strangler Fig pattern for migrating monoliths"]
       },
       {
         title: "CI/CD and Infrastructure as Code",
