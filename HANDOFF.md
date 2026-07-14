@@ -36,10 +36,10 @@ We are NOT writing a beginner crash course. We are building a masterclass.
 - **Restructuring**: You have full permission to analyze the roadmap and dynamically re-order topics, split topics into parts, or introduce new modules if it creates a more logical learning progression (e.g., moving Abstraction before Composition).
 - **Refactoring**: If you notice a gap in an existing module (like Wrapper classes missing from primitive types), proactively go back and inject a deep dive section to fix it.
 
-### Immediate Next Step: Level 1, Abstraction
-Open or create `content/roadmap/level-1/abstraction.md`.
+### Immediate Next Step: Level 1, Polymorphism
+Open or create `content/roadmap/level-1/polymorphism.md`.
 **Requirements:**
-1. **Absolute Depth**: Explain Abstract classes vs Interfaces. Dive deep into default methods, static methods in interfaces, and how they solve the multiple inheritance problem.
+1. **Absolute Depth**: Explain Compile-time (Static) vs Run-time (Dynamic) Polymorphism. Dive into Upcasting, Downcasting, `ClassCastException`, and the modern Java 16+ Pattern Matching for `instanceof`.
 
 ### Ongoing Strategy
 Apply this exact standard of deep-dive rigorousness and Mermaid SVG architectural visualization to the remaining topics. Remember that Mermaid v11 requires wrapping node labels in double quotes (e.g. `A["Your Text"]`) if they contain special characters to avoid parsing errors.
@@ -58,8 +58,8 @@ Apply this exact standard of deep-dive rigorousness and Mermaid SVG architectura
 - [x] Memory References & Copying (Pass-by-Value, Shallow vs Deep Copy)
 - [x] Encapsulation & Access Modifiers
 - [x] Inheritance
-- [ ] Abstraction
-- [ ] Composition over Inheritance
+- [x] Abstraction
+- [x] Composition over Inheritance
 - [ ] Polymorphism
 - [ ] Advanced Class Design
 
