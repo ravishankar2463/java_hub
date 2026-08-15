@@ -68,7 +68,11 @@ export const roadmapData: RoadmapLevel[] = [
     topics: [
       {
         title: "Classes and Objects",
-        details: ["The blueprint vs the instance", "Constructors (Default, Parameterized, No-Args)", "The `this` keyword", "Instance vs Class (static) variables"]
+        details: ["The blueprint vs the instance", "Constructors (Default, Parameterized, No-Args)", "The `this` keyword", "Instance Variables & Methods"]
+      },
+      {
+        title: "The Static Keyword",
+        details: ["Static Variables & Memory (Metaspace)", "Static Methods & Utility Classes", "Static Initialization Blocks", "Why the `main` method is static"]
       },
       {
         title: "Memory References & Copying",

@@ -23,6 +23,7 @@ We are NOT writing a beginner crash course. We are building a masterclass.
 - You must explain the *why* alongside the *how*. 
 - Always tie concepts back to JVM internals (Heap vs Stack, Metaspace, JIT compiler, memory allocation vs access rights).
 - Provide complex, real-world edge cases (e.g., The Diamond Problem, the Fragile Base Class).
+- **Mandatory Examples & Diagrams**: Every single topic MUST have extensive code examples, edge-case traps, and visual Mermaid diagrams to explain architecture and memory. Never write a short, high-level summary. Go deep.
 
 ### 2. Markdown & Curriculum Syncing (Mistakes to Avoid)
 - **Slug Matching**: The filename in `content/roadmap/level-[x]/[slug].md` **MUST EXACTLY MATCH** the slugified `title` from `data/roadmap.ts` (e.g., `title: "Memory References & Copying"` -> `memory-references-copying.md`). Failure to do this causes 404 errors.
@@ -36,10 +37,10 @@ We are NOT writing a beginner crash course. We are building a masterclass.
 - **Restructuring**: You have full permission to analyze the roadmap and dynamically re-order topics, split topics into parts, or introduce new modules if it creates a more logical learning progression (e.g., moving Abstraction before Composition).
 - **Refactoring**: If you notice a gap in an existing module (like Wrapper classes missing from primitive types), proactively go back and inject a deep dive section to fix it.
 
-### Immediate Next Step: Level 1, Polymorphism
-Open or create `content/roadmap/level-1/polymorphism.md`.
+### Immediate Next Step: Level 2, I/O and NIO.2
+Open or create `content/roadmap/level-2/io-and-nio2.md`.
 **Requirements:**
-1. **Absolute Depth**: Explain Compile-time (Static) vs Run-time (Dynamic) Polymorphism. Dive into Upcasting, Downcasting, `ClassCastException`, and the modern Java 16+ Pattern Matching for `instanceof`.
+1. **Absolute Depth**: Explain legacy `java.io` (Streams, Readers/Writers, blocking I/O). Contrast with `java.nio` (Channels, Buffers, Selectors, non-blocking I/O). Dive deep into NIO.2 (`java.nio.file.Path`, `Files`). Provide Mermaid diagrams showing Buffer capacity/position/limit or Stream pipelines.
 
 ### Ongoing Strategy
 Apply this exact standard of deep-dive rigorousness and Mermaid SVG architectural visualization to the remaining topics. Remember that Mermaid v11 requires wrapping node labels in double quotes (e.g. `A["Your Text"]`) if they contain special characters to avoid parsing errors.
@@ -55,16 +56,24 @@ Apply this exact standard of deep-dive rigorousness and Mermaid SVG architectura
 
 **Level 1 Status:**
 - [x] Classes and Objects (Metaspace, Static vs Instance)
+- [x] The Static Keyword
 - [x] Memory References & Copying (Pass-by-Value, Shallow vs Deep Copy)
 - [x] Encapsulation & Access Modifiers
 - [x] Inheritance
 - [x] Abstraction
 - [x] Composition over Inheritance
-- [ ] Polymorphism
-- [ ] Advanced Class Design
+- [x] Polymorphism
+- [x] Advanced Class Design
+
+**Level 2 Status:**
+- [x] Exception Handling
+- [x] Enums
+- [x] The String Constant Pool & StringBuilders
+- [x] Modern Core APIs
+- [ ] I/O and NIO.2
+- [ ] Network Socket Programming
 
 **Future Levels:**
-- **Level 2:** The Core Master (Part 1)
 - **Level 3:** The Core Master (Part 2)
 - **Level 4:** The Functional Java Dev
 - **Level 5:** The Concurrency Expert
