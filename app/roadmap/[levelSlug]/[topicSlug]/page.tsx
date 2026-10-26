@@ -1,6 +1,6 @@
 import { roadmapData } from "@/data/roadmap";
 import { slugify } from "@/utils/slugify";
-import fs from "fs";
+import { existsSync } from "node:fs";
 import path from "path";
 import { parseMarkdownFile } from "@/lib/markdown";
 import { ArrowLeft, Map } from "lucide-react";
@@ -13,6 +13,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 import GithubSlugger from "github-slugger";
+import type { Components } from "react-markdown";
 export const dynamicParams = false;
 
 export async function generateStaticParams() {
@@ -54,17 +55,38 @@ export default async function TopicPage({ params }: { params: Promise<{ levelSlu
 
   const filePath = path.join(process.cwd(), "content", "roadmap", levelSlug, `${topicSlug}.md`);
   
-  const doc = parseMarkdownFile(filePath);
+  const doc = existsSync(filePath) ? parseMarkdownFile(filePath) : null;
   const markdownContent = doc ? doc.content : `## ${topicTitle}\n\nContent for this topic is currently being developed. The deep-dive details, code examples, and advanced insights will be published here soon.\n\n> **Check back shortly!**`;
 
   const slugger = new GithubSlugger();
-  const headingLines = markdownContent.split('\n').filter(line => line.match(/^#{2,3}\s/));
+  const headingLines = markdownContent.split('\n').filter(line => /^\s{0,3}#{2,3}\s/.test(line));
   const headings = headingLines.map(line => {
-    const level = line.match(/^#+/)?.[0].length || 2;
-    const text = line.replace(/^#+\s/, '');
+    const level = line.match(/^\s{0,3}(#+)/)?.[1].length || 2;
+    const text = line.replace(/^\s{0,3}#+\s/, '');
     const id = slugger.slug(text);
     return { id, text, level };
   });
+
+  const markdownComponents: Components = {
+    code({ className, children }) {
+      const match = /language-(\w+)/.exec(className || "");
+      if (match) {
+        if (match[1] === "mermaid") {
+          return <MermaidDiagram chart={String(children)} />;
+        }
+        return (
+          <div className="my-6">
+            <CodeBlock code={String(children).replace(/\n$/, "")} language={match[1]} />
+          </div>
+        );
+      }
+      return (
+        <code className="bg-black/5 dark:bg-white/10 px-1.5 py-0.5 rounded text-emerald-600 dark:text-emerald-300 font-mono text-sm">
+          {children}
+        </code>
+      );
+    },
+  };
 
   return (
     <div className="min-h-screen pt-24 pb-16 px-6 max-w-7xl mx-auto flex flex-col gap-8">
@@ -89,26 +111,7 @@ export default async function TopicPage({ params }: { params: Promise<{ levelSlu
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeSlug]}
-              components={{
-                code({ node, inline, className, children, ...props }: any) {
-                  const match = /language-(\w+)/.exec(className || "");
-                  if (!inline && match) {
-                    if (match[1] === "mermaid") {
-                      return <MermaidDiagram chart={String(children)} />;
-                    }
-                    return (
-                      <div className="my-6">
-                        <CodeBlock code={String(children).replace(/\n$/, "")} language={match[1]} />
-                      </div>
-                    );
-                  }
-                  return (
-                    <code className="bg-black/5 dark:bg-white/10 px-1.5 py-0.5 rounded text-emerald-600 dark:text-emerald-300 font-mono text-sm" {...props}>
-                      {children}
-                    </code>
-                  );
-                },
-              }}
+              components={markdownComponents}
             >
               {markdownContent}
             </ReactMarkdown>

@@ -35,7 +35,6 @@ export const BentoGridItem = ({
   header,
   icon,
   url,
-  category,
 }: {
   className?: string
   title?: string | React.ReactNode
@@ -43,7 +42,6 @@ export const BentoGridItem = ({
   header?: React.ReactNode
   icon?: React.ReactNode
   url: string
-  category: string
 }) => {
   return (
     <Link href={url} className="group h-full">

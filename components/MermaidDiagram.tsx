@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import mermaid from 'mermaid';
 import { Maximize2, X, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
@@ -8,16 +8,9 @@ import { createPortal } from 'react-dom';
 
 export function MermaidDiagram({ chart }: { chart: string }) {
   const [svg, setSvg] = useState('');
-  // Use a stable, unique ID for mermaid to render into
-  const [id] = useState(`mermaid-${Math.random().toString(36).substring(7)}`);
+  const id = `mermaid-${useId().replace(/:/g, '')}`;
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  // Avoid hydration mismatch with portals
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Handle escape key to close modal
   useEffect(() => {
@@ -32,7 +25,7 @@ export function MermaidDiagram({ chart }: { chart: string }) {
     mermaid.initialize({
       startOnLoad: false,
       theme: 'dark',
-      securityLevel: 'loose',
+      securityLevel: 'strict',
       fontFamily: 'var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif',
       themeVariables: {
         background: 'transparent',
@@ -90,7 +83,7 @@ export function MermaidDiagram({ chart }: { chart: string }) {
       </div>
 
       {/* Fullscreen Portal */}
-      {mounted && isModalOpen && createPortal(
+      {isModalOpen && createPortal(
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md">
           {/* Close Button */}
           <button 

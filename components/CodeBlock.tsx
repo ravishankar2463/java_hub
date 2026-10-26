@@ -24,7 +24,7 @@ export function CodeBlock({ code, language = 'java' }: { code: string, language?
           theme: 'github-dark-dimmed',
         })
         setHtml(output)
-      } catch (e) {
+      } catch {
         // Fallback if language is not supported
         const output = highlighter.codeToHtml(code, {
           lang: 'text',
@@ -55,8 +55,13 @@ export function CodeBlock({ code, language = 'java' }: { code: string, language?
       </div>
       <div 
         className="p-4 overflow-x-auto text-sm [&_pre]:!bg-transparent [&_pre]:!m-0 [&_code]:!grid"
-        dangerouslySetInnerHTML={{ __html: html || `<pre><code>${code}</code></pre>` }}
-      />
+      >
+        {html ? (
+          <div dangerouslySetInnerHTML={{ __html: html }} />
+        ) : (
+          <pre><code>{code}</code></pre>
+        )}
+      </div>
     </div>
   )
 }

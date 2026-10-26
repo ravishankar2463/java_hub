@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import matter from 'gray-matter';
-import { slugify } from '@/utils/slugify';
 
 export interface MarkdownDocument {
   slug: string;
@@ -11,7 +10,7 @@ export interface MarkdownDocument {
     description: string;
     date: string;
     category?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   content: string;
   filePath: string;

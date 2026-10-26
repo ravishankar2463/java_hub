@@ -1,4 +1,6 @@
 import type { NextConfig } from "next";
+import { existsSync, watch, utimesSync } from "node:fs";
+import path from "node:path";
 
 const isGithubActions = process.env.GITHUB_ACTIONS || false;
 let basePath = '';
@@ -12,19 +14,17 @@ if (isGithubActions) {
 // Watch for changes in the content directory in development
 if (process.env.NODE_ENV !== 'production') {
   try {
-    const fs = require('fs');
-    const path = require('path');
     let timeout: NodeJS.Timeout;
     
-    fs.watch(path.join(process.cwd(), 'content'), { recursive: true }, (eventType: string, filename: string) => {
+    watch(path.join(process.cwd(), 'content'), { recursive: true }, (eventType, filename) => {
       clearTimeout(timeout);
       timeout = setTimeout(() => {
         console.log(`[Content Watcher] Detected change in ${filename}, triggering fast refresh...`);
         // Touch lib/markdown.ts to trigger Next.js to recompile routes that depend on it
         const depPath = path.join(process.cwd(), 'lib', 'markdown.ts');
-        if (fs.existsSync(depPath)) {
+        if (existsSync(depPath)) {
           const now = new Date();
-          fs.utimesSync(depPath, now, now);
+          utimesSync(depPath, now, now);
         }
       }, 100); // Debounce to prevent multiple triggers
     });

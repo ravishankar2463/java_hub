@@ -1,5 +1,5 @@
 import { getArticles } from "@/lib/markdown";
-import { ArrowLeft, FileText } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CodeBlock } from "@/components/CodeBlock";
@@ -9,6 +9,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 import GithubSlugger from "github-slugger";
+import type { Components } from "react-markdown";
 
 export async function generateStaticParams() {
   const articles = getArticles();
@@ -31,13 +32,34 @@ export default async function ArticlePage({ params }: { params: Promise<{ catego
   }
 
   const slugger = new GithubSlugger();
-  const headingLines = article.content.split('\n').filter(line => line.match(/^#{2,3}\s/));
+  const headingLines = article.content.split('\n').filter(line => /^\s{0,3}#{2,3}\s/.test(line));
   const headings = headingLines.map(line => {
-    const level = line.match(/^#+/)?.[0].length || 2;
-    const text = line.replace(/^#+\s/, '');
+    const level = line.match(/^\s{0,3}(#+)/)?.[1].length || 2;
+    const text = line.replace(/^\s{0,3}#+\s/, '');
     const id = slugger.slug(text);
     return { id, text, level };
   });
+
+  const markdownComponents: Components = {
+    code({ className, children }) {
+      const match = /language-(\w+)/.exec(className || "");
+      if (match) {
+        if (match[1] === "mermaid") {
+          return <MermaidDiagram chart={String(children)} />;
+        }
+        return (
+          <div className="my-6">
+            <CodeBlock code={String(children).replace(/\n$/, "")} language={match[1]} />
+          </div>
+        );
+      }
+      return (
+        <code className="bg-black/5 dark:bg-white/10 px-1.5 py-0.5 rounded text-blue-600 dark:text-blue-300 font-mono text-sm">
+          {children}
+        </code>
+      );
+    },
+  };
 
   return (
     <div className="min-h-screen pt-24 pb-16 px-6 max-w-7xl mx-auto flex flex-col gap-8">
@@ -73,26 +95,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ catego
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeSlug]}
-              components={{
-                code({ node, inline, className, children, ...props }: any) {
-                  const match = /language-(\w+)/.exec(className || "");
-                  if (!inline && match) {
-                    if (match[1] === "mermaid") {
-                      return <MermaidDiagram chart={String(children)} />;
-                    }
-                    return (
-                      <div className="my-6">
-                        <CodeBlock code={String(children).replace(/\n$/, "")} language={match[1]} />
-                      </div>
-                    );
-                  }
-                  return (
-                    <code className="bg-black/5 dark:bg-white/10 px-1.5 py-0.5 rounded text-blue-600 dark:text-blue-300 font-mono text-sm" {...props}>
-                      {children}
-                    </code>
-                  );
-                },
-              }}
+              components={markdownComponents}
             >
               {article.content}
             </ReactMarkdown>

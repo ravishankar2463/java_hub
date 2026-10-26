@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BentoGrid, BentoGridItem } from "@/components/BentoGrid";
-import { MonitorPlay, Code, Database, Server, Map, FileText, ArrowRight } from "lucide-react";
+import { Map, FileText } from "lucide-react";
 import { getAllContent } from "@/lib/markdown";
 
 export default function Home() {
@@ -46,7 +46,6 @@ export default function Home() {
                 title={item.frontmatter.title}
                 description={item.frontmatter.description}
                 url={url}
-                category={item.category || "General"}
                 icon={<FileText className="h-6 w-6 text-emerald-400" />}
                 className={isWide ? "md:col-span-2" : "md:col-span-1"}
               />
