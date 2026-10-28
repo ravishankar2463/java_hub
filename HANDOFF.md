@@ -43,14 +43,14 @@ Continue in curriculum order. Compare `data/roadmap.ts` with `content/roadmap/le
 ### Ongoing Strategy
 Apply this exact standard of deep-dive rigorousness and Mermaid SVG architectural visualization to the remaining topics. Remember that Mermaid v11 requires wrapping node labels in double quotes (e.g. `A["Your Text"]`) if they contain special characters to avoid parsing errors.
 
-**Level 0 Status:**
-- [x] Environment Setup
-- [x] Git & Version Control
-- [x] Anatomy of a Java Program
-- [x] Variables and Data Types
-- [x] Control Flow
-- [x] Arrays & 2D Matrices
-- [x] Intro to OOPS (Classes & Methods)
+**Level 0 Status (Complete Human Voice Overhaul Done):**
+- [x] Environment Setup (Human voice, JVM/JRE/JDK bakery analogy, bytecode disassembly)
+- [x] Git & Version Control (Human voice, snapshots vs deltas, object database, reflog)
+- [x] Anatomy of a Java Program (Human voice, structural blueprint, bytecode analysis, Java 21+ unnamed classes)
+- [x] Variables and Data Types (Human voice, Stack vs Heap, IEEE 754 gotchas, Integer cache, var)
+- [x] Control Flow (Human voice, branch prediction, modern switch expressions, labeled loops)
+- [x] Arrays & 2D Matrices (Human voice, contiguous layout, CPU cache locality, System.arraycopy)
+- [x] Intro to OOPS (Human voice, Metaspace vs Heap, object lifecycle, this mechanics, null pitfalls)
 
 **Level 1 Status:**
 - [x] Classes and Objects (Metaspace, Static vs Instance)
@@ -139,3 +139,4 @@ Apply this exact standard of deep-dive rigorousness and Mermaid SVG architectura
 - [ ] CI/CD and Infrastructure as Code
 
 *You are building a resource for "Java Gods". Do not gloss over details.*
+
