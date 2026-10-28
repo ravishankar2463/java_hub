@@ -37,7 +37,7 @@ We are NOT writing a beginner crash course. We are building a masterclass.
 - **Restructuring**: You have full permission to analyze the roadmap and dynamically re-order topics, split topics into parts, or introduce new modules if it creates a more logical learning progression (e.g., moving Abstraction before Composition).
 - **Refactoring**: If you notice a gap in an existing module (like Wrapper classes missing from primitive types), proactively go back and inject a deep dive section to fix it.
 
-### Immediate Next Step: Level 8, Spring Events, Caching, & Scheduling
+### Immediate Next Step: Level 8, Spring Security Architecture
 Continue in curriculum order. Compare `data/roadmap.ts` with `content/roadmap/level-<n>/` before writing; create any missing topic at the exact slugified title and update its level checklist below.
 
 ### Ongoing Strategy
@@ -116,7 +116,7 @@ Apply this exact standard of deep-dive rigorousness and Mermaid SVG architectura
 - [x] Aspect-Oriented Programming (AOP)
 - [x] Building RESTful APIs
 - [x] Spring Data JPA
-- [ ] Spring Events, Caching, & Scheduling
+- [x] Spring Events, Caching, & Scheduling
 - [ ] Spring Security Architecture
 - [ ] Stateless Authentication (JWT)
 - [ ] Automated Testing
