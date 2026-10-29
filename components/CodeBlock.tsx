@@ -62,7 +62,7 @@ export function CodeBlock({
         })
         if (!isCancelled) setHtml(output)
       } catch {
-        // Fallback to plain text if language isn't supported
+        // Fallback to markdown if language isn't supported
         try {
           const output = highlighter.codeToHtml(code, {
             lang: 'markdown',
@@ -95,16 +95,16 @@ export function CodeBlock({
   const lineCount = code.split('\n').length
 
   return (
-    <div className="relative group rounded-xl overflow-hidden my-6 border border-black/10 dark:border-white/10 bg-[#22272e] shadow-md max-w-full">
+    <div className="relative group rounded-xl overflow-hidden my-6 border border-[var(--color-card-border)] bg-[#1c2128] shadow-sm max-w-full">
       {/* Code Header Bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-black/30 backdrop-blur-sm select-none">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-black/30 backdrop-blur-sm select-none">
         <div className="flex items-center gap-2">
-          <Code2 className="w-3.5 h-3.5 text-neutral-400" />
-          <span className="text-xs font-mono font-medium text-neutral-300 uppercase tracking-wider">
+          <Code2 className="w-3.5 h-3.5 text-slate-400" />
+          <span className="text-xs font-mono font-medium text-slate-300 uppercase tracking-wider">
             {language}
           </span>
           {lineCount > 1 && (
-            <span className="text-[10px] text-neutral-500 font-mono hidden sm:inline-block">
+            <span className="text-[10px] text-slate-400 font-mono hidden sm:inline-block">
               ({lineCount} lines)
             </span>
           )}
@@ -112,7 +112,7 @@ export function CodeBlock({
 
         <button
           onClick={copyToClipboard}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-white/10 text-neutral-400 hover:text-white transition-colors cursor-pointer min-h-[32px] text-xs font-medium"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-white/10 text-slate-300 hover:text-white transition-colors cursor-pointer min-h-[32px] text-xs font-medium"
           aria-label={copied ? "Code copied to clipboard" : "Copy code to clipboard"}
           title="Copy code"
         >
@@ -135,7 +135,7 @@ export function CodeBlock({
         {html ? (
           <div dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
-          <pre className="text-neutral-200">
+          <pre className="text-slate-200">
             <code>{code}</code>
           </pre>
         )}

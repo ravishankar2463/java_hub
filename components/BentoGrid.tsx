@@ -51,34 +51,34 @@ export const BentoGridItem = ({
       <motion.div
         whileHover={{ scale: 0.99, translateY: -2 }}
         className={cn(
-          "h-full rounded-3xl transition duration-200 p-6 sm:p-8 bg-black/[0.02] dark:bg-white/[0.02] border border-black/10 dark:border-white/10 hover:border-emerald-500/40 hover:bg-emerald-500/5 justify-between flex flex-col space-y-4 shadow-sm",
+          "h-full rounded-3xl transition duration-200 p-6 sm:p-8 bg-[var(--color-card)] border border-[var(--color-card-border)] hover:border-emerald-500/40 hover:bg-emerald-500/5 justify-between flex flex-col space-y-4 shadow-xs",
           className
         )}
       >
         <div>
           {header}
           <div className="flex items-center justify-between mb-4">
-            <div className="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 w-fit">
+            <div className="p-2.5 rounded-xl bg-[var(--color-card-subtle)] border border-[var(--color-border)] w-fit text-emerald-600 dark:text-emerald-400">
               {icon}
             </div>
             {category && (
-              <span className="text-[11px] font-mono font-medium px-2.5 py-0.5 rounded-full bg-black/5 dark:bg-white/10 text-neutral-500 uppercase tracking-wider">
+              <span className="text-[11px] font-mono font-medium px-2.5 py-0.5 rounded-full bg-[var(--color-card-subtle)] border border-[var(--color-border)] text-slate-600 dark:text-slate-400 uppercase tracking-wider">
                 {category}
               </span>
             )}
           </div>
 
           <div className="group-hover:translate-x-0.5 transition duration-200">
-            <div className="text-lg sm:text-xl font-bold text-foreground mb-2 group-hover:text-emerald-500 transition-colors">
+            <div className="text-lg sm:text-xl font-bold text-slate-900 dark:text-slate-100 mb-2 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
               {title}
             </div>
-            <div className="font-normal text-neutral-600 dark:text-neutral-400 text-sm leading-relaxed line-clamp-3">
+            <div className="font-normal text-slate-600 dark:text-slate-400 text-sm leading-relaxed line-clamp-3">
               {description}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 text-xs font-medium text-neutral-500 group-hover:text-emerald-500 transition-colors pt-2 border-t border-black/5 dark:border-white/5">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors pt-2 border-t border-[var(--color-border)]">
           <span>Read lesson</span>
           <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
         </div>

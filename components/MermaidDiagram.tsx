@@ -40,11 +40,11 @@ export function MermaidDiagram({ chart }: { chart: string }) {
       themeVariables: {
         background: 'transparent',
         primaryColor: '#059669',
-        primaryTextColor: '#fff',
+        primaryTextColor: '#f1f5f9',
         primaryBorderColor: '#34d399',
         lineColor: '#6ee7b7',
-        secondaryColor: '#1f2937',
-        tertiaryColor: '#111827',
+        secondaryColor: '#1e293b',
+        tertiaryColor: '#0f172a',
       }
     });
 
@@ -67,7 +67,7 @@ export function MermaidDiagram({ chart }: { chart: string }) {
 
   if (!svg) {
     return (
-      <div className="animate-pulse bg-black/5 dark:bg-white/5 rounded-2xl h-36 w-full my-6 flex items-center justify-center text-neutral-500 text-xs sm:text-sm font-mono border border-black/10 dark:border-white/10">
+      <div className="animate-pulse bg-[var(--color-card)] rounded-2xl h-36 w-full my-6 flex items-center justify-center text-slate-500 text-xs sm:text-sm font-mono border border-[var(--color-border)]">
         Rendering architectural diagram...
       </div>
     );
@@ -78,7 +78,7 @@ export function MermaidDiagram({ chart }: { chart: string }) {
       {/* Inline View */}
       <div className="relative group my-8">
         <div 
-          className="p-4 sm:p-8 bg-neutral-950 border border-black/10 dark:border-white/10 rounded-2xl overflow-x-auto flex justify-center items-center shadow-md transition-all group-hover:border-emerald-500/50 cursor-pointer min-h-[160px]"
+          className="p-4 sm:p-8 bg-[#161b22] border border-[var(--color-card-border)] rounded-2xl overflow-x-auto flex justify-center items-center shadow-xs transition-all group-hover:border-emerald-500/50 cursor-pointer min-h-[160px]"
           onClick={() => setIsModalOpen(true)}
           title="Click to expand full interactive diagram"
           dangerouslySetInnerHTML={{ __html: svg }}
@@ -87,7 +87,7 @@ export function MermaidDiagram({ chart }: { chart: string }) {
         {/* Action Badge Button */}
         <button 
           onClick={() => setIsModalOpen(true)}
-          className="absolute top-3 right-3 sm:top-4 sm:right-4 flex items-center gap-1.5 px-2.5 py-1.5 bg-neutral-900/90 hover:bg-emerald-600 text-white rounded-lg transition-all shadow-md backdrop-blur-sm border border-white/10 text-xs font-medium cursor-pointer"
+          className="absolute top-3 right-3 sm:top-4 sm:right-4 flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-900/90 hover:bg-emerald-600 text-white rounded-lg transition-all shadow-md backdrop-blur-sm border border-slate-700 text-xs font-medium cursor-pointer"
           title="Fullscreen Interactive Diagram"
           aria-label="Expand Diagram to Fullscreen"
         >
@@ -98,17 +98,17 @@ export function MermaidDiagram({ chart }: { chart: string }) {
 
       {/* Fullscreen Modal Portal */}
       {mounted && isModalOpen && createPortal(
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/95 backdrop-blur-md animate-in fade-in duration-200">
           {/* Header Bar */}
           <div className="absolute top-4 left-4 right-4 z-[110] flex items-center justify-between">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-neutral-900/90 border border-white/10 text-xs text-neutral-300">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/90 border border-slate-700 text-xs text-slate-300">
               <Move className="w-3.5 h-3.5 text-emerald-400" />
               <span>Pan & Zoom enabled • Scroll or pinch</span>
             </div>
 
             <button 
               onClick={() => setIsModalOpen(false)}
-              className="p-2.5 bg-neutral-900/90 hover:bg-red-600 text-white rounded-xl transition-colors shadow-2xl border border-white/10 cursor-pointer"
+              className="p-2.5 bg-slate-900/90 hover:bg-rose-600 text-white rounded-xl transition-colors shadow-2xl border border-slate-700 cursor-pointer"
               aria-label="Close Diagram"
             >
               <X className="w-5 h-5" />
@@ -125,28 +125,28 @@ export function MermaidDiagram({ chart }: { chart: string }) {
             {({ zoomIn, zoomOut, resetTransform }) => (
               <>
                 {/* Floating Bottom Controls */}
-                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[110] flex items-center gap-1.5 p-1.5 sm:p-2 bg-neutral-900/90 rounded-2xl border border-white/10 shadow-2xl backdrop-blur-md">
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[110] flex items-center gap-1.5 p-1.5 sm:p-2 bg-slate-900/90 rounded-2xl border border-slate-700 shadow-2xl backdrop-blur-md">
                   <button 
                     onClick={() => zoomOut()} 
-                    className="p-2.5 hover:bg-white/10 rounded-xl text-neutral-300 hover:text-white transition-colors cursor-pointer" 
+                    className="p-2.5 hover:bg-white/10 rounded-xl text-slate-300 hover:text-white transition-colors cursor-pointer" 
                     title="Zoom Out"
                     aria-label="Zoom Out"
                   >
                     <ZoomOut className="w-4 h-4 sm:w-5 sm:h-5" />
                   </button>
-                  <div className="w-px h-5 bg-white/10 mx-1" />
+                  <div className="w-px h-5 bg-slate-700 mx-1" />
                   <button 
                     onClick={() => resetTransform()} 
-                    className="p-2.5 hover:bg-white/10 rounded-xl text-neutral-300 hover:text-white transition-colors cursor-pointer" 
+                    className="p-2.5 hover:bg-white/10 rounded-xl text-slate-300 hover:text-white transition-colors cursor-pointer" 
                     title="Reset View"
                     aria-label="Reset View"
                   >
                     <RotateCcw className="w-4 h-4 sm:w-5 sm:h-5" />
                   </button>
-                  <div className="w-px h-5 bg-white/10 mx-1" />
+                  <div className="w-px h-5 bg-slate-700 mx-1" />
                   <button 
                     onClick={() => zoomIn()} 
-                    className="p-2.5 hover:bg-white/10 rounded-xl text-neutral-300 hover:text-white transition-colors cursor-pointer" 
+                    className="p-2.5 hover:bg-white/10 rounded-xl text-slate-300 hover:text-white transition-colors cursor-pointer" 
                     title="Zoom In"
                     aria-label="Zoom In"
                   >
@@ -160,7 +160,7 @@ export function MermaidDiagram({ chart }: { chart: string }) {
                   contentClass="w-full h-full flex items-center justify-center p-4 sm:p-12"
                 >
                   <div 
-                    className="p-8 sm:p-16 bg-neutral-950/90 border border-white/10 rounded-3xl shadow-[0_0_100px_rgba(0,0,0,1)] max-w-full overflow-hidden"
+                    className="p-8 sm:p-16 bg-[#161b22] border border-slate-700 rounded-3xl shadow-[0_0_100px_rgba(0,0,0,0.8)] max-w-full overflow-hidden"
                     dangerouslySetInnerHTML={{ __html: svg }}
                   />
                 </TransformComponent>

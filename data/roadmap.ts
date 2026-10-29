@@ -26,7 +26,7 @@ export const roadmapData: RoadmapLevel[] = [
     subtitle: "Setting the Foundation",
     description: "Welcome to Java! This stage is all about setting up your environment and understanding the absolute basics of programming syntax. No prior experience required.",
     color: "from-neutral-500/20 to-neutral-500/5",
-    badge: "bg-neutral-500/10 text-neutral-400 border-neutral-500/20",
+    badge: "bg-neutral-500/10 text-neutral-800 dark:text-neutral-200 border-neutral-500/30",
     topics: [
       {
         title: "Environment Setup",
@@ -64,7 +64,7 @@ export const roadmapData: RoadmapLevel[] = [
     subtitle: "Modeling the Real World",
     description: "Java is fundamentally an Object-Oriented language. Here you will learn how to design software by modeling data and behavior together into objects.",
     color: "from-blue-500/20 to-blue-500/5",
-    badge: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    badge: "bg-blue-500/10 text-blue-800 dark:text-blue-300 border-blue-500/30",
     topics: [
       {
         title: "Classes and Objects",
@@ -110,7 +110,7 @@ export const roadmapData: RoadmapLevel[] = [
     subtitle: "I/O, Exceptions, and Utilities",
     description: "Move beyond syntax and understand how to handle errors, work with files, and connect over networks.",
     color: "from-emerald-500/20 to-emerald-500/5",
-    badge: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    badge: "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/30",
     topics: [
       {
         title: "Exception Handling",
@@ -144,7 +144,7 @@ export const roadmapData: RoadmapLevel[] = [
     subtitle: "Data Structures & JVM Magic",
     description: "Master the tools provided by the standard library to handle data, and learn how Java actually works under the hood.",
     color: "from-cyan-500/20 to-cyan-500/5",
-    badge: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+    badge: "bg-cyan-500/10 text-cyan-800 dark:text-cyan-300 border-cyan-500/30",
     topics: [
       {
         title: "Generics",
@@ -178,7 +178,7 @@ export const roadmapData: RoadmapLevel[] = [
     subtitle: "Declarative Programming",
     description: "Java 8 changed everything. Learn to write clean, declarative, and easily parallelizable code using functional programming paradigms.",
     color: "from-teal-500/20 to-teal-500/5",
-    badge: "bg-teal-500/10 text-teal-400 border-teal-500/20",
+    badge: "bg-teal-500/10 text-teal-800 dark:text-teal-300 border-teal-500/30",
     topics: [
       {
         title: "Lambdas and Functional Interfaces",
@@ -208,7 +208,7 @@ export const roadmapData: RoadmapLevel[] = [
     subtitle: "Mastering Threads & Multicore",
     description: "Write code that handles millions of requests safely. Deep dive into the Java Memory Model, locks, and the revolutionary Project Loom.",
     color: "from-red-500/20 to-red-500/5",
-    badge: "bg-red-500/10 text-red-400 border-red-500/20",
+    badge: "bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-500/30",
     topics: [
       {
         title: "The Java Memory Model (JMM)",
@@ -242,7 +242,7 @@ export const roadmapData: RoadmapLevel[] = [
     subtitle: "Design Patterns & Principles",
     description: "Build enterprise muscle memory. Master the patterns that scale to millions of lines of code without collapsing.",
     color: "from-indigo-500/20 to-indigo-500/5",
-    badge: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+    badge: "bg-indigo-500/10 text-indigo-800 dark:text-indigo-300 border-indigo-500/30",
     topics: [
       {
         title: "SOLID Principles Basics",
@@ -272,7 +272,7 @@ export const roadmapData: RoadmapLevel[] = [
     subtitle: "Databases and ORM",
     description: "Applications need data. Master relational databases, SQL, and how to elegantly map Java objects to database tables using Hibernate.",
     color: "from-yellow-500/20 to-yellow-500/5",
-    badge: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+    badge: "bg-amber-500/10 text-amber-900 dark:text-amber-300 border-amber-500/30",
     topics: [
       {
         title: "Relational Database Fundamentals & Advanced SQL",
@@ -310,7 +310,7 @@ export const roadmapData: RoadmapLevel[] = [
     subtitle: "Enterprise Web Development",
     description: "Spring Boot is the industry standard. Learn how to build robust, secure, and production-ready RESTful APIs.",
     color: "from-orange-500/20 to-orange-500/5",
-    badge: "bg-orange-500/10 text-orange-400 border-orange-500/20",
+    badge: "bg-orange-500/10 text-orange-900 dark:text-orange-300 border-orange-500/30",
     topics: [
       {
         title: "Build Tools",
@@ -356,7 +356,7 @@ export const roadmapData: RoadmapLevel[] = [
     subtitle: "Distributed Systems",
     description: "Break the monolith. Learn how to design, deploy, and manage a fleet of independently scalable microservices.",
     color: "from-purple-500/20 to-purple-500/5",
-    badge: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+    badge: "bg-purple-500/10 text-purple-800 dark:text-purple-300 border-purple-500/30",
     topics: [
       {
         title: "Microservice Principles",
@@ -390,7 +390,7 @@ export const roadmapData: RoadmapLevel[] = [
     subtitle: "Performance, DevOps, and Scale",
     description: "The pinnacle of Java mastery. You are now architecting globally distributed systems, squeezing every drop of performance from the JVM, and deploying to Kubernetes.",
     color: "from-fuchsia-500/20 to-fuchsia-500/5",
-    badge: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20",
+    badge: "bg-fuchsia-500/10 text-fuchsia-800 dark:text-fuchsia-300 border-fuchsia-500/30",
     topics: [
       {
         title: "Advanced JVM Tuning & Profiling",

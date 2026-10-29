@@ -32,37 +32,37 @@ export default function RoadmapPage() {
     <div className="flex flex-col gap-12 w-full pb-16">
       {/* Hero Header */}
       <section className="flex flex-col items-center justify-center text-center gap-6 pt-6 sm:pt-10">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs sm:text-sm font-medium text-emerald-600 dark:text-emerald-400">
-          <Sparkles className="w-3.5 h-3.5" />
+        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-xs sm:text-sm font-medium text-emerald-800 dark:text-emerald-300">
+          <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
           <span>Interactive Career Curriculum</span>
-          <span className="text-neutral-400">&bull;</span>
+          <span className="text-slate-400">&bull;</span>
           <span className="font-mono">Java 21+</span>
         </div>
 
-        <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-foreground max-w-4xl leading-[1.15]">
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-slate-900 dark:text-slate-100 max-w-4xl leading-[1.15]">
           The Java Mastery Roadmap
         </h1>
 
-        <p className="max-w-2xl text-base sm:text-lg text-neutral-600 dark:text-neutral-400 leading-relaxed">
-          From your first <code className="bg-black/5 dark:bg-white/10 px-1.5 py-0.5 rounded text-xs font-mono">public static void main</code> to
+        <p className="max-w-2xl text-base sm:text-lg text-slate-600 dark:text-slate-400 leading-relaxed">
+          From your first <code className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40 px-1.5 py-0.5 rounded text-xs font-mono font-medium">public static void main</code> to
           architecting resilient, multi-region distributed cloud platforms. A unified, senior-engineer curated curriculum.
         </p>
 
         {/* Curriculum Stats Badges */}
         <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs sm:text-sm text-neutral-600 dark:text-neutral-300">
-            <Layers className="w-4 h-4 text-emerald-500" />
-            <span><strong>11</strong> Mastery Levels</span>
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[var(--color-card)] border border-[var(--color-border)] text-xs sm:text-sm text-slate-700 dark:text-slate-300 shadow-xs">
+            <Layers className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <span><strong className="text-slate-900 dark:text-slate-100">11</strong> Mastery Levels</span>
           </div>
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs sm:text-sm text-neutral-600 dark:text-neutral-300">
-            <CheckCircle className="w-4 h-4 text-emerald-500" />
-            <span><strong>{totalTopics}</strong> Deep-Dive Lessons</span>
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[var(--color-card)] border border-[var(--color-border)] text-xs sm:text-sm text-slate-700 dark:text-slate-300 shadow-xs">
+            <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <span><strong className="text-slate-900 dark:text-slate-100">{totalTopics}</strong> Deep-Dive Lessons</span>
           </div>
         </div>
 
-        {/* Level Quick-Jump Navigation Bar (Sticky/Scrollable) */}
-        <div className="w-full max-w-4xl mt-6 p-2 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/10 dark:border-white/10 backdrop-blur-md">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 mb-2 px-2 text-left">
+        {/* Level Quick-Jump Navigation Bar */}
+        <div className="w-full max-w-4xl mt-6 p-2 rounded-2xl bg-[var(--color-card)] border border-[var(--color-card-border)] shadow-xs">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2 px-2 text-left">
             Jump Directly to Level
           </div>
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin px-1">
@@ -70,7 +70,7 @@ export default function RoadmapPage() {
               <a
                 key={lvl.level}
                 href={`#level-${lvl.level}`}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 text-neutral-600 dark:text-neutral-300 hover:text-foreground hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all cursor-pointer"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap bg-[var(--color-card-subtle)] border border-[var(--color-border)] text-slate-700 dark:text-slate-300 hover:text-emerald-800 dark:hover:text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-all cursor-pointer"
               >
                 {lvl.label}
               </a>

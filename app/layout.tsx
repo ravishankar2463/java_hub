@@ -53,7 +53,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      <body className="min-h-full flex flex-col bg-[var(--color-background)] text-[var(--color-foreground)]">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -64,11 +64,11 @@ export default function RootLayout({
           <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
             {children}
           </main>
-          <footer className="w-full border-t border-black/10 dark:border-white/10 py-8 px-4 sm:px-6 lg:px-8 mt-auto bg-black/[0.01] dark:bg-white/[0.01]">
-            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-500">
+          <footer className="w-full border-t border-[var(--color-border)] py-8 px-4 sm:px-6 lg:px-8 mt-auto bg-[var(--color-card)]">
+            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
               <div className="flex items-center gap-2">
-                <Compass className="w-4 h-4 text-emerald-500" />
-                <span className="font-semibold text-foreground">JavaHub</span>
+                <Compass className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span className="font-semibold text-slate-900 dark:text-slate-100">JavaHub</span>
                 <span>&bull;</span>
                 <span>11 Levels &bull; 73 Deep-Dive Architecture Lessons</span>
               </div>

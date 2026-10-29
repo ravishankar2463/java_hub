@@ -115,15 +115,15 @@ export default async function TopicPage({
         );
       }
       return (
-        <code className="bg-black/5 dark:bg-white/10 px-1.5 py-0.5 rounded text-emerald-600 dark:text-emerald-300 font-mono text-sm">
+        <code className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40 px-1.5 py-0.5 rounded font-mono text-xs sm:text-sm font-medium">
           {children}
         </code>
       );
     },
     table({ children }) {
       return (
-        <div className="overflow-x-auto my-6 rounded-xl border border-black/10 dark:border-white/10">
-          <table className="min-w-full divide-y divide-black/10 dark:divide-white/10 text-sm">
+        <div className="overflow-x-auto my-6 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xs">
+          <table className="min-w-full divide-y divide-[var(--color-border)] text-sm text-slate-700 dark:text-slate-300">
             {children}
           </table>
         </div>
@@ -131,7 +131,7 @@ export default async function TopicPage({
     },
     blockquote({ children }) {
       return (
-        <blockquote className="my-6 pl-4 border-l-4 border-emerald-500 bg-emerald-500/5 dark:bg-emerald-500/10 py-3 pr-4 rounded-r-xl italic text-neutral-700 dark:text-neutral-300">
+        <blockquote className="my-6 pl-4 border-l-4 border-emerald-600/70 dark:border-emerald-400/70 bg-emerald-50/60 dark:bg-emerald-950/30 py-3 pr-4 rounded-r-xl italic text-slate-700 dark:text-slate-300 leading-relaxed">
           {children}
         </blockquote>
       );
@@ -146,7 +146,7 @@ export default async function TopicPage({
       {/* Breadcrumb Navigation */}
       <nav
         aria-label="Breadcrumb"
-        className="flex items-center flex-wrap gap-2 text-xs sm:text-sm text-neutral-500 dark:text-neutral-400"
+        className="flex items-center flex-wrap gap-2 text-xs sm:text-sm text-slate-500 dark:text-slate-400"
       >
         <Link
           href="/roadmap"
@@ -154,14 +154,14 @@ export default async function TopicPage({
         >
           <span>Roadmap</span>
         </Link>
-        <ChevronRight className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+        <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
         <Link
           href={`/roadmap#level-${currentTopic.levelNumber}`}
           className="hover:text-foreground transition-colors truncate max-w-[150px] sm:max-w-none"
         >
           Level {currentTopic.levelNumber}: {currentTopic.levelSubtitle}
         </Link>
-        <ChevronRight className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+        <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
         <span className="text-foreground font-medium truncate max-w-[200px] sm:max-w-none">
           {currentTopic.topicTitle}
         </span>
@@ -170,27 +170,27 @@ export default async function TopicPage({
       {/* Main Content & Table of Contents Layout */}
       <div className="flex flex-col xl:flex-row gap-8 xl:gap-12 relative items-start w-full">
         {/* Article Body Container */}
-        <article className="flex-1 min-w-0 w-full p-6 sm:p-10 md:p-12 rounded-2xl border border-black/10 dark:border-white/10 bg-black/[0.01] dark:bg-neutral-950/40 backdrop-blur-xl">
+        <article className="flex-1 min-w-0 w-full p-6 sm:p-10 md:p-12 rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-card)] shadow-xs">
           {/* Header Metadata */}
-          <header className="mb-8 pb-8 border-b border-black/10 dark:border-white/10">
+          <header className="mb-8 pb-8 border-b border-[var(--color-border)]">
             <div className="flex flex-wrap items-center gap-2.5 mb-4">
-              <span className="px-3 py-1 text-xs font-semibold uppercase tracking-wider rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <span className="px-3 py-1 text-xs font-semibold uppercase tracking-wider rounded-full bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
                 Level {currentTopic.levelNumber}
               </span>
-              <span className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-neutral-600 dark:text-neutral-400">
-                <Clock className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-full bg-[var(--color-card-subtle)] border border-[var(--color-border)] text-slate-600 dark:text-slate-300">
+                <Clock className="w-3.5 h-3.5 text-slate-400" />
                 {readingTimeMinutes} min read
               </span>
-              <span className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-neutral-600 dark:text-neutral-400">
-                <BookOpen className="w-3.5 h-3.5" />
+              <span className="flex items-center gap-1.5 px-3 py-1 text-xs rounded-full bg-[var(--color-card-subtle)] border border-[var(--color-border)] text-slate-600 dark:text-slate-300">
+                <BookOpen className="w-3.5 h-3.5 text-slate-400" />
                 Topic {currentIndex + 1} of {allRoadmapTopics.length}
               </span>
             </div>
 
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-foreground leading-[1.15] mb-4">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-slate-900 dark:text-slate-100 leading-[1.15] mb-4">
               {currentTopic.topicTitle}
             </h1>
-            <p className="text-base sm:text-lg text-neutral-600 dark:text-neutral-400">
+            <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400">
               {currentTopic.levelTitle} &bull; {currentTopic.levelSubtitle}
             </p>
           </header>
@@ -199,7 +199,7 @@ export default async function TopicPage({
           <TableOfContents headings={headings} />
 
           {/* Markdown Content */}
-          <div className="prose prose-base sm:prose-lg dark:prose-invert prose-emerald max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-a:text-emerald-500 hover:prose-a:underline prose-pre:bg-transparent prose-pre:p-0 prose-headings:scroll-mt-24">
+          <div className="prose prose-base sm:prose-lg dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 prose-headings:text-slate-900 dark:prose-headings:text-slate-100 prose-headings:font-bold prose-headings:tracking-tight prose-a:text-emerald-700 dark:prose-a:text-emerald-400 hover:prose-a:underline prose-pre:bg-transparent prose-pre:p-0 prose-headings:scroll-mt-24">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               rehypePlugins={[rehypeSlug]}
@@ -210,8 +210,8 @@ export default async function TopicPage({
           </div>
 
           {/* Sequential Next / Previous Topic Navigation */}
-          <footer className="mt-16 pt-8 border-t border-black/10 dark:border-white/10 flex flex-col gap-6">
-            <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+          <footer className="mt-16 pt-8 border-t border-[var(--color-border)] flex flex-col gap-6">
+            <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               <span>Roadmap Progression</span>
               <span>{Math.round(((currentIndex + 1) / allRoadmapTopics.length) * 100)}% Completed</span>
             </div>
@@ -221,29 +221,29 @@ export default async function TopicPage({
               {prevTopic ? (
                 <Link
                   href={`/roadmap/${prevTopic.levelSlug}/${prevTopic.topicSlug}`}
-                  className="flex flex-col gap-2 p-5 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all group"
+                  className="flex flex-col gap-2 p-5 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all group"
                 >
-                  <div className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400 group-hover:text-emerald-500 transition-colors">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                     <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
                     <span>Previous Topic</span>
                   </div>
-                  <span className="text-xs font-mono text-neutral-400">
+                  <span className="text-xs font-mono text-slate-400">
                     Level {prevTopic.levelNumber}
                   </span>
-                  <span className="text-sm sm:text-base font-semibold text-foreground group-hover:text-emerald-500 transition-colors line-clamp-2">
+                  <span className="text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-2">
                     {prevTopic.topicTitle}
                   </span>
                 </Link>
               ) : (
                 <Link
                   href="/roadmap"
-                  className="flex flex-col gap-2 p-5 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:border-black/20 dark:hover:border-white/20 transition-all group"
+                  className="flex flex-col gap-2 p-5 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] hover:border-slate-300 dark:hover:border-slate-700 transition-all group"
                 >
-                  <div className="flex items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                     <ArrowLeft className="w-3.5 h-3.5" />
                     <span>Roadmap Index</span>
                   </div>
-                  <span className="text-sm font-semibold text-foreground">
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                     Back to Roadmap Overview
                   </span>
                 </Link>
@@ -253,28 +253,28 @@ export default async function TopicPage({
               {nextTopic ? (
                 <Link
                   href={`/roadmap/${nextTopic.levelSlug}/${nextTopic.topicSlug}`}
-                  className="flex flex-col gap-2 p-5 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.02] hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all text-right sm:text-left group"
+                  className="flex flex-col gap-2 p-5 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all text-right sm:text-left group"
                 >
-                  <div className="flex items-center justify-end sm:justify-start gap-1.5 text-xs text-neutral-500 dark:text-neutral-400 group-hover:text-emerald-500 transition-colors">
+                  <div className="flex items-center justify-end sm:justify-start gap-1.5 text-xs text-slate-500 dark:text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                     <span className="order-1 sm:order-2">Next Topic</span>
                     <ArrowRight className="w-3.5 h-3.5 order-2 sm:order-1 group-hover:translate-x-1 transition-transform" />
                   </div>
-                  <span className="text-xs font-mono text-neutral-400">
+                  <span className="text-xs font-mono text-slate-400">
                     Level {nextTopic.levelNumber}
                   </span>
-                  <span className="text-sm sm:text-base font-semibold text-foreground group-hover:text-emerald-500 transition-colors line-clamp-2">
+                  <span className="text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-2">
                     {nextTopic.topicTitle}
                   </span>
                 </Link>
               ) : (
                 <Link
                   href="/roadmap"
-                  className="flex flex-col gap-2 p-5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10 transition-all text-right sm:text-left group"
+                  className="flex flex-col gap-2 p-5 rounded-xl border border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10 transition-all text-right sm:text-left group"
                 >
-                  <div className="flex items-center justify-end sm:justify-start gap-1.5 text-xs text-emerald-500">
+                  <div className="flex items-center justify-end sm:justify-start gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
                     <span>Curriculum Completed!</span>
                   </div>
-                  <span className="text-sm font-semibold text-foreground">
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                     Return to Roadmap Overview
                   </span>
                 </Link>
@@ -284,7 +284,7 @@ export default async function TopicPage({
             <div className="flex justify-center mt-4">
               <Link
                 href="/roadmap"
-                className="inline-flex items-center gap-2 text-xs sm:text-sm text-neutral-500 dark:text-neutral-400 hover:text-foreground transition-colors"
+                className="inline-flex items-center gap-2 text-xs sm:text-sm text-slate-500 dark:text-slate-400 hover:text-foreground transition-colors"
               >
                 <Layers className="w-4 h-4" />
                 <span>View Full 11-Level Roadmap</span>
