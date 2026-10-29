@@ -384,7 +384,7 @@ flowchart TD
    - Constructor body (`<init>`).
 4. **Never Escape `this`**: Do not pass `this` to outside listeners or start threads inside constructors.
 5. **Builder over Telescoping**: Replace multi-argument constructor confusion with fluent Builders.
-6. **Overload Priority**: Exact match $\rightarrow$ Primitive widening $\rightarrow$ Autoboxing $\rightarrow$ Varargs.
+6. **Overload Priority**: Exact match -> Primitive widening -> Autoboxing -> Varargs.
 
 ---
 
