@@ -43,3 +43,4 @@ console.log(`\n========================================`);
 console.log(`Scan Complete across ${files.length} files.`);
 console.log(`Total Formatting Issues: ${totalErrors}`);
 console.log(`========================================\n`);
+

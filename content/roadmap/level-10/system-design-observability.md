@@ -261,3 +261,4 @@ Spring Boot Actuator automatically avoids this by using the parameterized route 
 Standard logging MDC and trace scopes rely on `ThreadLocal` storage, which is lost when execution hops to a new worker thread.
 1. **For `@Async` Thread Pools**: Configure the thread pool with a `TaskDecorator` (such as `DelegatingSecurityContextAsyncTaskExecutor` or OpenTelemetry's context-propagating executor wrapper) that copies the current thread's MDC map and OTel trace context before task dispatch, and restores it on the worker thread.
 2. **For Kafka Messaging**: The producer extracts the active Trace ID and injects it into the Kafka record headers (`RecordHeader("traceparent", ...)`). When the downstream consumer reads the record, a Kafka consumer interceptor extracts the `traceparent` header, activates a child Span, and populates the consumer thread's SLF4J MDC before invoking the listener method.
+

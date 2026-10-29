@@ -2,64 +2,142 @@
 
 import { useEffect, useState } from 'react'
 import { createHighlighter, Highlighter } from 'shiki'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, Code2 } from 'lucide-react'
 
 let highlighter: Highlighter | null = null
 
-export function CodeBlock({ code, language = 'java' }: { code: string, language?: string }) {
+const LANGUAGE_MAP: Record<string, string> = {
+  sh: 'bash',
+  shell: 'bash',
+  zsh: 'bash',
+  yml: 'yaml',
+  docker: 'dockerfile',
+  golang: 'go',
+  js: 'javascript',
+  ts: 'typescript',
+};
+
+export function CodeBlock({
+  code,
+  language = 'java',
+}: {
+  code: string;
+  language?: string;
+}) {
   const [html, setHtml] = useState<string>('')
   const [copied, setCopied] = useState(false)
 
+  const normalizedLang = LANGUAGE_MAP[language.toLowerCase()] || language.toLowerCase()
+
   useEffect(() => {
+    let isCancelled = false
+
     async function highlight() {
       if (!highlighter) {
         highlighter = await createHighlighter({
           themes: ['github-dark-dimmed'],
-          langs: ['java', 'typescript', 'bash', 'json', 'xml', 'powershell', 'sql', 'yaml', 'docker', 'markdown'],
+          langs: [
+            'java',
+            'typescript',
+            'javascript',
+            'bash',
+            'json',
+            'xml',
+            'powershell',
+            'sql',
+            'yaml',
+            'dockerfile',
+            'markdown',
+            'diff',
+          ],
         })
       }
+
+      if (isCancelled) return
+
       try {
         const output = highlighter.codeToHtml(code, {
-          lang: language,
+          lang: normalizedLang,
           theme: 'github-dark-dimmed',
         })
-        setHtml(output)
+        if (!isCancelled) setHtml(output)
       } catch {
-        // Fallback if language is not supported
-        const output = highlighter.codeToHtml(code, {
-          lang: 'text',
-          theme: 'github-dark-dimmed',
-        })
-        setHtml(output)
+        // Fallback to plain text if language isn't supported
+        try {
+          const output = highlighter.codeToHtml(code, {
+            lang: 'markdown',
+            theme: 'github-dark-dimmed',
+          })
+          if (!isCancelled) setHtml(output)
+        } catch {
+          if (!isCancelled) setHtml('')
+        }
       }
     }
-    highlight()
-  }, [code, language])
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(code)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    highlight()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [code, normalizedLang])
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('Failed to copy to clipboard', err)
+    }
   }
 
+  const lineCount = code.split('\n').length
+
   return (
-    <div className="relative group rounded-lg overflow-hidden my-6 border border-white/10 bg-[#22272e]">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-white/5">
-        <span className="text-xs font-mono text-neutral-400">{language}</span>
+    <div className="relative group rounded-xl overflow-hidden my-6 border border-black/10 dark:border-white/10 bg-[#22272e] shadow-md max-w-full">
+      {/* Code Header Bar */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 bg-black/30 backdrop-blur-sm select-none">
+        <div className="flex items-center gap-2">
+          <Code2 className="w-3.5 h-3.5 text-neutral-400" />
+          <span className="text-xs font-mono font-medium text-neutral-300 uppercase tracking-wider">
+            {language}
+          </span>
+          {lineCount > 1 && (
+            <span className="text-[10px] text-neutral-500 font-mono hidden sm:inline-block">
+              ({lineCount} lines)
+            </span>
+          )}
+        </div>
+
         <button
           onClick={copyToClipboard}
-          className="p-1 rounded hover:bg-white/10 text-neutral-400 hover:text-white transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md hover:bg-white/10 text-neutral-400 hover:text-white transition-colors cursor-pointer min-h-[32px] text-xs font-medium"
+          aria-label={copied ? "Code copied to clipboard" : "Copy code to clipboard"}
+          title="Copy code"
         >
-          {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+          {copied ? (
+            <>
+              <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-emerald-400 text-xs font-medium">Copied!</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-3.5 h-3.5" />
+              <span className="text-xs">Copy</span>
+            </>
+          )}
         </button>
       </div>
-      <div 
-        className="p-4 overflow-x-auto text-sm [&_pre]:!bg-transparent [&_pre]:!m-0 [&_code]:!grid"
-      >
+
+      {/* Code Content Container */}
+      <div className="p-4 overflow-x-auto text-xs sm:text-sm font-mono leading-relaxed [&_pre]:!bg-transparent [&_pre]:!m-0 [&_code]:!grid scrollbar-thin">
         {html ? (
           <div dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
-          <pre><code>{code}</code></pre>
+          <pre className="text-neutral-200">
+            <code>{code}</code>
+          </pre>
         )}
       </div>
     </div>

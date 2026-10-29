@@ -301,3 +301,4 @@ During the Maven/Gradle build phase, the Spring AOT engine evaluates the applica
 1. **No Docker Daemon Required**: Jib can build and push container images directly from Maven/Gradle without requiring a local Docker daemon or root privileges, making it ideal for locked-down CI/CD runners.
 2. **Intelligent Layering**: Standard Dockerfiles typically package the entire fat JAR (`app.jar`) into a single image layer. Even changing one character of code invalidates the entire 100 MB layer. Jib automatically decomposes the application into separate layers (Dependencies, Resources, Compiled Classes). When code changes, Jib uploads only the tiny application class layer (a few hundred kilobytes), drastically reducing CI/CD build and push times.
 3. **Reproducible Builds**: Jib strips out non-deterministic metadata (such as timestamps), ensuring that identical source code produces the exact same bit-for-bit container image digest.
+

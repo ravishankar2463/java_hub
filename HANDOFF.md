@@ -121,3 +121,40 @@ We have built a premium, dark/light mode responsive Next.js application designed
 - **`node scripts/verify-all-topics.js`**: Verifies that every single topic declared in `data/roadmap.ts` has a corresponding `.md` file in `content/roadmap/level-[x]/` and that zero placeholder files exist. (Result: 73/73 complete).
 - **`node scripts/check-all-markdown.js`**: Scans all 77 markdown files across `content/` for raw dollar math (`$O(1)$`, `$$...$$`) and hardcoded numbered headings (`## 1. Foo`). (Result: 0 issues).
 - **`npm run build`**: Compiles all 82 static routes in ~3.9s without errors or warnings.
+
+
+## 4. UI/UX Overhaul Across Desktop and Mobile (October 2026)
+We delivered a comprehensive UI/UX overhaul across all pages and components for both Desktop and Mobile devices:
+1. **Responsive Navbar & Mobile Navigation Drawer (`components/Navbar.tsx`)**:
+   - Touch targets updated to >= 44x44px.
+   - Active route highlighting using `usePathname()` with subtle pill styling for Home and Roadmap.
+   - Mobile navigation drawer featuring:
+     - Quick search launcher (`⌘K`)
+     - Direct links to Home and Roadmap with icons
+     - 2-column Quick Jump Grid to Level 0 through Level 10
+     - Background body scroll locking while drawer is open
+2. **Sequential Lesson Reading Experience (`app/roadmap/[levelSlug]/[topicSlug]/page.tsx`)**:
+   - **Sticky Reading Progress Bar (`components/ReadingProgressBar.tsx`)**: Smooth gradient bar dynamically tracking scroll percentage from 0% to 100%.
+   - **Breadcrumb Navigation**: Direct links to Roadmap overview and current Level anchor.
+   - **Lesson Metadata**: Reading time calculation (min read), topic progression pill (e.g. `Topic 15 of 73`), and level badge.
+   - **Dual Table of Contents (`components/TableOfContents.tsx`)**:
+     - *Mobile & Tablet (< xl)*: Collapsible accordion dropdown banner showing section count and jumping directly to headings.
+     - *Desktop (>= xl)*: Sticky sidebar with active heading tracking via `IntersectionObserver`, smooth scrolling, and "Back to Top" button.
+   - **Sequential Topic Progression Cards**:
+     - Previous Topic card (linking seamlessly across levels and to roadmap overview).
+     - Next Topic card (with completion percentage indicator e.g. `52% Completed`).
+     - Centered "View Full 11-Level Roadmap" shortcut.
+3. **Interactive Code & Architecture Diagram Experience**:
+   - **Enhanced CodeBlock (`components/CodeBlock.tsx`)**: Extended language aliases (`bash`, `sh`, `yaml`, `dockerfile`, `diff`), language title badge, line count indicator, accessible copy button with "Copied!" green checkmark feedback, and custom horizontal scroll container.
+   - **Mermaid Diagram Canvas (`components/MermaidDiagram.tsx`)**: Mobile indicator badge for pan & zoom, dark backdrop for sharp line contrast, and responsive fullscreen modal with touch controls.
+4. **Roadmap Index Page (`app/roadmap/page.tsx` & `components/RoadmapLevelCard.tsx`)**:
+   - Quick-Jump horizontal pill bar for instant navigation to any level (`#level-0` through `#level-10`).
+   - Clean timeline alignment on mobile and desktop without cramped margins.
+   - High-contrast card styling for both dark and light modes.
+5. **Modern Homepage & Bento Grid (`app/page.tsx` & `components/BentoGrid.tsx`)**:
+   - Modern hero section with prominent action CTAs.
+   - Feature highlights (Virtual Threads, Spring Boot 3, Databases, K8s).
+   - Responsive Bento Grid with category tags and hover transitions.
+6. **Command Palette (`components/CommandPalette.tsx`) & Theme Toggle (`components/ThemeToggle.tsx`)**:
+   - High-contrast light and dark mode styling.
+   - Mobile keyboard friendly positioning.

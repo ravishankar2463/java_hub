@@ -15,3 +15,4 @@ if (headingMatches.length > 0) {
 } else {
   console.log('No numbered headings found!');
 }
+

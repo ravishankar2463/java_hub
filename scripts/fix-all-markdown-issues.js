@@ -58,3 +58,4 @@ for (const file of files) {
 }
 
 console.log(`\nFinished updating ${fixedFiles} files.`);
+

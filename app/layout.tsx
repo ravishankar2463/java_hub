@@ -6,6 +6,8 @@ import { Navbar } from "@/components/Navbar";
 import { getArticles } from "@/lib/markdown";
 import { roadmapData } from "@/data/roadmap";
 import { slugify } from "@/utils/slugify";
+import Link from "next/link";
+import { Compass } from "lucide-react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,8 +20,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Java Developer Hub",
-  description: "An ultra-modern Java developer resource hub.",
+  title: "JavaHub | Modern Java Developer Platform",
+  description: "The complete senior engineering curriculum: 11 levels, 73 deep-dive topics, JVM internals, Project Loom, Spring Boot 3, and Cloud Architecture.",
 };
 
 export default function RootLayout({
@@ -39,7 +41,7 @@ export default function RootLayout({
       id: slugify(topic.title),
       title: topic.title,
       url: `/roadmap/level-${level.level}/${slugify(topic.title)}`,
-      group: "Roadmap Mastery"
+      group: `Level ${level.level}: ${level.subtitle}`
     }))
   );
 
@@ -48,10 +50,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -59,9 +61,27 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <Navbar searchItems={searchItems} />
-          <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+          <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
             {children}
           </main>
+          <footer className="w-full border-t border-black/10 dark:border-white/10 py-8 px-4 sm:px-6 lg:px-8 mt-auto bg-black/[0.01] dark:bg-white/[0.01]">
+            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-500">
+              <div className="flex items-center gap-2">
+                <Compass className="w-4 h-4 text-emerald-500" />
+                <span className="font-semibold text-foreground">JavaHub</span>
+                <span>&bull;</span>
+                <span>11 Levels &bull; 73 Deep-Dive Architecture Lessons</span>
+              </div>
+              <div className="flex items-center gap-6">
+                <Link href="/" className="hover:text-foreground transition-colors">
+                  Home
+                </Link>
+                <Link href="/roadmap" className="hover:text-foreground transition-colors">
+                  Mastery Roadmap
+                </Link>
+              </div>
+            </div>
+          </footer>
         </ThemeProvider>
       </body>
     </html>

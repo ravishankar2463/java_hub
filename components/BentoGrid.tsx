@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import Link from 'next/link'
 import clsx from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import { ArrowRight } from 'lucide-react'
 
 export function cn(...inputs: (string | undefined | null | false)[]) {
   return twMerge(clsx(inputs))
@@ -19,7 +20,7 @@ export const BentoGrid = ({
   return (
     <div
       className={cn(
-        'grid md:auto-rows-[18rem] grid-cols-1 md:grid-cols-3 gap-4 max-w-7xl mx-auto',
+        'grid md:auto-rows-[19rem] grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 max-w-7xl mx-auto',
         className
       )}
     >
@@ -35,6 +36,7 @@ export const BentoGridItem = ({
   header,
   icon,
   url,
+  category,
 }: {
   className?: string
   title?: string | React.ReactNode
@@ -42,25 +44,43 @@ export const BentoGridItem = ({
   header?: React.ReactNode
   icon?: React.ReactNode
   url: string
+  category?: string
 }) => {
   return (
-    <Link href={url} className="group h-full">
+    <Link href={url} className="group h-full block">
       <motion.div
         whileHover={{ scale: 0.99, translateY: -2 }}
         className={cn(
-          "row-span-1 rounded-3xl group/bento transition duration-200 shadow-input dark:shadow-none p-6 md:p-8 bg-black/[0.02] dark:bg-white/[0.02] border border-black/5 dark:border-white/5 justify-between flex flex-col space-y-4",
+          "h-full rounded-3xl transition duration-200 p-6 sm:p-8 bg-black/[0.02] dark:bg-white/[0.02] border border-black/10 dark:border-white/10 hover:border-emerald-500/40 hover:bg-emerald-500/5 justify-between flex flex-col space-y-4 shadow-sm",
           className
         )}
       >
-        {header}
-        <div className="group-hover:translate-x-1 transition duration-200">
-          {icon}
-          <div className="font-bold text-foreground mb-2 mt-2">
-            {title}
+        <div>
+          {header}
+          <div className="flex items-center justify-between mb-4">
+            <div className="p-2.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 w-fit">
+              {icon}
+            </div>
+            {category && (
+              <span className="text-[11px] font-mono font-medium px-2.5 py-0.5 rounded-full bg-black/5 dark:bg-white/10 text-neutral-500 uppercase tracking-wider">
+                {category}
+              </span>
+            )}
           </div>
-          <div className="font-normal text-neutral-600 dark:text-neutral-300 text-sm">
-            {description}
+
+          <div className="group-hover:translate-x-0.5 transition duration-200">
+            <div className="text-lg sm:text-xl font-bold text-foreground mb-2 group-hover:text-emerald-500 transition-colors">
+              {title}
+            </div>
+            <div className="font-normal text-neutral-600 dark:text-neutral-400 text-sm leading-relaxed line-clamp-3">
+              {description}
+            </div>
           </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 text-xs font-medium text-neutral-500 group-hover:text-emerald-500 transition-colors pt-2 border-t border-black/5 dark:border-white/5">
+          <span>Read lesson</span>
+          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
         </div>
       </motion.div>
     </Link>
