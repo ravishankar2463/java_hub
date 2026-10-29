@@ -17,50 +17,50 @@ Let's explore how Java manages arrays on the Heap, why accessing an array elemen
 
 ## Memory Layout: The Magic of Contiguous Allocation
 
-Beginners often memorize that looking up an element in an array by its index takes $O(1)$ constant time. But *why*? 
+Beginners often memorize that looking up an element in an array by its index takes `O(1)` constant time. But *why*? 
 
 When you allocate an array in Java, the JVM requests a single, unbroken chunk of address space from the operating system:
 
 ```mermaid
-flowchart TD
-    subgraph StackFrame ["Thread Stack"]
-        Ref["int[] scores = 0x5000<br/>(Pointer to Heap Address)"]
+flowchart LR
+    subgraph Stack ["Thread Stack"]
+        Ref["int[] scores<br/>(Pointer: 0x5000)"]
     end
 
-    subgraph HeapMemory ["JVM Heap (Contiguous Memory Block)"]
+    subgraph Heap ["JVM Heap: Contiguous Array Memory"]
         direction LR
-        subgraph Header ["Object Header (16 Bytes)"]
-            MW["Mark Word<br/>(8 bytes)"]
-            KW["Klass Pointer<br/>(4 bytes)"]
-            AL["Length: 4<br/>(4 bytes)"]
-        end
-        subgraph Elements ["Sequential Data Slots (4 bytes each)"]
-            E0["scores[0]<br/>Address: 0x5010<br/>Value: 95"]
-            E1["scores[1]<br/>Address: 0x5014<br/>Value: 87"]
-            E2["scores[2]<br/>Address: 0x5018<br/>Value: 92"]
-            E3["scores[3]<br/>Address: 0x501C<br/>Value: 100"]
-        end
-        Header --- Elements
+        H1["Object Header (16B)<br/>• Mark Word (8B)<br/>• Klass Pointer (4B)<br/>• Length: 4 (4B)"]
+        E0["scores[0]<br/>Addr: 0x5010<br/>Value: 95"]
+        E1["scores[1]<br/>Addr: 0x5014<br/>Value: 87"]
+        E2["scores[2]<br/>Addr: 0x5018<br/>Value: 92"]
+        E3["scores[3]<br/>Addr: 0x501C<br/>Value: 100"]
+
+        H1 --> E0 --> E1 --> E2 --> E3
     end
 
-    Ref -->|"points to 0x5000"| MW
+    Ref -->|"points to base address 0x5000"| H1
 
-    style StackFrame fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#f8fafc
-    style HeapMemory fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#f8fafc
-    style Header fill:#1e293b,stroke:#64748b,color:#f8fafc
-    style Elements fill:#022c22,stroke:#34d399,color:#f8fafc
+    style Stack fill:#0f172a,stroke:#3b82f6,color:#f8fafc
+    style Heap fill:#064e3b,stroke:#10b981,color:#f8fafc
+    style H1 fill:#1e293b,stroke:#64748b,color:#f8fafc
+    style E0 fill:#022c22,stroke:#34d399,color:#f8fafc
+    style E1 fill:#022c22,stroke:#34d399,color:#f8fafc
+    style E2 fill:#022c22,stroke:#34d399,color:#f8fafc
+    style E3 fill:#022c22,stroke:#34d399,color:#f8fafc
 ```
 
 Because the memory addresses are strictly consecutive, the CPU doesn't have to search through memory to find `scores[3]`. It calculates the physical memory address using simple arithmetic:
 
-$$\text{Target Address} = \text{Base Address} + (\text{Index} \times \text{Size of Data Type})$$
+```text
+Target Address = Base Address + (Index * Size of Data Type)
+```
 
 For an `int` array starting at byte address `0x5010`:
-- `scores[0]` $\rightarrow 0x5010 + (0 \times 4) = 0x5010$
-- `scores[1]` $\rightarrow 0x5010 + (1 \times 4) = 0x5014$
-- `scores[3]` $\rightarrow 0x5010 + (3 \times 4) = 0x501C$
+- `scores[0]` -> `0x5010 + (0 * 4) = 0x5010`
+- `scores[1]` -> `0x5010 + (1 * 4) = 0x5014`
+- `scores[3]` -> `0x5010 + (3 * 4) = 0x501C`
 
-Whether your array has four elements or four million elements, calculating that offset takes a single CPU clock cycle. That is what true $O(1)$ random access means.
+Whether your array has four elements or four million elements, calculating that offset takes a single CPU clock cycle. That is what true `O(1)` random access means.
 
 ---
 
@@ -77,7 +77,7 @@ Because an array is an object, it carries an internal **Object Header**:
 
 > [!NOTE]
 > **Why are Array Lengths Capped at 2.14 Billion?**
-> Look at the length field in the object header: it is a signed 32-bit `int`. This means an array's length can never exceed `Integer.MAX_VALUE` ($2^{31} - 1$, or $2,147,483,647$). You cannot create an array indexed by a 64-bit `long`.
+> Look at the length field in the object header: it is a signed 32-bit `int`. This means an array's length can never exceed `Integer.MAX_VALUE` (2^31 - 1, or 2,147,483,647). You cannot create an array indexed by a 64-bit `long`.
 
 ---
 
@@ -87,9 +87,9 @@ Java provides three primary syntax forms for instantiating an array:
 
 ### 1. Dynamic Allocation with Default Values
 When you declare an array with a specific size, Java allocates the heap memory immediately and wipes every slot to its type's default value:
-- Numeric types (`int`, `double`, `byte`, etc.) $\rightarrow `0`$
-- `boolean` $\rightarrow `false`$
-- Reference types (Objects, Strings) $\rightarrow `null`$
+- Numeric types (`int`, `double`, `byte`, etc.) -> `0`
+- `boolean` -> `false`
+- Reference types (Objects, Strings) -> `null`
 
 ```java
 // Allocate space for 5 bank balances (all initially 0.0)
@@ -291,7 +291,7 @@ System.out.println(Arrays.deepToString(grid)); // "[[1, 2], [3, 4]]"
 
 ## Summary & Mental Model Checkpoint
 
-1. **Contiguous Memory**: Arrays allocate unbroken memory blocks on the Heap, enabling instant $O(1)$ random access arithmetic.
+1. **Contiguous Memory**: Arrays allocate unbroken memory blocks on the Heap, enabling instant `O(1)` random access arithmetic.
 2. **First-Class Objects**: Arrays are objects with standard headers (Mark Word + Klass Pointer + 4-byte `length`).
 3. **Primitive vs Reference**: Primitive arrays store raw bits side-by-side; reference arrays store 64-bit pointers to scattered heap objects.
 4. **Arrays of Arrays**: 2D matrices in Java are not flat grids; they are parent arrays holding pointers to independent row arrays (enabling jagged shapes).
@@ -312,4 +312,4 @@ System.out.println(Arrays.deepToString(grid)); // "[[1, 2], [3, 4]]"
 > **Answer:** `Arrays.equals()` compares two 1D arrays for element-by-element equality using `equals()` (or `==` for primitives). If passed a multidimensional array (an array of arrays), `Arrays.equals()` will only compare the memory references of the nested row arrays, not their nested elements. `Arrays.deepEquals()` performs recursive traversal through arbitrarily nested arrays, ensuring complete value equality across multidimensional structures.
 
 ### What algorithm does `Arrays.sort()` use for primitive arrays versus object arrays? Why the difference?
-> **Answer:** For primitive arrays, `Arrays.sort()` uses Vladimir Yaroslavskiy's **Dual-Pivot Quicksort**. It is an in-place $O(n \log n)$ algorithm with high cache efficiency, but it is **unstable** (it does not preserve the relative order of identical elements). For object arrays, `Arrays.sort()` uses **TimSort** (an adaptive, stable hybrid of MergeSort and InsertionSort). Stability is mandatory for objects so that secondary sorting keys (e.g. sorting by name after sorting by age) do not scramble previous sort order.
+> **Answer:** For primitive arrays, `Arrays.sort()` uses Vladimir Yaroslavskiy's **Dual-Pivot Quicksort**. It is an in-place `O(n log n)` algorithm with high cache efficiency, but it is **unstable** (it does not preserve the relative order of identical elements). For object arrays, `Arrays.sort()` uses **TimSort** (an adaptive, stable hybrid of MergeSort and InsertionSort). Stability is mandatory for objects so that secondary sorting keys (e.g. sorting by name after sorting by age) do not scramble previous sort order.
