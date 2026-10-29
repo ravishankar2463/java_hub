@@ -438,3 +438,4 @@ When an exception occurs during the execution of an `ItemWriter`:
 - **`JobExecution`:** Represents a single physical run attempt of a `JobInstance`. If a `JobInstance` fails, it can be launched again. That subsequent run attempt is a new `JobExecution` associated with the same `JobInstance`.
 
 Spring Batch enforces that a `JobInstance` can only run to `COMPLETED` status once. If you attempt to launch a job with identical parameters that has already completed successfully, Spring Batch rejects it with `JobInstanceAlreadyCompleteException`. To execute the job again on demand, you must introduce a differentiating parameter (such as `run.id=System.currentTimeMillis()`), typically configured using a `RunIdIncrementer`.
+

@@ -400,3 +400,4 @@ Because the Confluent `KafkaAvroSerializer` and `KafkaAvroDeserializer` utilize 
 
 - **Existing Workloads:** Producers and consumers already have the schema mappings (e.g., `Schema ID 42 <-> OrderCreatedEvent`) cached in JVM heap memory. They continue serializing and deserializing records at full speed with zero network traffic to the Schema Registry.
 - **New Schema Deployments:** If a newly deployed microservice produces a brand-new schema version, or a consumer receives a message with an unknown Schema ID not present in its cache, the client must contact the Schema Registry. In that scenario, the client throws a `SerializationException` or blocks until `schema.registry.url` becomes reachable again.
+

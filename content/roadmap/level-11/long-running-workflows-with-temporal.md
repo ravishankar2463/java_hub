@@ -369,3 +369,4 @@ Choreography works well for simple, decoupled 2-step event notifications (e.g., 
 3. **Observability Nightmares:** Tracking the current progress of a single customer order requires tracing distributed trace IDs across dozens of asynchronous topics.
 
 Temporal replaces choreography with an explicit, readable, code-defined workflow where timeouts, retries, and saga rollbacks are clearly expressed in a single, type-safe Java class.
+

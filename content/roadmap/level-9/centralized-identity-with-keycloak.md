@@ -441,3 +441,4 @@ To interact with the Keycloak Admin REST API securely from a background Java ser
 3. In the client's **Service Account Roles** tab, assign the minimum required administrative permissions (e.g., `manage-users` or `view-users` scoped to the realm).
 4. In the Java application, construct the `Keycloak` client using `KeycloakBuilder.builder()`, supplying the `grantType(OAuth2Constants.CLIENT_CREDENTIALS)`, `clientId`, and `clientSecret`.
 5. Under the hood, the admin client requests an M2M bearer token using the client credentials grant, automatically handles token refresh when the access token nears expiration, and attaches the bearer token to all outgoing Keycloak administrative REST calls.
+

@@ -452,3 +452,4 @@ Okapi BM25 introduces two major improvements:
 
 1. **Term Frequency Saturation:** BM25 uses a hyperbolic curve with a configurable parameter `k1` (usually 1.2). As term frequency increases, the score gain diminishes and asymptotically approaches a ceiling. An occurrence count of 20 yields roughly the same relevance contribution as an occurrence count of 100.
 2. **Document Length Normalization:** Long documents naturally contain more words and thus have a higher probability of matching query terms by chance. BM25 divides the term frequency by a factor proportional to the document's length relative to the average document length in the index, controlled by parameter `b` (usually 0.75). Shorter, more focused documents receive higher scores than long, rambling documents with the same term count.
+

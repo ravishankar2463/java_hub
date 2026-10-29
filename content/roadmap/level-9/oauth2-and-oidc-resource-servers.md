@@ -457,3 +457,4 @@ In enterprise systems, authorization must enforce the intersection of both. Spri
 ```
 
 This guarantees that an action only executes if the client application is authorized to perform it *and* the authenticated human user has the organizational authority to do so.
+

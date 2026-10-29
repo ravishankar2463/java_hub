@@ -405,3 +405,4 @@ To secure tool execution against prompt injection, an enterprise architecture mu
 2. **Schema & Boundary Validation:** Enforce strict Jakarta Bean Validation (`@Min(1)`, `@Max(10000)`, `@Pattern`) on the tool's request record. Reject out-of-bounds parameters before business logic executes.
 3. **Deterministic Human-in-the-Loop (HitL) Gates:** High-risk financial, security, or administrative mutations must never execute autonomously. The tool should return a `PENDING_APPROVAL` status token, requiring two-factor authorization (MFA) from the human user before the transaction commits.
 4. **Strict Isolation of Read vs Write Tools:** Avoid giving a single agent access to both unrestricted web-browsing/reading tools and privileged internal transaction tools. An attacker can hide injection payloads on external websites that the agent reads and subsequently executes against internal APIs.
+

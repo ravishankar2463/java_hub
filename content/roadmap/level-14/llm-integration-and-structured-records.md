@@ -349,3 +349,4 @@ Java `record` types provide architectural advantages when modeling AI outputs:
 1. **Guaranteed Immutability:** Once an LLM output is parsed, domain records represent an unalterable snapshot of that extraction. Downstream microservice threads cannot accidentally mutate or corrupt fields during processing.
 2. **Canonical Constructor Integrity:** Unlike traditional JavaBeans—which require a zero-argument default constructor and setter methods—records require all fields to be initialized through their canonical constructor. This prevents half-initialized objects from existing in memory.
 3. **Compact Semantic Metadata:** Records minimize boilerplate, allowing developers to cleanly annotate fields with `@JsonPropertyDescription` and Bean Validation annotations (`@NotNull`, `@Pattern`) without wading through hundreds of lines of getters, setters, and builder classes.
+

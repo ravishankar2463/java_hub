@@ -502,3 +502,4 @@ In a deep microservice call graph (Service A -> Service B -> Service C), if Serv
 A **gRPC Deadline** specifies an absolute timestamp before which the operation must complete. gRPC automatically serializes the remaining time into the HTTP/2 headers and passes it downstream. If the deadline expires while Service B is waiting for Service C, the gRPC runtime automatically cancels the call, throws `Status.DEADLINE_EXCEEDED`, and releases the waiting threads.
 
 If a downstream service ignores deadline propagation (e.g., does not inspect `io.grpc.Context.current().isCancelled()` during long-running loops or blocking I/O), it becomes an **orphan worker**: it continues consuming database connections, disk I/O, and CPU cycles computing a result that the upstream caller has already abandoned. Properly engineered gRPC services always check context cancellation during expensive loops to terminate work immediately.
+

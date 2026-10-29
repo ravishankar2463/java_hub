@@ -473,3 +473,4 @@ Passing JWTs in the query string introduces severe security vulnerabilities:
 Under **HTTP/1.1**, web browsers enforce a strict limit of **6 concurrent open TCP connections per domain**. Because an SSE stream holds an HTTP connection open indefinitely, opening 6 browser tabs to the application exhausts the browser's entire connection allocation for that origin. Opening a 7th tab causes all subsequent HTTP requests (`fetch`, images, scripts) to hang indefinitely in a pending state until an SSE connection is closed.
 
 Under **HTTP/2**, this limitation is eliminated. HTTP/2 supports **multiplexing**, allowing hundreds of concurrent bidirectional streams (both regular REST calls and SSE event streams) to share a single underlying TCP connection. A user can open dozens of browser tabs without exhausting browser connection limits. In production, SSE should always be served over HTTP/2.
+

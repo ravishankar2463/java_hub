@@ -329,3 +329,4 @@ Before a CI/CD pipeline deploys a new artifact (e.g., `order-service:3.2.0`), it
 2. Does a verified contract exist proving that `order-service:3.2.0` is compatible with `payment-service:1.9.0`?
 
 If the verification succeeded, the command returns exit code `0`, and the deployment proceeds. If no verification exists or the contract failed, it returns exit code `1`, immediately aborting the deployment and preventing breaking changes from reaching production users.
+

@@ -345,3 +345,4 @@ In standard stateless REST APIs, a traffic flip at the load balancer shifts traf
 **The Architectural Remedy:**
 - **Externalize Session State:** Eliminate sticky sessions entirely by storing session state in a shared Redis cluster (`Spring Session Data Redis`).
 - **Connection Draining (Graceful Termination):** When initiating the Blue-Green flip, send an HTTP/2 `GOAWAY` frame or a WebSocket close frame (`1001 Going Away`) instructing client browsers to close their existing persistent sockets and reconnect to the load balancer, cleanly shifting them to the new Green environment.
+
