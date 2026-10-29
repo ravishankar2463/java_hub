@@ -186,14 +186,14 @@ Java is defined by an open specification (**OpenJDK**). While Oracle maintains a
 Do not manually drag folders into `/Library/Java`. Professional JVM engineers manage their Java versions using **SDKMAN!**:
 
 ```bash
-# 1. Install SDKMAN
+# Install SDKMAN
 curl -s "https://get.sdkman.io" | bash
 source "$HOME/.sdkman/bin/sdkman-init.sh"
 
-# 2. Install the latest Eclipse Temurin Java 21 LTS
+# Install the latest Eclipse Temurin Java 21 LTS
 sdk install java 21.0.2-tem
 
-# 3. Verify it is active
+# Verify it is active
 java -version
 ```
 
@@ -225,12 +225,12 @@ flowchart TD
     JH -->|"Yes: /path/to/jdk-21"| RUN["Locates JDK headers, tools, and runtime"]
 ```
 
-### 1. The `PATH` Variable
+### The `PATH` Variable
 `PATH` is a list of directory paths that your operating system searches whenever you type a command into your terminal.
 - When you type `javac`, your operating system checks each folder in `PATH` sequentially.
 - If the `bin` directory of your JDK (e.g., `C:\Program Files\Eclipse Adoptium\jdk-21\bin` or `/opt/homebrew/opt/openjdk@21/bin`) is not listed in `PATH`, your shell has no idea what `javac` is.
 
-### 2. The `JAVA_HOME` Variable
+### The `JAVA_HOME` Variable
 Unlike `PATH`, `JAVA_HOME` is not meant for your terminal command prompt; it is meant for **developer tools**. Build systems like Maven, Gradle, Android Studio, and IntelliJ IDEA inspect `$JAVA_HOME` to determine which JDK installation to compile against.
 
 - **The Golden Rule**: `JAVA_HOME` must point to the **root** folder of your JDK, **never** the `bin` directory.

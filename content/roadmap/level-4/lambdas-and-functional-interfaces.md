@@ -62,7 +62,7 @@ When junior developers see a lambda, they assume the compiler generates a hidden
 Let's dispel that myth immediately: **The compiler does NOT create an anonymous inner class!**
 
 If Java created an anonymous class for every lambda:
-1. Every lambda would generate a separate `.class` file on disk (e.g. `OrderService$$Lambda$1.class`), bloating JAR sizes.
+1. Every lambda would generate a separate `.class` file on disk (e.g. `OrderService__Lambda_1.class`), bloating JAR sizes.
 2. The JVM would have to load, verify, and link thousands of tiny class files into Metaspace at boot time, severely degrading application startup performance.
 3. Every single execution of a lambda would force a brand-new object allocation on the Heap.
 
@@ -73,7 +73,7 @@ Instead, Java 8 leverages the **`invokedynamic` (indy)** bytecode instruction in
 flowchart LR
     Source["Java Source:<br/>list.forEach(x -&gt; print(x))"]
     Javac["javac Compiler"]
-    Bytecode["Bytecode:<br/>1. Private synthetic method lambda$0<br/>2. invokedynamic opcode"]
+    Bytecode["Bytecode:<br/>1. Private synthetic method lambda_0<br/>2. invokedynamic opcode"]
     Metafactory["LambdaMetafactory<br/>(Runtime Bootstrap)"]
     DirectCall["Ultra-fast Direct MethodHandle Execution"]
 
@@ -86,7 +86,7 @@ flowchart LR
 1. **Synthetic Method Extraction:** `javac` takes the lambda body and desugars it into a `private static synthetic` (or instance) method inside your existing class:
    ```java
    // Generated secretly by javac inside your class:
-   private static synthetic void lambda$main$0(String text) {
+   private static synthetic void lambda_main_0(String text) {
        System.out.println(text);
    }
    ```

@@ -113,20 +113,20 @@ Under the hood, the Java compiler silently injects a **synthetic final field** i
 flowchart LR
     subgraph HeapMemory ["JVM Heap Space"]
         OuterObj["BankAccount Instance (Address: 0x1000)<br/>• double balance = 10000.0"]
-        InnerObj["AccountInspector Instance (Address: 0x9000)<br/>• <b>final BankAccount this$0 = 0x1000</b> (Synthetic Hidden Pointer!)"]
+        InnerObj["AccountInspector Instance (Address: 0x9000)<br/>• <b>final BankAccount this_0 = 0x1000</b> (Synthetic Hidden Pointer!)"]
     end
 
-    InnerObj -->|"hidden this$0 pointer"| OuterObj
+    InnerObj -->|"hidden this_0 pointer"| OuterObj
 
     style HeapMemory fill:#0f172a,stroke:#3b82f6,color:#f8fafc
     style OuterObj fill:#047857,stroke:#34d399,color:#f8fafc
     style InnerObj fill:#7f1d1d,stroke:#f87171,color:#f8fafc
 ```
 
-The compiler adds a hidden parameter to `AccountInspector`'s constructor and assigns `this.this$0 = account`. When you write `balance`, the compiler secretly translates it to `this$0.balance`.
+The compiler adds a hidden parameter to `AccountInspector`'s constructor and assigns `this.this_0 = account`. When you write `balance`, the compiler secretly translates it to `this_0.balance`.
 
 ### The Lethal Senior Memory Leak Trap
-Because `AccountInspector` carries this hidden `this$0` pointer, **the Garbage Collector can never reclaim `BankAccount` as long as `AccountInspector` is alive!**
+Because `AccountInspector` carries this hidden `this_0` pointer, **the Garbage Collector can never reclaim `BankAccount` as long as `AccountInspector` is alive!**
 
 Imagine this common bug in an enterprise web service:
 
@@ -151,7 +151,7 @@ public class LargeOrderProcessingService {
 ```
 
 What happens here?
-The `OrderNotificationTask` sits in the background thread queue waiting for hours. Because it holds a hidden `this$0` pointer to `LargeOrderProcessingService`, **all 50 Megabytes of cached ledger data cannot be garbage collected**! 
+The `OrderNotificationTask` sits in the background thread queue waiting for hours. Because it holds a hidden `this_0` pointer to `LargeOrderProcessingService`, **all 50 Megabytes of cached ledger data cannot be garbage collected**! 
 
 If 1,000 orders are scheduled, your server will exhaust its heap and crash with `java.lang.OutOfMemoryError: Java heap space`.
 
@@ -335,7 +335,7 @@ if (obj instanceof User(String name, Money(double amount, String currency))) {
 ## 🎯 Senior Engineer Interview Questions
 
 ### Why can a non-static inner class cause a memory leak when passed to an asynchronous executor?
-> **Answer:** A non-static inner class retains a hidden synthetic reference (`this$0`) pointing directly to the enclosing outer class instance on the Heap. If the inner class is submitted to a long-running thread pool, event bus, or static collection, that hidden reference prevents the Garbage Collector from collecting the outer instance—even if the application has discarded all direct references to the outer object. If the outer instance holds large data structures, this results in severe heap exhaustion (`OutOfMemoryError`).
+> **Answer:** A non-static inner class retains a hidden synthetic reference (`this_0`) pointing directly to the enclosing outer class instance on the Heap. If the inner class is submitted to a long-running thread pool, event bus, or static collection, that hidden reference prevents the Garbage Collector from collecting the outer instance—even if the application has discarded all direct references to the outer object. If the outer instance holds large data structures, this results in severe heap exhaustion (`OutOfMemoryError`).
 
 ### Why must local variables captured by anonymous inner classes or lambda expressions be "effectively final"?
 > **Answer:** Local variables reside in the thread's Stack frame and are reclaimed when the method returns, whereas anonymous classes and lambdas are Heap-allocated objects that may outlive the method. To enable execution after method completion, the compiler makes a private copy of the local variable inside the heap object. Requiring the variable to be effectively final guarantees that the Stack copy and the Heap copy never diverge in value, preventing subtle concurrency and data synchronization bugs.

@@ -66,18 +66,18 @@ flowchart TD
 
 ## Deep Dive into the Four Modifiers
 
-### 1. `private`: The Atomic Vault
+### `private`: The Atomic Vault
 Marking a member `private` means that only code between the `{` and `}` of that specific class can see it. 
 
 Even if another class lives in the exact same package or extends your class as a child, it is completely blind to private members.
 
 > [!NOTE]
 > **Java 11 Nestmates Feature:**
-> In older Java versions, an inner class accessing a private field of its outer class required the compiler to inject invisible synthetic bridge methods (`access$000`). Java 11 introduced **Nest-Based Access Control** (JEP 181), allowing nestmates to access each other's private fields natively in bytecode without performance or security overhead.
+> In older Java versions, an inner class accessing a private field of its outer class required the compiler to inject invisible synthetic bridge methods (`access_000`). Java 11 introduced **Nest-Based Access Control** (JEP 181), allowing nestmates to access each other's private fields natively in bytecode without performance or security overhead.
 
 ---
 
-### 2. `default` (Package-Private): The Architect's Secret Weapon
+### `default` (Package-Private): The Architect's Secret Weapon
 If you do not prefix a class, method, or field with any access modifier, Java assigns it **package-private** access.
 
 Many junior developers assume that leaving off a modifier is an accident. In senior domain-driven architecture, **package-private is the most powerful tool for modular encapsulation**.
@@ -98,7 +98,7 @@ By marking helper classes as package-private:
 
 ---
 
-### 3. `protected`: The Fragile Inheritance Bridge
+### `protected`: The Fragile Inheritance Bridge
 `protected` grants access to two distinct groups:
 1. Any class in the **same package** (identical to package-private).
 2. Any **subclass**, even if that subclass lives in a completely different package or third-party library.
@@ -109,7 +109,7 @@ By marking helper classes as package-private:
 
 ---
 
-### 4. `public`: The Irrevocable Public Contract
+### `public`: The Irrevocable Public Contract
 `public` means global exposure. Every class, in every package, in every module can call this member.
 
 Whenever you mark a method `public`, you are making a binding architectural promise. Once other teams begin calling your public method, you can never change its parameters or delete it without causing compile failures across the organization.
@@ -301,4 +301,4 @@ With just three lines of code, the Java compiler automatically generates:
 > **Answer:** No. A top-level class can only be declared `public` or package-private (no modifier). Declaring a top-level class `private` would mean no other class could ever access it, rendering it completely useless to the compiler and runtime. Declaring it `protected` is nonsensical because `protected` includes subclass access outside the package, but without an enclosing class to define an inheritance root, top-level accessibility is strictly bounded by the package or the universe.
 
 ### How does Java 11's Nestmates feature (JEP 181) improve encapsulation between outer and inner classes at the bytecode level?
-> **Answer:** Prior to Java 11, the JVM bytecode specification did not recognize nested classes; the compiler generated separate `.class` files (e.g. `Outer$Inner.class`). To allow the inner class to access private members of the outer class, `javac` had to generate synthetic package-private accessor methods (`access$000`). This slightly weakened encapsulation and bloated bytecode. Java 11 introduced native nestmate attributes in the class file (`NestMembers` and `NestHost`), allowing the JVM to directly verify and permit private member access between nested classes without synthetic bridges.
+> **Answer:** Prior to Java 11, the JVM bytecode specification did not recognize nested classes; the compiler generated separate `.class` files (e.g. `Outer_Inner.class`). To allow the inner class to access private members of the outer class, `javac` had to generate synthetic package-private accessor methods (`access_000`). This slightly weakened encapsulation and bloated bytecode. Java 11 introduced native nestmate attributes in the class file (`NestMembers` and `NestHost`), allowing the JVM to directly verify and permit private member access between nested classes without synthetic bridges.

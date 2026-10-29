@@ -85,7 +85,7 @@ Because an array is an object, it carries an internal **Object Header**:
 
 Java provides three primary syntax forms for instantiating an array:
 
-### 1. Dynamic Allocation with Default Values
+### Dynamic Allocation with Default Values
 When you declare an array with a specific size, Java allocates the heap memory immediately and wipes every slot to its type's default value:
 - Numeric types (`int`, `double`, `byte`, etc.) -> `0`
 - `boolean` -> `false`
@@ -100,7 +100,7 @@ balances[1] = 275.00;
 // balances[2], balances[3], balances[4] remain 0.0
 ```
 
-### 2. Array Literals (Inline Initialization)
+### Array Literals (Inline Initialization)
 When you already know the elements upfront:
 
 ```java

@@ -193,7 +193,7 @@ flowchart TD
     style L4 fill:#701a75,color:#f8fafc
 ```
 
-### 1. The Classic `for` Loop
+### The Classic `for` Loop
 Best when you need the index counter or need to step by custom intervals:
 
 ```java
@@ -209,7 +209,7 @@ for (int i = 0; i < 5; i++) {
 3. Execute the loop body.
 4. Apply the increment `i++`, then loop back to step 2.
 
-### 2. The Enhanced `for-each` Loop
+### The Enhanced `for-each` Loop
 Introduced in Java 5, this is the most idiomatic way to iterate over arrays and `Iterable` collections (like `ArrayList`, `HashSet`). It eliminates off-by-one index bugs:
 
 ```java
@@ -231,7 +231,7 @@ for (String provider : paymentProviders) {
 > ```
 > This is why attempting to remove items directly from a list inside a `for-each` loop throws a **`ConcurrentModificationException`**. If you need to remove items while iterating, use the iterator's own `it.remove()` method or `list.removeIf(...)`!
 
-### 3. The `while` Loop
+### The `while` Loop
 Evaluates the condition **before** entering the body. If the condition is false on arrival, it runs **zero times**:
 
 ```java
@@ -244,7 +244,7 @@ while (!isConnected && retries < 3) {
 }
 ```
 
-### 4. The `do-while` Loop
+### The `do-while` Loop
 Evaluates the condition **after** executing the block. It is guaranteed to run **at least once**, making it ideal for interactive menus, user prompts, or initial token acquisitions:
 
 ```java

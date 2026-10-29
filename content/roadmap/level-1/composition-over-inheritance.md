@@ -220,7 +220,7 @@ classDiagram
     ForwardingSet~E~ o-- Set~E~ : "composes (delegate)"
 ```
 
-### 1. The Reusable Forwarding Wrapper
+### The Reusable Forwarding Wrapper
 To avoid writing dozens of boilerplate delegation methods in every customized set, we write a single, reusable `ForwardingSet`:
 
 ```java
@@ -244,7 +244,7 @@ public class ForwardingSet<E> implements Set<E> {
 }
 ```
 
-### 2. The Resilient Instrumented Decorator
+### The Resilient Instrumented Decorator
 Now, writing our counter set is trivial and bulletproof:
 
 ```java

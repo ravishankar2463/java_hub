@@ -230,7 +230,7 @@ flowchart TD
     style SL fill:#4a044e,color:#f8fafc
 ```
 
-### 1. `default` Methods
+### `default` Methods
 You can now provide a default method body directly inside an interface:
 
 ```java
@@ -251,7 +251,7 @@ public interface NotificationChannel {
 }
 ```
 
-### 2. Resolving Default Method Collisions
+### Resolving Default Method Collisions
 What happens if a class implements two interfaces that both declare the exact same `default` method?
 
 ```java

@@ -47,10 +47,10 @@ flowchart TD
     style D_Impl fill:#022c22,color:#f8fafc
 ```
 
-### 1. Compile-Time Polymorphism (Static Binding)
+### Compile-Time Polymorphism (Static Binding)
 When you overload methods within the same class, the compiler inspects the arguments provided and wires the bytecode directly to that specific method's address. There is zero runtime guesswork or indirection.
 
-### 2. Run-Time Polymorphism (Dynamic Binding)
+### Run-Time Polymorphism (Dynamic Binding)
 When a parent reference points to a child instance on the Heap, the compiler cannot know which implementation will execute:
 
 ```java
@@ -132,14 +132,14 @@ flowchart TD
     style Dog fill:#064e3b,stroke:#10b981,color:#f8fafc
 ```
 
-### 1. Upcasting: Safe and Automatic
+### Upcasting: Safe and Automatic
 Casting from a specialized subtype up to a general supertype is always safe. A `Dog` is guaranteed to satisfy all contracts of `Animal`:
 ```java
 Dog myDog = new Dog("Rex");
 Animal myAnimal = myDog; // Implicit upcast. No casting syntax needed!
 ```
 
-### 2. Downcasting: Explicit and Dangerous
+### Downcasting: Explicit and Dangerous
 Casting from a general supertype down to a specific subtype requires an explicit cast:
 ```java
 Animal myAnimal = fetchFromDatabase();

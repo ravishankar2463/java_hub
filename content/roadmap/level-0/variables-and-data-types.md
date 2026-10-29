@@ -126,7 +126,7 @@ The compiler strips all underscores during compilation—they exist purely for h
 
 ## Senior Traps with Primitives
 
-### 1. The Integer Overflow Silent Disaster
+### The Integer Overflow Silent Disaster
 What happens when you increment an integer beyond its maximum capacity? In Java, it does **not** throw an exception. It silently overflows and wraps around to the minimum negative value:
 
 ```java
@@ -144,7 +144,7 @@ Imagine calculating a banking balance or e-commerce cart total: a customer adds 
 > int safe = Math.addExact(max, 1); // Instantly throws ArithmeticException instead of silently corrupting data!
 > ```
 
-### 2. The Floating-Point Financial Catastrophe
+### The Floating-Point Financial Catastrophe
 Run this line in your terminal or IDE:
 ```java
 System.out.println(0.1 + 0.2);
@@ -310,14 +310,14 @@ flowchart LR
     style D fill:#0f172a,color:#fff
 ```
 
-### 1. Widening (Implicit Casting)
+### Widening (Implicit Casting)
 Moving from a smaller memory footprint to a larger one. Because there is zero chance of data truncation, the compiler performs this automatically without asking:
 ```java
 int small = 42;
 double wide = small; // Automatically becomes 42.0
 ```
 
-### 2. Narrowing (Explicit Casting)
+### Narrowing (Explicit Casting)
 Moving from a larger type to a smaller type. Because higher-order bits or decimal precision will be permanently destroyed, the compiler refuses to do this unless you explicitly sign off using parentheses `(targetType)`:
 
 ```java

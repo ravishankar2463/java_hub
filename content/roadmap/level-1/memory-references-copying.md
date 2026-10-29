@@ -139,13 +139,13 @@ flowchart TD
     style Mgr3 fill:#047857,color:#f8fafc
 ```
 
-### 1. Shallow Copy
+### Shallow Copy
 - Creates a new instance of the parent object on the Heap.
 - Copies all primitive fields directly.
 - **Copies the references of nested objects** rather than cloning the nested objects themselves.
 - *The Danger:* Modifying the child object (`Dept2.getManager().setBonus(...)`) silently alters the child of `Dept1`!
 
-### 2. Deep Copy
+### Deep Copy
 - Creates a new instance of the parent object.
 - Recursively creates brand-new instances of **all nested child objects**.
 - *The Result:* Two completely autonomous, decoupled object hierarchies in memory. Altering any field anywhere in the copy has zero side effects on the original.

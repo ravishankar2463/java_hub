@@ -91,7 +91,7 @@ public class BankAccount {
             throw new IllegalArgumentException("Deposit amount must be positive.");
         }
         this.balance += amount;
-        System.out.println("Deposited $" + amount + ". New balance: $" + this.balance);
+        System.out.println("Deposited USD " + amount + ". New balance: USD " + this.balance);
     }
 
     public double getBalance() {
@@ -102,10 +102,10 @@ public class BankAccount {
 
 Let's dissect each of these three building blocks:
 
-### 1. Fields (State)
+### Fields (State)
 Fields store the data associated with an object. In senior design, fields should almost always be marked `private` (Encapsulation). This ensures that outside code cannot bypass your business rules—for example, nobody can set `balance = -999999` without going through the `withdraw()` or `deposit()` methods!
 
-### 2. Constructors (Object Initialization)
+### Constructors (Object Initialization)
 A constructor is a special sub-routine executed at the exact millisecond an object is born.
 - It shares the **exact name of the class**.
 - It has **no return type** (not even `void`).
@@ -121,7 +121,7 @@ A constructor is a special sub-routine executed at the exact millisecond an obje
 > ```
 > However, the instant you write **even one** custom constructor (like our `BankAccount(String, double)` above), Java permanently revokes the automatic default constructor. Calling `new BankAccount()` without arguments will now fail to compile!
 
-### 3. Methods (Behavior)
+### Methods (Behavior)
 Methods define what an object can do. Notice how our `deposit()` method checks `isFrozen` and validates `amount` before changing `balance`. This is the fundamental promise of OOP: **state and logic are bundled together**.
 
 ---

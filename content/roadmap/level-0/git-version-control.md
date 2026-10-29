@@ -105,15 +105,15 @@ classDiagram
 
 Let's dissect what these objects actually are:
 
-### 1. Blobs (Binary Large Objects)
+### Blobs (Binary Large Objects)
 When you stage a file, Git compresses its content (using zlib) and calculates its cryptographic SHA-1 hash (a 40-character hexadecimal string). That content is stored as a **blob**. 
 - A blob holds *only* the file data. 
 - It does **not** store the file name, the folder path, or creation dates. If two files in different folders have the exact same contents, Git only stores a single blob!
 
-### 2. Trees (Directories)
+### Trees (Directories)
 A **tree** represents a folder. It is a simple list that maps human-readable filenames and file permissions to their corresponding blob hashes or child tree hashes.
 
-### 3. Commits (The Snapshot Metadata)
+### Commits (The Snapshot Metadata)
 A **commit** is surprisingly small. If you inspect a commit object using Git’s low-level plumbing command (`git cat-file -p <commit-hash>`), you will see plain text:
 
 ```text
@@ -312,7 +312,7 @@ Just like that, your entire branch is resurrected. You are virtually indestructi
 
 To work like a professional software engineer on a Java team:
 
-### 1. Always Use a Robust `.gitignore`
+### Always Use a Robust `.gitignore`
 Never commit compiled `.class` files, IDE settings (`.idea`, `.vscode`), or build directories (`target/`, `build/`) to Git. Storing compiled binaries bloats the repository and causes endless merge conflicts.
 
 A minimal Java `.gitignore`:
@@ -339,7 +339,7 @@ out/
 Thumbs.db
 ```
 
-### 2. Write Commits That Tell a Story
+### Write Commits That Tell a Story
 Avoid committing messages like `fix`, `wip`, or `asdf`. Use the **Conventional Commits** standard:
 - `feat: add Google OAuth2 login flow`
 - `fix: prevent NullPointerException in OrderService when address is empty`

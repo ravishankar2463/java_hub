@@ -78,7 +78,7 @@ flowchart TD
     style L5 fill:#312e81,color:#f8fafc
 ```
 
-### 1. The Package Declaration
+### The Package Declaration
 ```java
 package com.javahub.basics;
 ```
@@ -99,7 +99,7 @@ By convention, enterprise Java packages use the reverse domain name of the organ
 
 ---
 
-### 2. Imports: Bringing Tools into Your Workshop
+### Imports: Bringing Tools into Your Workshop
 ```java
 import java.time.Instant;
 import java.util.*;
@@ -117,7 +117,7 @@ You can also use wildcard imports (`import java.util.*;`), which tell the compil
 
 ---
 
-### 3. The Class Declaration: The Mold for Everything
+### The Class Declaration: The Mold for Everything
 ```java
 public class HelloWorld {
     // Body of the class
@@ -137,7 +137,7 @@ Every program unit in Java is defined inside a type—most commonly a `class`.
 
 ---
 
-### 4. The Iconic `main` Method: The JVM Entry Point
+### The Iconic `main` Method: The JVM Entry Point
 ```java
 public static void main(String[] args)
 ```
@@ -186,7 +186,7 @@ Inside your program:
 
 ---
 
-### 5. The Executable Statement: `System.out.println()`
+### The Executable Statement: `System.out.println()`
 ```java
 System.out.println("Hello, World!");
 ```
@@ -244,14 +244,14 @@ Curly braces define **lexical scope**. Any variables declared between `{` and `}
 
 Code tells the machine *what* to do; comments explain to human engineers *why* you did it. Java provides three distinct comment styles:
 
-### 1. Single-Line Comments
+### Single-Line Comments
 ```java
 // Calculate compound interest after tax deduction
 double netTotal = principal * Math.pow(1 + rate, time);
 ```
 Everything from `//` to the end of that specific physical line is ignored by the compiler.
 
-### 2. Multi-Line (Block) Comments
+### Multi-Line (Block) Comments
 ```java
 /*
  * Temporary workaround for upstream gateway timeout.
@@ -261,7 +261,7 @@ Everything from `//` to the end of that specific physical line is ignored by the
 ```
 Delimited by `/*` and `*/`. Useful for disabling chunks of code during debugging or writing multi-line explanations.
 
-### 3. Javadoc Comments: Professional Documentation
+### Javadoc Comments: Professional Documentation
 ```java
 /**
  * Processes a customer refund against the original payment provider.
@@ -322,7 +322,7 @@ Let's see this in action without relying on an IDE button:
 2. Open your terminal at the root of your project:
 
 ```bash
-# 1. Compile the Java source code into bytecode
+# Compile the Java source code into bytecode
 javac -d out src/com/javahub/basics/HelloWorld.java
 ```
 Notice the `-d out` flag: this tells `javac` to place the generated `.class` files into a separate `out` directory while automatically preserving the package folder structure.

@@ -253,7 +253,7 @@ OrderStatus.DELIVERED.ordinal(); // 2
 
 Java provides two specialized collection classes engineered specifically for enums. They are among the fastest data structures in the entire standard library:
 
-### 1. `EnumSet`: High-Speed Bitwise Vectors
+### `EnumSet`: High-Speed Bitwise Vectors
 In C/C++, developers use bitwise bitmasks (`0x01 | 0x02 | 0x04`) to represent sets of flags. 
 
 In Java, **`EnumSet`** gives you that exact hardware-level speed with 100% type safety. 
@@ -270,7 +270,7 @@ If your enum has 64 or fewer constants (which is true for 99.9% of enums), the J
 Under the hood, it does not allocate an array or a hash table—it stores the set inside a **single 64-bit primitive `long` bit-vector**! 
 Operations like `.contains()`, `.add()`, and `.retainAll()` execute as **single-cycle CPU bitwise instructions** (`AND`, `OR`, `XOR`).
 
-### 2. `EnumMap`: Array-Indexed Lookup
+### `EnumMap`: Array-Indexed Lookup
 If you need a map where the keys are enums, never use `HashMap<MyEnum, V>`. 
 
 Use **`EnumMap<MyEnum, V>`**:

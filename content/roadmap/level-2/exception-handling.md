@@ -61,7 +61,7 @@ flowchart TD
     style RE fill:#7c2d12,stroke:#fb923c,color:#f8fafc
 ```
 
-### 1. `java.lang.Error`: Catastrophic JVM Crashes
+### `java.lang.Error`: Catastrophic JVM Crashes
 Errors represent fatal system exhaustion. The physical JVM is dying, corrupt, or out of resources. 
 - `OutOfMemoryError`: The Heap or Metaspace has zero remaining bytes, and full GC sweeps failed to reclaim space.
 - `StackOverflowError`: A recursive loop consumed all 1 MB of the thread's stack space.
@@ -71,11 +71,11 @@ Errors represent fatal system exhaustion. The physical JVM is dying, corrupt, or
 > **Never Catch `Error` or `Throwable`!**
 > Catching `Error` (e.g., `catch (Throwable t)`) in an attempt to keep a server alive is lethal. If an `OutOfMemoryError` or `ThreadDeath` occurred, shared data structures are likely half-written and corrupt. Let the thread terminate cleanly.
 
-### 2. `java.lang.Exception` (Checked Exceptions): Anticipated Realities
+### `java.lang.Exception` (Checked Exceptions): Anticipated Realities
 Checked exceptions represent external conditions outside your application's direct control: a network cable was unplugged, a hard drive ran out of space, or a remote REST endpoint timed out.
 - The Java compiler **strictly enforces** the "Handle or Declare" rule: you must wrap the call in a `try-catch` block or declare `throws` on your method signature.
 
-### 3. `java.lang.RuntimeException` (Unchecked Exceptions): Programmer Blunders
+### `java.lang.RuntimeException` (Unchecked Exceptions): Programmer Blunders
 Unchecked exceptions represent bugs in your own programming logic:
 - `NullPointerException`: You dereferenced a reference without validating it.
 - `IndexOutOfBoundsException`: You miscalculated array offsets.
