@@ -101,6 +101,10 @@ export const roadmapData: RoadmapLevel[] = [
       {
         title: "Advanced Class Design",
         details: ["Nested / Inner Classes", "Anonymous Inner Classes", "Records (Java 14+) for immutable data carriers"]
+      },
+      {
+        title: "Sealed Classes and Pattern Matching",
+        details: ["Algebraic Data Types (Sum & Product Types)", "The `sealed`, `non-sealed`, and `permits` Modifiers", "Exhaustive Pattern Matching in `switch` (Java 21+)", "Record Patterns & Nested Deconstruction", "Eliminating the Gang-of-Four Visitor Pattern"]
       }
     ]
   },
@@ -135,6 +139,10 @@ export const roadmapData: RoadmapLevel[] = [
       {
         title: "Network Socket Programming",
         details: ["`ServerSocket`", "`Socket`", "TCP vs UDP", "Blocking I/O network calls"]
+      },
+      {
+        title: "Regular Expressions and ReDoS Defense",
+        details: ["The `java.util.regex` Architecture (`Pattern` & `Matcher`)", "Nondeterministic Finite Automata (NFA) Internals", "Catastrophic Backtracking & ReDoS Vulnerability", "Greedy, Reluctant, & Possessive Quantifiers", "Text Blocks (`\"\"\"`) and Regex Compilation Caching"]
       }
     ]
   },
@@ -169,6 +177,10 @@ export const roadmapData: RoadmapLevel[] = [
       {
         title: "Reflection API & Custom Annotations",
         details: ["The `Class<?>` object", "Dynamic method invocation", "Building custom `@Annotations`", "The performance cost of reflection"]
+      },
+      {
+        title: "Java Platform Module System (JPMS)",
+        details: ["Project Jigsaw and `module-info.java`", "`requires`, `exports`, `opens`, and Qualified Exports", "Strong Encapsulation vs Reflection Infiltration", "Split Packages & The Unnamed Module", "Creating Custom Minimal Runtimes with `jlink`"]
       }
     ]
   },
@@ -233,6 +245,10 @@ export const roadmapData: RoadmapLevel[] = [
       {
         title: "Project Loom (Virtual Threads)",
         details: ["Platform Threads vs OS Threads vs Virtual Threads", "How the JVM parks/unparks virtual threads during blocking I/O", "Structured Concurrency API", "Scoped Values (The modern ThreadLocal)"]
+      },
+      {
+        title: "Structured Concurrency and Scoped Values",
+        details: ["The Flaws of Unstructured Concurrency (`Future.get()`, Orphan Threads)", "StructuredTaskScope (`ShutdownOnFailure`, `ShutdownOnSuccess`)", "Subtask Lifecycle & Cancellation Cascades", "ScopedValue (JEP 446) vs Memory-Leaking ThreadLocal", "Unifying Virtual Threads with Structured Task Hierarchies"]
       }
     ]
   },
@@ -263,6 +279,10 @@ export const roadmapData: RoadmapLevel[] = [
       {
         title: "Architectural Patterns",
         details: ["Hexagonal Architecture (Ports and Adapters)", "Clean Architecture / Onion Architecture", "CQRS (Command Query Responsibility Segregation)", "Strangler Fig pattern for migrating monoliths"]
+      },
+      {
+        title: "Domain-Driven Design Tactical Patterns",
+        details: ["Strategic vs Tactical Domain-Driven Design (DDD)", "Entities vs Value Objects vs Aggregates", "Aggregate Roots as Transactional Invariant Boundaries", "Domain Events & Event-Driven Decoupling", "Repositories vs DAO Antipatterns", "Anti-Corruption Layers (ACL) in Legacy Integration"]
       }
     ]
   },
@@ -443,6 +463,10 @@ export const roadmapData: RoadmapLevel[] = [
       {
         title: "Resilient Event Processing and Dead Letter Queues",
         details: ["Error Handling in Spring Kafka", "Non-Blocking Retries with `@RetryableTopic`", "Dead Letter Topic (DLT) Routing & Reprocessing", "Backpressure and Circuit Breakers for Event Consumers"]
+      },
+      {
+        title: "Stateful Stream Processing with Kafka Streams",
+        details: ["KStream, KTable, and GlobalKTable Duality", "RocksDB Local Embedded State Stores", "Windowing Operations: Tumbling, Hopping, & Sliding Windows", "Stream-Table Joins & Changelog Topic Compaction", "Exactly-Once Processing Semantics (EOS) in Kafka Streams"]
       }
     ]
   },
@@ -583,6 +607,40 @@ export const roadmapData: RoadmapLevel[] = [
       {
         title: "LLM Tool Calling and Function Execution",
         details: ["Function Calling Mechanics with LLMs", "Registering Java Functions as Tools in Spring AI", "Multi-Step Decision Loops and Agentic Execution", "Securing AI Tool Execution in Enterprise Backends"]
+      },
+      {
+        title: "Multi-Agent Orchestration and Autonomous Systems",
+        details: ["Autonomous Agent Architectures: Perception, Reasoning, & Action", "The ReAct (Reason + Act) Loop in Enterprise Java", "Short-Term Working Memory vs Long-Term Vector Memory", "Multi-Agent Coordination & Supervision Patterns", "Human-in-the-Loop Safeguards for Autonomous Workflows"]
+      }
+    ]
+  },
+  {
+    level: 15,
+    title: "Level 15: Ultra-Low Latency & Mechanical Sympathy",
+    subtitle: "Sub-Microsecond Systems & Hardware Alignment",
+    description: "The apex tier of high-performance Java engineering. Master mechanical sympathy, LMAX Disruptor lock-free ring buffers, Project Panama FFM off-heap memory, zero-allocation algorithms, and low-latency Aeron messaging.",
+    color: "from-rose-500/20 to-rose-500/5",
+    badge: "bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-500/30",
+    topics: [
+      {
+        title: "Mechanical Sympathy and CPU Architecture",
+        details: ["Mechanical Sympathy: Designing Code for Modern Hardware", "CPU Cache Hierarchy (L1, L2, L3) and 64-Byte Cache Lines", "False Sharing and the `@Contended` Annotation", "Branch Predictors, Out-of-Order Execution, & Instruction Pipelines", "Hardware Memory Barriers (Store-Load, Load-Load, Store-Store)"]
+      },
+      {
+        title: "Project Panama: Foreign Function & Memory API",
+        details: ["Retiring `sun.misc.Unsafe` and JNI Pitfalls (JEP 454)", "MemorySegment, MemoryLayout, and Arenas (Confined, Shared, Global)", "Deterministic Off-Heap Memory Allocation without GC Overhead", "Calling Native C/C++ Libraries via `Linker` and `SymbolLookup`", "High-Performance Direct Memory I/O"]
+      },
+      {
+        title: "The LMAX Disruptor and Lock-Free Ring Buffers",
+        details: ["The Contention Nightmare of BlockingQueues", "Circular Ring Buffer Topology with Power-of-Two Masking", "Sequencer Architecture: Single-Producer vs Multi-Producer", "Memory Barriers without Mutex Locks", "Wait Strategies: YieldingWaitStrategy vs BusySpinWaitStrategy"]
+      },
+      {
+        title: "Zero-Allocation Java and Garbage-Free Patterns",
+        details: ["Escaping the GC: Escape Analysis & Scalar Replacement", "Flyweight Pattern for Reusable Value Mutators", "Primitive Specialized Collections (Agrona, Eclipse Collections)", "CPU Core Pinning & Thread Affinity via JNI/JNA", "Garbage-Free Logging with Log4j2 Asynchronous Appenders"]
+      },
+      {
+        title: "Ultra-Low-Latency Messaging: Aeron and Chronicle Queue",
+        details: ["The Microsecond Barrier: TCP vs UDP Multicast", "Aeron Messaging Architecture: Media Driver, Log Buffers, & Flow Control", "Chronicle Queue: Memory-Mapped Inter-Process Communication (IPC)", "Kernel Bypass Networking (Solarflare OpenOnload, DPDK)", "Designing Deterministic Sub-Microsecond Trading Engines"]
       }
     ]
   }

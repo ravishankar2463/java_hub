@@ -21,7 +21,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "JavaHub | Modern Java Developer Platform",
-  description: "The complete senior engineering curriculum: 11 levels, 73 deep-dive topics, JVM internals, Project Loom, Spring Boot 3, and Cloud Architecture.",
+  description: "The complete senior engineering curriculum: 16 levels, 116 deep-dive topics, JVM internals, Project Loom, Spring Boot 3, Distributed Systems, AI Orchestration, and Ultra-Low Latency Java.",
 };
 
 export default function RootLayout({

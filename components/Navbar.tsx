@@ -30,6 +30,7 @@ const LEVELS = [
   { level: 12, title: "Cloud & K8s", short: "L12: Cloud" },
   { level: 13, title: "System Design & SRE", short: "L13: SRE" },
   { level: 14, title: "Enterprise AI", short: "L14: AI" },
+  { level: 15, title: "Low Latency & HFT", short: "L15: Low Latency" },
 ];
 
 export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
@@ -118,7 +119,7 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
                 <Map className="w-3.5 h-3.5" />
                 Roadmap
                 <span className="ml-1 px-1.5 py-0.2 text-[10px] rounded-full bg-[var(--color-card-subtle)] text-slate-500 dark:text-slate-400 border border-[var(--color-border)]">
-                  104 Topics
+                  116 Topics
                 </span>
               </Link>
             </nav>
@@ -206,7 +207,7 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
                     <span>Mastery Roadmap</span>
                   </div>
                   <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-medium">
-                    15 Levels
+                    16 Levels
                   </span>
                 </Link>
               </div>

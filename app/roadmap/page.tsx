@@ -24,6 +24,7 @@ const LEVEL_SHORTCUTS = [
   { level: 12, label: "L12: Cloud & K8s" },
   { level: 13, label: "L13: System Design" },
   { level: 14, label: "L14: Enterprise AI" },
+  { level: 15, label: "L15: Low Latency" },
 ];
 
 export default function RoadmapPage() {
@@ -56,7 +57,7 @@ export default function RoadmapPage() {
         <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
           <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[var(--color-card)] border border-[var(--color-border)] text-xs sm:text-sm text-slate-700 dark:text-slate-300 shadow-xs">
             <Layers className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span><strong className="text-slate-900 dark:text-slate-100">15</strong> Mastery Levels</span>
+            <span><strong className="text-slate-900 dark:text-slate-100">{roadmapData.length}</strong> Mastery Levels</span>
           </div>
           <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[var(--color-card)] border border-[var(--color-border)] text-xs sm:text-sm text-slate-700 dark:text-slate-300 shadow-xs">
             <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
