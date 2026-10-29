@@ -1,262 +1,438 @@
 ---
 title: "Automated Testing"
-description: "Build a practical Spring Boot test strategy with JUnit Jupiter, AssertJ, Mockito, MockMvc, integration tests, and Testcontainers."
+description: "Master enterprise testing in Spring Boot: JUnit 5, AssertJ, Mockito pitfalls, @WebMvcTest slice testing, context caching with @DirtiesContext hazards, and Testcontainers with @ServiceConnection."
 category: "level-8"
 date: "2026-10-29T10:00:00Z"
 ---
 
-Automated tests make behavior repeatable: after a change, they can check whether important contracts still hold without relying on a developer to click through the application by hand. The useful question is not how to maximize the number of tests, but which test gives fast, reliable evidence for a behavior at the right boundary.
+There are two kinds of automated test suites in enterprise software engineering: the kind that gives your team the fearless confidence to deploy to production on a Friday afternoon, and the kind that developers routinely bypass with `-DskipTests` because it takes 45 minutes to run, consumes 16 GB of RAM, and fails intermittently due to timing glitches.
 
-This lesson uses Java 21, the JUnit Jupiter programming model (commonly called JUnit 5), Spring Boot 4.1.2 / Spring Framework 7, and current Mockito, AssertJ, and Testcontainers APIs. Spring Boot's dependency BOM selects the exact JUnit artifact version; its newer releases may manage a later JUnit major while retaining the Jupiter API model shown here. Examples assume the usual Spring Boot test dependencies, but this repository does not include Java or Spring test dependencies, so the snippets are instructional rather than locally compiled or run.
+Writing high-value tests is not about chasing arbitrary 100% code coverage metrics. It is about understanding the **cost-to-confidence ratio** of each testing boundary: knowing when a 2-millisecond pure unit test is superior to a 5-second Spring context test, and knowing when an in-memory mock provides dangerous, false confidence that hides a production outage.
 
-## Choose the boundary that answers the question
+In this guide, we will examine the full testing spectrum in modern Java 21 and Spring Boot. We will master JUnit 5, AssertJ, and Mockito, dive into Spring MVC slice tests with `MockMvc`, optimize Spring's context caching engine, and replace flawed in-memory database mocks with real, containerized PostgreSQL instances using **Testcontainers** and `@ServiceConnection`.
 
-Use the narrowest test that verifies the behavior you care about. As the test crosses more application boundaries, it usually proves more integration and costs more setup and runtime:
+---
+
+## The Testing Pyramid vs The Testing Trophy
+
+In traditional software engineering, the "Testing Pyramid" advocated for thousands of unit tests and almost zero integration tests. In modern cloud-native architectures where microservices heavily integrate with databases, messaging brokers, and HTTP APIs, senior engineers advocate for the **Testing Trophy**:
 
 ```mermaid
 flowchart TD
-    question["What behavior must this test prove?"]
-    question --> pure{"One class's business rule?"}
-    pure -->|yes| unit["JUnit Jupiter unit test; use AssertJ"]
-    pure -->|no| web{"HTTP mapping, validation, or JSON contract?"}
-    web -->|yes| mvc["Spring MVC slice with MockMvc"]
-    web -->|no| wiring{"Application wiring or component interaction?"}
-    wiring -->|yes| context["Integration test with SpringBootTest"]
-    wiring -->|no| database{"Real database behavior or SQL compatibility?"}
-    database -->|yes| container["SpringBootTest with Testcontainers"]
-    database -->|no| review["Clarify the observable behavior and its boundary"]
+    subgraph Trophy ["The Testing Trophy"]
+        E2E["End-to-End Tests (Smallest)
+(Full system, multi-service workflows)"]
+        Integration["Integration Tests (Largest / Highest ROI)
+(@SpringBootTest + Testcontainers: Real DB, real queries)"]
+        Slice["Slice Tests (Medium)
+(@WebMvcTest, @DataJpaTest: Fast boundary checks)"]
+        Unit["Unit Tests (Fast Foundation)
+(Plain JUnit 5 + AssertJ: Pure business logic, zero Spring)"]
+    end
+
+    Unit --> Slice
+    Slice --> Integration
+    Integration --> E2E
 ```
 
-The categories are complementary rather than competing. A focused unit test can cover many business-rule cases; a smaller set of MVC and full-context tests checks framework wiring and external boundaries. Avoid making every test load the entire application and database when a plain unit test would answer the same question.
+| Test Type | Scope | Execution Speed | Spring Context Loaded? | What It Proves |
+|---|---|---|---|---|
+| **Pure Unit Test** | A single Java class / algorithm | 1 - 5 milliseconds | **No** (Zero overhead) | Business logic, state calculations, branch rules. |
+| **Web Slice Test (`@WebMvcTest`)** | Controller layer | 200 - 800 milliseconds | **Partial** (Only MVC controllers, Jackson, Security) | HTTP routing, JSON serialization, validation, status codes. |
+| **Data Slice Test (`@DataJpaTest`)** | Repository layer | 500ms - 2 seconds | **Partial** (Only JPA entities and repositories) | Derived queries, JPQL correctness, custom mappings. |
+| **Full Integration Test (`@SpringBootTest`)** | End-to-end service flow | 2 - 10 seconds | **Full** (Entire `ApplicationContext`) | Spring bean wiring, transaction boundaries, component interplay. |
+| **Containerized Integration** | Real DB / Broker interactions | 3 - 15 seconds | **Full + Docker** | Real PostgreSQL/Kafka compatibility, migrations, foreign keys. |
 
-## JUnit Jupiter and AssertJ for unit tests
+---
 
-JUnit 5 is a family of projects: the JUnit Platform launches tests, and JUnit Jupiter provides the programming and extension model used in these examples. `@Test` marks a test method; lifecycle annotations such as `@BeforeEach` can prepare per-test state. Prefer independent tests with explicit setup over state shared between tests.
+## Unit Testing with JUnit 5 and AssertJ
 
-AssertJ complements JUnit by providing fluent assertions and useful failure messages. For example, an exception can be asserted by type and message:
+A pure unit test should never bootstrap the Spring `ApplicationContext`. Bootstrapping Spring takes 2 to 5 seconds per test class; running 500 pure unit tests takes under 500 milliseconds total.
+
+### Fluent Assertions with AssertJ
+AssertJ provides type-safe, human-readable assertion chaining that generates crystal-clear failure messages when something breaks:
 
 ```java
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+package com.example.ecommerce.domain;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
-record Order(String id) {
-}
+import java.math.BigDecimal;
+import java.util.List;
 
-class OrderService {
-    Order findRequired(String orderId) {
-        if (orderId == null || orderId.isBlank()) {
-            throw new IllegalArgumentException("orderId must not be blank");
-        }
-        return new Order(orderId);
-    }
-}
+import static org.assertj.core.api.Assertions.*;
 
-class OrderServiceTest {
-    private final OrderService service = new OrderService();
+class OrderDiscountCalculatorTest {
+
+    private final OrderDiscountCalculator calculator = new OrderDiscountCalculator();
 
     @Test
-    void rejectsBlankOrderIds() {
-        assertThatThrownBy(() -> service.findRequired(" "))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("orderId must not be blank");
+    @DisplayName("Should apply 15% VIP discount when order total exceeds USD 100")
+    void shouldApplyVipDiscountForHighValueOrders() {
+        // Arrange
+        Order order = new Order(
+            "VIP-CUSTOMER",
+            List.of(new OrderItem("LAPTOP", new BigDecimal("1200.00"), 1))
+        );
+
+        // Act
+        BigDecimal discountedTotal = calculator.calculateTotal(order);
+
+        // Assert (AssertJ chaining)
+        assertThat(discountedTotal)
+            .isNotNull()
+            .isEqualByComparingTo(new BigDecimal("1020.00")) // 1200 - 15% (180)
+            .isLessThan(order.getRawTotal());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "   ", "\t"})
+    @DisplayName("Should throw IllegalArgumentException when customer ID is blank")
+    void shouldRejectBlankCustomerIds(String invalidCustomerId) {
+        assertThatThrownBy(() -> new Order(invalidCustomerId, List.of()))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Customer ID must not be blank");
     }
 }
 ```
 
-This is a unit test: it runs the class directly, without starting Spring or connecting to a database. Assertions should describe externally observable results and important side effects, not private method calls or implementation details that may change without changing behavior.
+---
 
-JUnit also supports parameterized tests for the same behavior over a set of inputs. Use them when cases share one clear assertion; keep each case easy to understand and report. Test meaningful boundaries (blank, malformed, minimum/maximum, absent, and valid values) rather than producing large numbers of nearly identical test methods.
+## Mocking Collaborators with Mockito
 
-## Mock collaborators with Mockito
-
-A unit test should not contact a production database, network, or mail provider. Mockito can replace a collaborator at the boundary and let the test focus on the class's decision. A small example uses constructor injection so the dependency is explicit:
+Mockito allows you to stub external collaborators (e.g., payment gateways, remote REST APIs) so your unit test focuses exclusively on the class under test.
 
 ```java
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+package com.example.ecommerce.service;
 
-import java.util.Optional;
+import com.example.ecommerce.domain.Order;
+import com.example.ecommerce.domain.PaymentGateway;
+import com.example.ecommerce.domain.PaymentResult;
+import com.example.ecommerce.repository.OrderRepository;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-interface OrderRepository {
-    Optional<Order> findById(String id);
-}
+import java.math.BigDecimal;
+import java.util.UUID;
 
-class OrderLookupService {
-    private final OrderRepository repository;
-
-    OrderLookupService(OrderRepository repository) {
-        this.repository = repository;
-    }
-
-    Order findRequired(String id) {
-        return repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + id));
-    }
-}
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class OrderLookupServiceTest {
+class OrderProcessingServiceTest {
+
     @Mock
-    private OrderRepository repository;
+    private OrderRepository orderRepository;
+
+    @Mock
+    private PaymentGateway paymentGateway;
 
     @InjectMocks
-    private OrderLookupService service;
+    private OrderProcessingService orderService;
 
     @Test
-    void returnsTheOrderFoundByTheRepository() {
-        var expected = new Order("42");
-        when(repository.findById("42")).thenReturn(Optional.of(expected));
+    @DisplayName("Should confirm order and save when payment succeeds")
+    void shouldConfirmOrderOnSuccessfulPayment() {
+        // Arrange
+        UUID orderId = UUID.randomUUID();
+        Order pendingOrder = new Order(orderId, new BigDecimal("250.00"));
+        
+        when(orderRepository.findById(orderId)).thenReturn(java.util.Optional.of(pendingOrder));
+        when(paymentGateway.charge(eq(orderId), any(BigDecimal.class)))
+            .thenReturn(PaymentResult.success("TXN-999"));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var actual = service.findRequired("42");
+        // Act
+        Order confirmedOrder = orderService.processOrder(orderId);
 
-        assertThat(actual).isEqualTo(expected);
-        verify(repository).findById("42");
+        // Assert
+        assertThat(confirmedOrder.isConfirmed()).isTrue();
+        assertThat(confirmedOrder.getTransactionId()).isEqualTo("TXN-999");
+
+        // Verify side-effect interactions
+        verify(paymentGateway, times(1)).charge(orderId, new BigDecimal("250.00"));
+        verify(orderRepository, times(1)).save(pendingOrder);
     }
 }
 ```
 
-The example assumes an `OrderRepository` with `Optional<Order> findById(String id)` and an `OrderLookupService` whose constructor takes that repository and whose `findRequired` method returns the matching order. `@Mock` creates the mock, `@InjectMocks` constructs the subject and injects its mock dependencies, and `MockitoExtension` integrates Mockito with JUnit Jupiter. Keep real business logic in the subject under test; mocks are for collaborators, not for the value being tested.
+### The Pitfall of Over-Mocking
+If your test mocks 8 different collaborators and contains 25 lines of `when(...).thenReturn(...)` just to test 3 lines of business logic, you are not testing behavior—you are testing the internal implementation details. If someone refactors a method signature or changes an internal helper call, your tests will break even though the public behavior never changed. Only mock external I/O boundaries (networks, emails, payment terminals).
 
-Stub only behavior the test needs, then assert the result or externally relevant effect. A test that only verifies an interaction can pass while the returned value or state is wrong. Avoid mocking every class: excessive mocks couple tests to implementation and can give false confidence about real wiring. For Spring-managed components, use a Spring context test and `@MockitoBean` when the test needs to replace one application bean; `@Mock` alone does not register a bean in Spring's `ApplicationContext`.
+---
 
-## Test an HTTP contract with MockMvc
+## Controller Slice Testing with `@WebMvcTest` and `MockMvc`
 
-`MockMvc` exercises Spring MVC request handling with mock servlet request and response objects, without starting a real HTTP server. A `@WebMvcTest` loads a focused MVC slice; mock collaborators that the controller needs rather than loading unrelated services and infrastructure.
+When testing a REST controller, bootstrapping the entire database and security infrastructure is unnecessary. `@WebMvcTest` instantiates a lightweight, focused slice of Spring MVC:
+
+```mermaid
+flowchart TD
+    subgraph MockMvcContext ["@WebMvcTest Slice"]
+        Dispatcher["DispatcherServlet"]
+        Controller["OrderController"]
+        Converters["Jackson HttpMessageConverter"]
+        Validator["Jakarta LocalValidatorFactoryBean"]
+        MockBean["@MockitoBean OrderService (Mock)"]
+    end
+
+    Test["MockMvc Test Runner"] --> Dispatcher
+    Dispatcher --> Controller
+    Controller --> MockBean
+```
+
+> [!NOTE]
+> **Spring Framework 6.2 / Spring Boot 3.4 `@MockitoBean` Upgrade**  
+> In modern Spring Boot, the legacy `@MockBean` from `org.springframework.boot.test.mock.mockito` has been deprecated in favor of `@MockitoBean` from `org.springframework.test.context.bean.override.mockito`. It provides superior bean-override semantics during test context construction.
 
 ```java
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+package com.example.ecommerce.api;
 
+import com.example.ecommerce.api.dto.CreateOrderRequest;
+import com.example.ecommerce.api.dto.OrderResponse;
+import com.example.ecommerce.domain.OrderService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
 @WebMvcTest(OrderController.class)
 class OrderControllerTest {
+
     @Autowired
     private MockMvc mockMvc;
 
-    @MockitoBean
-    private OrderLookupService orders;
-
-    @Test
-    void returnsAnOrderAsJson() throws Exception {
-        when(orders.findRequired("42")).thenReturn(new Order("42"));
-
-        mockMvc.perform(get("/orders/42"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value("42"));
-    }
-}
-```
-
-This assumes an `OrderController` mapped to `GET /orders/{id}` that delegates to `OrderLookupService` and serializes an `Order` with an `id` property. `@MockitoBean` replaces a bean in the Spring test context; it is distinct from Mockito's plain `@Mock`. Spring Framework 7's bean-override annotation is used here rather than the older Spring Boot `@MockBean` API.
-
-An MVC test can check routing, JSON serialization, validation, exception mapping, and HTTP status behavior. The example assumes this route permits anonymous access; if the application's security filters protect it, configure the test with authentication and authorities that match the real rule. It does not prove that the real service or database works. Do not disable security just to make the test pass. Keep assertions on externally observable response contracts rather than incidental JSON formatting.
-
-## Full application integration with `@SpringBootTest`
-
-Use `@SpringBootTest` when a test needs Spring Boot's actual application configuration, dependency injection, and several collaborating components. By default, it loads the application context but does not start a server. Select a web environment explicitly when the test needs a real listening server, such as a test of the deployed HTTP stack or network configuration.
-
-```java
-import static org.assertj.core.api.Assertions.assertThat;
-
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-
-@SpringBootTest
-class OrderLookupIntegrationTest {
     @Autowired
-    private OrderLookupService orders;
+    private ObjectMapper objectMapper;
+
+    @MockitoBean
+    private OrderService orderService;
 
     @Test
-    void applicationContextProvidesTheRealService() {
-        assertThat(orders).isNotNull();
+    @DisplayName("POST /api/v1/orders - Valid request returns 201 Created with Location header")
+    void createOrderSuccess() throws Exception {
+        UUID orderId = UUID.randomUUID();
+        CreateOrderRequest request = new CreateOrderRequest(
+            "CUST-101",
+            List.of(new CreateOrderRequest.OrderItemRequest("SKU-BOOK", 2, new BigDecimal("19.99")))
+        );
+
+        OrderResponse response = new OrderResponse(
+            orderId, "CUST-101", "CREATED", new BigDecimal("39.98"), List.of(), Instant.now()
+        );
+
+        when(orderService.createOrder(any())).thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/orders")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isCreated())
+            .andExpect(header().string("Location", org.hamcrest.Matchers.containsString("/api/v1/orders/" + orderId)))
+            .andExpect(jsonPath("$.id").value(orderId.toString()))
+            .andExpect(jsonPath("$.status").value("CREATED"))
+            .andExpect(jsonPath("$.totalAmount").value(39.98));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/orders - Invalid request triggers RFC 9457 ProblemDetail 400")
+    void createOrderValidationError() throws Exception {
+        // Missing customerId and empty items list
+        CreateOrderRequest invalidRequest = new CreateOrderRequest("", List.of());
+
+        mockMvc.perform(post("/api/v1/orders")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(invalidRequest)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.title").value("Validation Failure"))
+            .andExpect(jsonPath("$.status").value(400))
+            .andExpect(jsonPath("$.invalidParams").isArray());
     }
 }
 ```
 
-This simple example checks context wiring; a useful integration test should exercise an important workflow through real application components and assert its result. Full context tests can take more time and use more resources than unit or slice tests, so reserve them for integration behavior that narrower tests cannot verify.
+---
 
-Spring's test context framework may cache compatible application contexts between tests. Keep test configuration stable when reuse is valuable, and avoid changing shared static state. Transactions can roll back work performed in the test-managed transaction, but they do not automatically undo external messages, HTTP calls, or database work performed in another transaction or thread.
+## The Danger of In-Memory Databases (The H2 Trap)
 
-## Real database behavior with Testcontainers
+For years, tutorials recommended testing Spring Data repositories against an in-memory H2 database because it was fast and required no external tools.
 
-Mocks cannot prove that the application's SQL, schema migrations, indexes, or database-specific behavior work against a real database engine. Testcontainers starts disposable services in Docker so an integration test can connect to the same database family used in production without depending on a developer-maintained local database.
+**Using H2 to test queries destined for PostgreSQL, MySQL, or Oracle in production is an architectural disaster.**
 
-Assume the application persists an `Order` JPA entity with a `String` identifier and has a Spring Data `OrderRepository` with `save` and `findById` methods. Spring Boot can create connection details from a Testcontainers-managed database with `@ServiceConnection`:
+### Why H2 Gives False Confidence
+1. **Dialect Discrepancies**: H2 accepts SQL syntax that PostgreSQL rejects, and vice-versa.
+2. **Missing Advanced Features**: H2 does not support PostgreSQL `JSONB` operators (`->>`), full-text search vectors, specific window functions, or UUID array types.
+3. **Case Sensitivity & Types**: H2 defaults to uppercase table names, hiding case-sensitivity bugs on Linux production servers.
+4. **Locking & Concurrency**: H2 does not replicate PostgreSQL's Multi-Version Concurrency Control (MVCC) or row-level `FOR UPDATE NOWAIT` locking behavior.
+
+---
+
+## Real Database Testing with Testcontainers and `@ServiceConnection`
+
+**Testcontainers** uses Docker to spin up genuine, production-identical database instances (PostgreSQL 16, MySQL 8, Redis 7, Kafka) directly from your JUnit test suite.
+
+In Spring Boot 3.1+, the `@ServiceConnection` annotation automatically discovers the container's dynamic port and binds Spring Boot's `spring.datasource.url`, `username`, and `password` properties without any manual `@DynamicPropertySource` configuration!
 
 ```java
-import static org.assertj.core.api.Assertions.assertThat;
+package com.example.ecommerce.integration;
 
+import com.example.ecommerce.entity.Order;
+import com.example.ecommerce.entity.OrderStatus;
+import com.example.ecommerce.repository.OrderRepository;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
 
+import java.math.BigDecimal;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
 @Testcontainers
-@SpringBootTest
-class OrderRepositoryIntegrationTest {
+class OrderRepositoryPostgresTest {
+
+    // Starts a real PostgreSQL 16 Docker container for the test suite
     @Container
     @ServiceConnection
-    static final PostgreSQLContainer<?> postgres =
-            new PostgreSQLContainer<>("postgres:16.4");
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16-alpine");
 
     @Autowired
-    private OrderRepository orders;
+    private OrderRepository orderRepository;
 
     @Test
-    void persistsAnOrderInPostgres() {
-        orders.save(new Order("42"));
-        var found = orders.findById("42");
+    @DisplayName("Should persist order and verify UUID generation in real PostgreSQL")
+    void shouldSaveAndQueryInRealPostgres() {
+        Order newOrder = new Order(UUID.randomUUID(), "CUST-999", OrderStatus.PENDING, new BigDecimal("89.50"));
 
-        assertThat(found).isPresent();
-        assertThat(found.orElseThrow().getId()).isEqualTo("42");
+        Order saved = orderRepository.save(newOrder);
+        assertThat(saved.getId()).isNotNull();
+
+        var retrieved = orderRepository.findById(saved.getId());
+        assertThat(retrieved).isPresent();
+        assertThat(retrieved.get().getCustomerId()).isEqualTo("CUST-999");
+        assertThat(retrieved.get().getTotalAmount()).isEqualByComparingTo(new BigDecimal("89.50"));
     }
 }
 ```
 
-The repository round trip uses a real PostgreSQL service, not a mock. Add the Spring Boot Testcontainers integration, the Testcontainers JUnit Jupiter and PostgreSQL modules, and Docker support in the test environment. Let the Spring Boot dependency management or project BOM select compatible library versions. The example image tag illustrates database selection; pin and maintain a specific image version or digest according to the project's reproducibility and supply-chain policy.
+---
 
-Static `@Container` fields are shared across test methods in a class and are started once for that class by the JUnit Jupiter integration; instance fields restart for each test method. The Testcontainers JUnit Jupiter extension documents sequential execution as its supported mode, so do not assume that its lifecycle is safe under parallel execution. Spring-managed container beans are another lifecycle option when sharing a container across a cached application context; choose one lifecycle strategy deliberately.
+## Spring Test Context Caching and the `@DirtiesContext` Build Bloat
 
-Testcontainers needs Docker or a compatible container runtime; a missing runtime is an environment prerequisite failure, not a passing database test. Container-backed tests should still clean up data or isolate records so that order, retries, or reused contexts do not make results depend on stale state.
+Spring's Test Context Framework includes a smart **Context Caching Mechanism**:
+If Test Class A and Test Class B share the identical Spring configuration (same active profiles, same mock beans, same environment variables), Spring Boots up the `ApplicationContext` **only once** and reuses it for Test Class B!
 
-## Keep a suite trustworthy
+```mermaid
+flowchart TD
+    ClassA["OrderServiceIntegrationTest
+(Starts ApplicationContext - 4 seconds)"] --> Cache["Spring Test Context Cache"]
+    Cache --> ClassB["CustomerServiceIntegrationTest
+(Exact same config -> REUSES cached context! - 50ms)"]
+    
+    ClassB --> DirtyClass["LegacyDirtyTest
+(@DirtiesContext annotation)"]
+    DirtyClass --> Evict["CACHE DESTROYED!"]
+    Evict --> ClassC["PaymentIntegrationTest
+(Must reboot ApplicationContext from scratch! - 4 seconds)"]
+```
 
-- **Test behavior, not private structure.** Refactoring should not break a test when public behavior remains the same.
-- **Keep tests deterministic.** Use fixed clocks, controlled IDs, and explicit inputs when time or randomness matters; avoid sleeps and tests that depend on order.
-- **Make failures diagnostic.** Use descriptive test names and focused assertions so a failure identifies the behavior that changed.
-- **Test both success and failure paths.** Include invalid input, missing data, authorization failures, and dependency errors where they are part of the contract.
-- **Avoid shared mutable fixtures.** Each test should establish its own relevant state and clean up external resources.
-- **Treat mocks as boundaries.** Too many mocked collaborators test the arrangement of mocks instead of the application's real behavior.
-- **Run the project wrapper.** Maven projects commonly run tests with `mvnw.cmd test`; Gradle projects commonly use `gradlew.bat test`. CI should execute the same wrapper and publish test reports.
-- **Do not equate coverage with correctness.** Coverage can find unexecuted lines, but it does not show whether assertions check meaningful outcomes.
+### The Cost of `@DirtiesContext`
+When a developer adds `@DirtiesContext` to a test class, it tells Spring: *"My test mutated shared Spring bean state; destroy this ApplicationContext from cache when I finish."*
 
-## Further reading
+If 20 integration test classes use `@DirtiesContext`, Spring Boot starts up from scratch 20 times! A test suite that should have run in 15 seconds will now take 3 minutes.
 
-- JUnit, [JUnit 5 User Guide](https://docs.junit.org/5.13.4/user-guide/)
-- AssertJ, [AssertJ Core Reference Guide](https://assertj.github.io/doc/)
-- Mockito, [Mockito JUnit Jupiter Extension](https://javadoc.io/doc/org.mockito/mockito-junit-jupiter/latest/org/mockito/junit/jupiter/MockitoExtension.html)
-- Spring Boot 4.1, [Testing Spring Boot Applications](https://docs.spring.io/spring-boot/4.1/reference/testing/spring-boot-applications.html)
-- Spring Boot 4.1, [Testcontainers Support](https://docs.spring.io/spring-boot/4.1/reference/testing/testcontainers.html)
-- Spring Framework 7, [MockMvc](https://docs.spring.io/spring-framework/reference/testing/mockmvc.html)
-- Spring Framework 7, [`@MockitoBean`](https://docs.spring.io/spring-framework/reference/testing/annotations/integration-spring/annotation-mockitobean.html)
-- Testcontainers, [JUnit 5 Integration](https://java.testcontainers.org/test_framework_integration/junit_5/)
-- [Spring Data JPA](./spring-data-jpa)
-- [Building RESTful APIs](./building-restful-apis)
+### How to Maintain Clean State Without `@DirtiesContext`
+1. Use `@Transactional` on test classes: The test runner automatically rolls back all database mutations when each `@Test` method finishes.
+2. Clean up tables via an explicit `@AfterEach` helper:
+   ```java
+   @Autowired
+   private OrderRepository orderRepository;
+
+   @AfterEach
+   void cleanUp() {
+       orderRepository.deleteAllInBatch();
+   }
+   ```
+3. Avoid mutating singleton bean fields inside tests.
+
+---
+
+## Architectural Traps and Real-World Outages
+
+### The "H2 False Confidence" Production Crash
+An e-commerce team ran 1,200 integration tests using an in-memory H2 database. All tests passed in CI in 45 seconds. 
+During a major Black Friday release, a new repository method executed this query:
+```sql
+SELECT * FROM orders o WHERE o.metadata->>'promo' = 'BLACK_FRIDAY'
+```
+H2's PostgreSQL compatibility mode accepted the syntax in tests. But in production, the application connected to an older AWS RDS PostgreSQL cluster whose JSONB index configuration threw an invalid cast exception. The checkout service crashed immediately upon launch, causing USD 250,000 in lost orders before rollback. 
+
+The fix was replacing H2 with Testcontainers running the exact PostgreSQL Docker image version deployed in AWS.
+
+### The MockMvc False Security Bug
+A developer wrote a `@WebMvcTest` for an administrative endpoint:
+```java
+mockMvc.perform(get("/api/admin/users")).andExpect(status().isOk());
+```
+The test passed with flying colors. But in production, the endpoint was completely inaccessible, returning 403 Forbidden to everyone. 
+Why? The developer had added `@AutoConfigureMockMvc(addFilters = false)` or omitted Spring Security from the `@WebMvcTest`, disabling all security filters! Always include Spring Security in your controller tests and test both authenticated and unauthorized roles with `@WithMockUser(roles = "ADMIN")`.
+
+---
+
+## Senior Interview Questions
+
+### Question 1: What is the exact difference between `@Mock`, `@InjectMocks`, and `@MockitoBean` in a Spring Boot application?
+**Answer:**  
+- **`@Mock`**: A standard Mockito annotation used in pure unit tests (`@ExtendWith(MockitoExtension.class)`). It creates a plain Mockito mock instance. It knows nothing about the Spring `ApplicationContext`.
+- **`@InjectMocks`**: A standard Mockito annotation that instantiates the tested class using constructor, setter, or field injection, passing in the collaborators marked with `@Mock`.
+- **`@MockitoBean`** (formerly `@MockBean`): A Spring Framework test annotation used in integration/slice tests (`@SpringBootTest`, `@WebMvcTest`). It creates a Mockito mock and registers it as a singleton bean **inside the Spring ApplicationContext**, replacing any existing real bean of that type for the duration of the test.
+
+### Question 2: How does the Spring Test Context Framework determine whether to reuse a cached `ApplicationContext` across multiple test classes?
+**Answer:**  
+Spring computes a `MergedTestConfiguration` cache key composed of:
+1. Test class hierarchy and annotations.
+2. Active Spring profiles (`@ActiveProfiles`).
+3. Configuration locations/classes (`@ContextConfiguration`).
+4. Custom property sources (`@TestPropertySource`).
+5. Overridden beans (`@MockitoBean` / `@MockBean`).
+6. Web environment configuration (`@SpringBootTest(webEnvironment = ...)`).
+
+If two test classes have the exact same combined configuration key, Spring reuses the running context. If a test class declares a unique `@MockitoBean` or different `@TestPropertySource`, it produces a cache miss and forces Spring to bootstrap an entirely new context.
+
+### Question 3: How does `@ServiceConnection` in Spring Boot Testcontainers work under the hood?
+**Answer:**  
+`@ServiceConnection` registers a `ConnectionDetails` bean in the test `ApplicationContext`. 
+For example, when applied to `PostgreSQLContainer<?>`, Spring Boot automatically registers a `JdbcConnectionDetails` bean that dynamically queries the container's randomized host port, database name, and credentials via `container.getJdbcUrl()`, `container.getUsername()`, and `container.getPassword()`. Spring Boot's auto-configuration prioritizes `ConnectionDetails` beans over standard `application.properties` datasource URLs, achieving seamless, zero-config container binding.
+
+### Question 4: Why can `@Transactional` on a `@SpringBootTest` method produce misleading results when testing concurrency or lazy loading?
+**Answer:**  
+When `@Transactional` is placed on a test method, the test runner wraps the entire test execution in a transaction and rolls it back at the end.
+1. **Lazy Loading False Confidence**: Because the test method itself holds an open Hibernate transaction, accessing lazy-loaded associations will succeed inside the test. However, in production, if a controller attempts to access that lazy collection outside a service transaction, it will crash with `LazyInitializationException`.
+2. **Concurrency Invalidation**: If the test spawns multiple threads or triggers an `@Async` method, the child threads cannot participate in the test runner's uncommitted transaction, resulting in race conditions and invisible state.
+Senior engineers prefer testing repository logic without test-level `@Transactional`, using explicit cleanup (`deleteAllInBatch()`) to observe true commit and flush behavior.
