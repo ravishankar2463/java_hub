@@ -63,13 +63,13 @@ Apply this exact standard of deep-dive rigorousness and Mermaid SVG architectura
 - [x] Polymorphism (Dynamic Method Dispatch, vtables vs itables, inline caching, pattern matching flow scoping, switch pattern matching)
 - [x] Advanced Class Design (Static nested vs inner, Outer.this memory leak hazard, effectively final variable capture, Records serialization security)
 
-**Level 2 Status:**
-- [x] Exception Handling
-- [x] Enums
-- [x] The String Constant Pool & StringBuilders
-- [x] Modern Core APIs
-- [x] I/O and NIO.2
-- [x] Network Socket Programming
+**Level 2 Status (Complete Human Voice Overhaul Done):**
+- [x] Exception Handling (Human voice, zero-cost bytecode exception tables, suppressed exceptions, fillInStackTrace performance cost)
+- [x] Enums (Human voice, bytecode class structure, EnumSet/EnumMap bit-vector performance, reflection-proof singletons, ordinal persistence hazards)
+- [x] The String Constant Pool & StringBuilders (Human voice, Compact Strings, StringTable C++ hashtable internals, invokedynamic StringConcatFactory, loop churn)
+- [x] Modern Core APIs (Human voice, JSR-310 immutable time engine, Instant vs ZonedDateTime, modern String utils, List.of compact factories, Java 11 non-blocking HttpClient)
+- [x] I/O and NIO.2 (Human voice, Streams vs Channels/Buffers, Direct ByteBuffers, Zero-Copy sendfile transfers, Memory-Mapped files mmap, serialization security)
+- [x] Network Socket Programming (Human voice, TCP 3-way handshake, packet streaming vs framing, TLV codec, TCP_NODELAY, SO_REUSEADDR, Java 21 Loom scale)
 
 **Level 3 Status:**
 - [x] Generics
