@@ -1,88 +1,100 @@
 ---
 title: "Database Migrations"
-description: "Evolve database schemas safely with versioned Flyway and Liquibase migrations, environment history, and expand-and-contract deployments."
+description: "Master zero-downtime database migrations with Flyway and Liquibase: Expand-and-Contract patterns, concurrent index creation, transactional DDL, and checksum validation."
 category: "level-7"
 date: "2026-10-29T10:00:00Z"
 ---
 
-A database schema is part of an application's runtime contract. When a release adds a column, changes a constraint, or transforms stored data, changing only the Java code leaves deployed databases behind. A **database migration** is a reviewed, version-controlled change that moves a database from one known schema state to the next.
+Imagine this production scenario: It is 10:00 AM on a Tuesday. A developer pushes a pull request that renames the `email` column to `email_address` in the `users` table. The pull request includes a single database migration script:
 
-This lesson introduces the migration workflow, then compares Flyway and Liquibase. Their syntax differs, but both keep a database-side record of applied changes and coordinate future updates with that record. Examples focus on SQL migrations and PostgreSQL where database behavior matters; verify DDL transactionality and locking for your database engine.
-
-## Why use schema migrations?
-
-Without migrations, schema setup and changes tend to drift into undocumented manual steps. One developer's database has a column that staging lacks; a production hotfix is not reflected in source control; a newly created test database follows different setup instructions than a real deployment.
-
-Migrations address this by recording the sequence of intended changes in the same version control workflow as application code. A tool checks its history table, applies pending changes in order, and records the result. A new environment can be built from the same migration history instead of relying on a copied database.
-
-```mermaid
-flowchart LR
-    Source["Versioned migration files"] --> Runner["Migration runner"]
-    Runner --> History["Database migration history"]
-    Runner --> Schema["Database schema and data"]
-    History --> Runner
-    App["Application version"] --> Schema
+```sql
+ALTER TABLE users RENAME COLUMN email TO email_address;
 ```
 
-The runner consults the history before changing the schema, rather than blindly replaying every file. The application and schema still need a compatible deployment plan: a successful migration alone does not guarantee every running application version can use the result.
+The migration runs as part of the CI/CD deployment pipeline. In Kubernetes, a rolling update begins: Pod 1 of the new version starts, while Pods 2, 3, and 4 are still running the previous version of your application.
 
-## Versioned SQL migrations with Flyway
+Immediately, your alerting system explodes:
+- Existing running pods (Pods 2, 3, and 4) fail on every login with `org.postgresql.util.PSQLException: ERROR: column "email" does not exist`.
+- New pods fail because background workers are still trying to read the old column name.
+- 500 Internal Server Errors spike across the entire platform.
 
-Flyway's common SQL migration convention uses a version, a double-underscore separator, a description, and a `.sql` suffix. For example:
+Your application code lives in version control, with pull requests, code reviews, and automated test pipelines. **Your database schema must be managed with the exact same rigor.** 
+
+Database migration frameworks—primarily **Flyway** and **Liquibase**—bring schema evolution into Git, providing automated, reproducible, and verifiable transitions across local machines, staging environments, and production clusters.
+
+```mermaid
+flowchart TD
+    subgraph "The Database Migration Pipeline"
+        Git["Migration Scripts in Git (/db/migration)"] --> Runner["Flyway / Liquibase Migration Runner"]
+        Runner --> Lock{"Acquire DB Lock Table"}
+        
+        Lock --> Check{"Check History Table (flyway_schema_history)"}
+        Check -->|"Checksum Drift Detected"| Crash["FAIL FAST! Abort Startup"]
+        Check -->|"Pending Migrations Found"| Apply["Execute Pending Migrations in Sequence"]
+        Check -->|"Up to Date"| Start["Release Lock & Start Java Application"]
+        
+        Apply --> Record["Record Applied Version & SHA-256 Hash"]
+        Record --> Start
+    end
+```
+
+---
+
+## Flyway: The SQL-First Standard
+
+Flyway is the industry standard for Java developers who prefer direct, clean SQL. It prioritizes simplicity and readability over complex abstraction layers.
+
+### The Flyway Naming Convention
+
+Flyway locates migration scripts inside `src/main/resources/db/migration/`. File names must follow a strict naming convention:
+
+```
+V<Version>__<Description>.sql
+```
+
+1. **Prefix**:
+   - `V`: **Versioned Migration**. Runs exactly once in numerical order (e.g., `V1__create_users.sql`, `V2.1__add_phone.sql`).
+   - `U`: **Undo Migration** (Commercial Flyway feature). Reverses a versioned migration.
+   - `R`: **Repeatable Migration**. Has no version number. Re-runs whenever its SHA-256 checksum changes (e.g., `R__user_summary_view.sql`).
+2. **Version**: Dot or underscore-separated numerical hierarchy (`V1_0_1` or `V1.0.1`).
+3. **Separator**: Two consecutive underscores (`__`).
+4. **Description**: Human-readable text with words separated by underscores or spaces.
+5. **Extension**: `.sql`.
 
 ```text
 src/main/resources/db/migration/
-  V001__create_customer.sql
-  V002__add_customer_status.sql
-  V003__backfill_customer_status.sql
-  R__refresh_customer_summary.sql
+  ├── V1__initial_schema.sql
+  ├── V2__add_orders_table.sql
+  ├── V3__create_customer_indexes.sql
+  └── R__recreate_order_reporting_view.sql
 ```
 
-Versioned migrations are applied once, in version order. Flyway records applied versions and checksums in its schema history table. Treat an applied migration as immutable: changing its contents after a shared environment has run it creates a history/checksum mismatch and makes it unclear which database state is authoritative. Add a new migration to correct or extend an already-applied change.
+### The flyway_schema_history Table
 
-`V001__create_customer.sql`:
+When Flyway runs, it automatically creates a metadata table named `flyway_schema_history` in your database:
 
-```sql
-CREATE TABLE customer (
-    customer_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    email text NOT NULL UNIQUE
-);
-```
+| installed_rank | version | description | type | script | checksum | installed_by | installed_on | success |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | 1 | initial schema | SQL | V1__initial_schema.sql | -142857291 | app_user | 2026-10-29 10:00:00 | true |
+| 2 | 2 | add orders table | SQL | V2__add_orders_table.sql | 849201948 | app_user | 2026-10-29 10:05:00 | true |
 
-`V002__add_customer_status.sql` for an existing `customer` table:
+Flyway computes a **SHA-256 checksum** of every file. On every application boot, Flyway compares the checksum of the local migration file against the checksum stored in `flyway_schema_history`.
 
-```sql
-ALTER TABLE customer
-    ADD COLUMN status text;
-```
+> [!CAUTION]
+> **Never modify an already-applied migration file!**
+> If you edit `V1__initial_schema.sql` after it has run in staging or production, Flyway will detect a checksum mismatch on the next boot and throw:
+> `FlywayException: Validate failed: Migration checksum mismatch for migration version 1`.
+> To fix a mistake in an existing migration, **always create a new forward migration** (e.g., `V3__fix_user_table.sql`).
 
-`V003__backfill_customer_status.sql`:
+---
 
-```sql
-UPDATE customer
-SET status = 'ACTIVE'
-WHERE status IS NULL;
-```
+## Liquibase: The Multi-Format Enterprise Alternative
 
-`V004__require_customer_status.sql`:
+While Flyway focuses on raw SQL, **Liquibase** takes a declarative, database-agnostic approach. It allows developers to define migrations using XML, YAML, JSON, or SQL formats.
 
-```sql
-ALTER TABLE customer
-    ALTER COLUMN status SET DEFAULT 'ACTIVE';
+### The Liquibase Changelog Structure
 
-ALTER TABLE customer
-    ALTER COLUMN status SET NOT NULL;
-```
-
-The separate add, backfill, and constraint steps can make the rollout compatible with old and new application versions. Add a default and a `NOT NULL` constraint only after considering the existing row count, database behavior, and whether old application instances can continue inserting rows. One large update may hold locks or generate substantial write-ahead log; for a large table, use a measured batching/backfill plan and verify the database-specific operational impact.
-
-Flyway also supports **repeatable migrations**, commonly used for definitions such as views or procedures that should be reapplied when their contents change. They have no version and run after pending versioned migrations. Use them only when the script is safe to apply repeatedly, such as a database-supported `CREATE OR REPLACE` definition; they are not a way to make one-time data changes repeat automatically.
-
-## Liquibase changelogs and changesets
-
-Liquibase describes database changes in a changelog containing ordered **changesets**. A changeset is identified by its `id`, `author`, and changelog path; an integer ID is not a global ordering mechanism by itself. The changelog's order determines execution order. Liquibase records executed changesets and checksums in its database changelog tables.
-
-An XML changelog can express the same schema change declaratively:
+A Liquibase configuration consists of a **Changelog** containing ordered **Changesets**:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -92,119 +104,243 @@ An XML changelog can express the same schema change declaratively:
     xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
         http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
-    <changeSet id="001-create-customer" author="team">
-        <createTable tableName="customer">
-            <column name="customer_id" type="BIGINT" autoIncrement="true">
+    <changeSet id="1" author="alice">
+        <createTable tableName="customers">
+            <column name="id" type="BIGINT" autoIncrement="true">
                 <constraints primaryKey="true" nullable="false"/>
             </column>
-            <column name="email" type="VARCHAR(320)">
+            <column name="email" type="VARCHAR(255)">
                 <constraints nullable="false" unique="true"/>
             </column>
-            <column name="status" type="VARCHAR(16)" defaultValue="ACTIVE">
-                <constraints nullable="false"/>
-            </column>
         </createTable>
+        <rollback>
+            <dropTable tableName="customers"/>
+        </rollback>
     </changeSet>
 
-    <changeSet id="002-customer-status-index" author="team">
-        <createIndex tableName="customer" indexName="customer_status_idx">
-            <column name="status"/>
-        </createIndex>
-    </changeSet>
 </databaseChangeLog>
 ```
 
-The XML schema version and exact generated SQL should be validated against the Liquibase version and target database used by the project. Database-specific behavior can require native SQL even when a tool offers database-independent change types. Keep each changeset focused on a logical change; a changeset is not a promise that every database can roll back all of its effects automatically.
+### Flyway vs Liquibase Comparison
 
-## Choosing a tool
+| Feature | Flyway | Liquibase |
+| :--- | :--- | :--- |
+| **Primary Philosophy** | SQL-First, pragmatic, simple. | Declarative, database-agnostic, enterprise. |
+| **File Formats** | Raw SQL (Java classes for data migrations). | XML, YAML, JSON, SQL. |
+| **Ordering Mechanism** | Strictly by Version number in file name. | Top-to-bottom order in Master Changelog. |
+| **Rollback Support** | Forward migrations preferred (Undo in Teams edition). | Built-in `<rollback>` tags in changesets. |
+| **Preconditions** | Limited. | Extensive (check table existence, row counts). |
+| **Best Used For** | 90% of modern Spring Boot & cloud microservices. | Large enterprise suites targeting multiple DB engines (Oracle, DB2, Postgres). |
 
-| Concern | Flyway | Liquibase |
-|---|---|---|
-| Change definition | Commonly ordered SQL files; Java migrations are also available | Changelogs in XML, YAML, JSON, or SQL formats |
-| Applied-change identity | Version for versioned migrations; checksum recorded in history | `id`, `author`, and changelog path; checksum recorded in database history |
-| Typical strength | Direct, SQL-first workflow with explicit migration scripts | Structured change types, preconditions, and changelog metadata |
-| Key discipline | Do not edit a versioned migration after it has run in a shared environment | Keep changesets stable after deployment; use supported checksum/identity procedures when moving files |
+---
 
-Neither tool eliminates the need to understand SQL or production deployment. Choose based on team conventions, supported database engines, desired changelog style, licensing and operational needs, and how the migration tool integrates with build and release pipelines. Avoid running two independent tools against the same schema unless ownership and ordering are deliberately designed.
+## The Expand-and-Contract Pattern for Zero-Downtime Deployments
 
-## Applying migrations safely
+In a cloud-native Kubernetes environment, deployments are **rolling**: for 5 to 15 minutes, old pods (Version N) and new pods (Version N+1) run simultaneously, processing live traffic against the **exact same database**.
 
-The normal workflow is a controlled progression from source change through verification and deployment:
+If Version N+1 renames, drops, or alters a column destructively, Version N crashes.
+
+To achieve true zero-downtime deployments, senior architects execute breaking schema changes using the **Expand-and-Contract (Parallel Run) Pattern** across multiple deployments:
 
 ```mermaid
 flowchart TD
-    Write["Add migration file"] --> Review["Review SQL and compatibility"]
-    Review --> Test["Test on disposable database"]
-    Test --> Valid{"Migration succeeds and checks pass?"}
-    Valid -->|"no"| Fix["Correct migration before release"]
-    Fix --> Test
-    Valid -->|"yes"| Deploy["Apply to target environment"]
-    Deploy --> History{"History matches expected version and checksum?"}
-    History -->|"yes"| Release["Deploy compatible application"]
-    History -->|"no"| Stop["Stop and investigate drift or partial failure"]
+    subgraph "Phase 1: Expand (Release N+1)"
+        E1["Migration V2: Add 'display_name' (Nullable)"]
+        E2["Deploy App v1.1: Writes to BOTH 'full_name' and 'display_name'"]
+    end
+
+    subgraph "Phase 2: Backfill (Async Batch Job)"
+        B1["Backfill Task: UPDATE users SET display_name = full_name WHERE display_name IS NULL"]
+    end
+
+    subgraph "Phase 3: Switch Reads (Release N+2)"
+        S1["Deploy App v1.2: Reads EXCLUSIVELY from 'display_name'"]
+    end
+
+    subgraph "Phase 4: Contract (Release N+3)"
+        C1["Deploy App v1.3: Ceases writing to 'full_name'"]
+        C2["Migration V3: Drop 'full_name' column & enforce NOT NULL on 'display_name'"]
+    end
+
+    Phase 1 --> Phase 2
+    Phase 2 --> Phase 3
+    Phase 3 --> Phase 4
 ```
 
-For each migration:
+### Walkthrough: Renaming `full_name` to `display_name`
 
-1. **Review the SQL and data impact.** Estimate affected rows, lock duration, table rewrite or index build behavior, disk space, replication lag, and recovery options for the actual database.
-2. **Test from a clean database.** Also test the migration against a representative older schema with realistic data; a clean install alone will not reveal every backfill or constraint issue.
-3. **Validate history before deployment.** Check that the target has the expected previous migrations and no unexplained checksum drift.
-4. **Back up and monitor where warranted.** A rollback script is not a backup, and restoring a backup may have its own data-loss window and recovery-time cost.
-5. **Observe the rollout.** Inspect migration output, application errors, lock waits, and the final schema/history state.
+1. **Phase 1: Expand (Release N+1)**:
+   - Run a migration adding `display_name` as a **nullable** column:
+     ```sql
+     ALTER TABLE users ADD COLUMN display_name text;
+     ```
+   - Deploy Application Version 1.1:
+     - **Reads**: Read from `display_name` if present; fall back to `full_name`.
+     - **Writes**: Write identical values to **both** `full_name` and `display_name` (Dual-Write).
+2. **Phase 2: Backfill**:
+   - Run an asynchronous background script to populate `display_name = full_name` for all existing historical rows in small batches.
+3. **Phase 3: Switch (Release N+2)**:
+   - Verify 100% of rows have `display_name`.
+   - Deploy Application Version 1.2: The application now reads exclusively from `display_name`.
+4. **Phase 4: Contract (Release N+3)**:
+   - Once all old pods are decommissioned and verified:
+   - Run a migration to drop `full_name` and add a `NOT NULL` constraint to `display_name`:
+     ```sql
+     ALTER TABLE users DROP COLUMN full_name;
+     ALTER TABLE users ALTER COLUMN display_name SET NOT NULL;
+     ```
 
-Migration runners commonly serialize access to a particular database while applying changes, but that does not make risky DDL instantaneous or compatible with live application traffic. Coordinate schema rollout with application rollout and database-specific operational constraints.
+---
 
-## Backward-compatible schema changes
+## Dangerous DDL: Table Locks in Production PostgreSQL
 
-An application deployment can be rolling: old and new application instances may run at the same time. A migration that immediately renames or drops a column can make one of those versions fail. The **expand-and-contract** approach makes the transition in stages:
+Executing an innocent-looking DDL statement on a production table containing 50 million rows can bring down your entire company.
+
+In PostgreSQL, every DDL command acquires a lock on the target table.
+
+### The Lock Hierarchy and AccessExclusiveLock
+
+- `ALTER TABLE ... ADD CONSTRAINT`
+- `ALTER TABLE ... DROP COLUMN`
+- `CREATE INDEX` (without `CONCURRENTLY`)
+- `VACUUM FULL`
+
+All of the above statements acquire an **`AccessExclusiveLock`**. 
+
+An `AccessExclusiveLock` blocks **ALL reads (`SELECT`) and ALL writes (`INSERT`, `UPDATE`, `DELETE`)** on the table.
+
+Even worse, if a long-running reporting query is currently reading the table, the `ALTER TABLE` statement waits in line behind it. While it waits, **every subsequent incoming read and write is queued behind the ALTER TABLE lock request**, exhausting the connection pool in seconds!
 
 ```mermaid
-flowchart LR
-    Expand["Expand schema with compatible field"] --> Dual["Deploy code that tolerates both forms"]
-    Dual --> Backfill["Backfill existing rows"]
-    Backfill --> Switch["Switch reads and writes to new form"]
-    Switch --> Contract["Remove old field after old code is gone"]
+sequenceDiagram
+    participant ReadQ as Long SELECT Query (Active)
+    participant DDL as ALTER TABLE (Waiting for Lock)
+    participant Incoming as Incoming User Reads (Queued)
+
+    Note over ReadQ: Query running for 10 seconds...
+    DDL->>ReadQ: Requests AccessExclusiveLock!
+    Note over DDL: WAITING for ReadQ to finish...
+    Incoming->>DDL: Blocked behind DDL lock request!
+    Incoming->>DDL: Blocked behind DDL lock request!
+    Note over Incoming: HikariCP Connection Pool EXHAUSTED! Outage!
 ```
 
-For example, to replace `full_name` with `display_name`:
+### Production Rule: Setting Lock Timeouts
 
-1. Add `display_name` while leaving `full_name` intact.
-2. Deploy application code that can read the new field and, during transition if necessary, keep both representations consistent.
-3. Backfill existing rows and verify the data.
-4. Move all application instances to the new field; monitor that no old version still depends on `full_name`.
-5. Remove the old field in a later migration.
+Never run DDL in production without a strict lock timeout! If the lock cannot be acquired within 2 seconds, fail immediately rather than queueing the entire application:
 
-“Add nullable column” is not automatically safe: application assumptions, write paths, triggers, and indexes still matter. The sequence must be tailored to the database and application. A destructive **contract** step should happen only after the old application version and all consumers are retired.
+```sql
+SET lock_timeout = '2s';
+ALTER TABLE orders ADD COLUMN fulfillment_center text;
+```
 
-## Existing databases, failure recovery, and rollback
+### Creating Indexes Safely: CREATE INDEX CONCURRENTLY
 
-When introducing migrations to a database that already contains schema and data, do not simply run every initial `CREATE TABLE` migration against it. First compare the real schema with the desired baseline, take an appropriate backup, and deliberately establish the tool's starting history using its documented baseline or changelog synchronization procedure. A baseline is an assertion about existing state, not a substitute for verifying that state.
+A standard `CREATE INDEX` scans the entire table while holding a `ShareLock`, blocking all writes (`INSERT`, `UPDATE`, `DELETE`) for minutes or hours.
 
-If a migration fails, first determine whether the database rolled back the operation. DDL transaction support differs between database engines and even between specific statements. A failed migration can leave partial schema changes or data effects, especially when an operation cannot be run transactionally. Do not edit the applied script or blindly run a repair command to make the status look clean:
+Always use **`CREATE INDEX CONCURRENTLY`** in production:
 
-- Inspect the migration tool's failure report and database history.
-- Inspect the actual schema and data for partial effects.
-- Recover using a tested database-specific cleanup, a corrected forward migration, or a restore plan.
-- Use a tool's `repair` or checksum-management command only after correcting the underlying mismatch and understanding exactly what history it will change.
+```sql
+CREATE INDEX CONCURRENTLY idx_users_email_active 
+    ON users (email) 
+    WHERE status = 'ACTIVE';
+```
 
-Rollback scripts are useful when the database operation is genuinely reversible and the reverse preserves data. Dropping a newly added column can discard values written after deployment, and restoring the previous schema does not restore deleted or transformed data. For many production changes, a forward corrective migration is safer than an attempted rollback.
+`CONCURRENTLY` performs two table scans and acquires only a weak `ShareUpdateExclusiveLock`. It allows reads and writes to continue unimpeded throughout the entire index creation process.
 
-## Practical rules
+> [!WARNING]
+> In PostgreSQL, **`CREATE INDEX CONCURRENTLY` cannot execute inside an active transaction block** (`BEGIN ... COMMIT`).
+> In Flyway, you must disable transactionality for that migration by adding the configuration header at the top of your SQL file:
+> ```sql
+> -- In Flyway migration file:
+> -- Tag to disable automatic transaction block:
+> -- executeInTransaction=false
+> 
+> CREATE INDEX CONCURRENTLY idx_users_email ON users(email);
+> ```
 
-- Commit migration files with the application changes that require them, and review them like production code.
-- Give each one-time change a unique, stable identity and preserve applied history; fix old mistakes with new migrations.
-- Test upgrades from an existing schema as well as creation of a fresh schema.
-- Plan for concurrent application versions, data backfills, and DDL locks.
-- Do not assume rollback is possible, DDL is transactional, or every database engine behaves the same.
-- Use the framework's status, validation, and generated-SQL checks in CI, but do not treat them as a replacement for exercising the migration against the target database.
-- Treat credentials and production database access as deployment configuration, never as values committed into migration files.
+### Adding NOT NULL Constraints Without Table Rewrites
 
-## Further reading
+Prior to PostgreSQL 11, adding `ALTER TABLE users ADD COLUMN active boolean NOT NULL DEFAULT true;` caused PostgreSQL to rewrite the entire physical table on disk, holding an exclusive lock for minutes.
 
-- Redgate Flyway, [Migrations](https://documentation.red-gate.com/flyway/flyway-concepts/migrations)
-- Redgate Flyway, [Versioned migrations](https://documentation.red-gate.com/flyway/flyway-concepts/migrations/versioned-migrations)
-- Redgate Flyway, [Repeatable migrations](https://documentation.red-gate.com/flyway/flyway-concepts/migrations/repeatable-migrations)
-- Redgate Flyway, [Transactional execution](https://documentation.red-gate.com/fd/transactional-execution-273973399.html)
-- Liquibase, [What is a changelog?](https://docs.liquibase.com/secure/user-guide-5-2-1/what-is-a-changelog)
-- Liquibase, [XML changelog example](https://docs.liquibase.com/secure/user-guide-5-2-1/xml-changelog-example)
-- [Relational Database Fundamentals & Advanced SQL](./relational-database-fundamentals-advanced-sql)
+In modern PostgreSQL, adding a column with a constant default is instantaneous (stored in system metadata). However, adding a `NOT NULL` constraint to an *existing* column still requires scanning every row under an exclusive lock.
+
+The zero-downtime solution:
+```sql
+-- Step 1: Add a CHECK constraint marked NOT VALID (Instantaneous metadata lock!)
+ALTER TABLE orders 
+    ADD CONSTRAINT check_orders_total_not_null 
+    CHECK (total_amount IS NOT NULL) NOT VALID;
+
+-- Step 2: Validate the constraint asynchronously (Acquires only a weak lock, reads concurrently!)
+ALTER TABLE orders 
+    VALIDATE CONSTRAINT check_orders_total_not_null;
+```
+
+---
+
+## Transactional DDL: PostgreSQL vs MySQL
+
+One of the greatest architectural advantages of PostgreSQL is **Transactional DDL**.
+
+In PostgreSQL, DDL statements (`CREATE TABLE`, `ALTER TABLE`, `DROP TABLE`) participate fully in transactions:
+
+```sql
+BEGIN;
+ALTER TABLE accounts ADD COLUMN tier text;
+INSERT INTO accounts (id, tier) VALUES ('A-1', 'GOLD');
+-- Simulated failure:
+UPDATE accounts SET invalid_syntax_error...;
+ROLLBACK;
+```
+
+If any statement in the migration fails, PostgreSQL **rolls back the entire transaction**. The column `tier` is never created, the insert is aborted, and your database remains in a completely clean, uncorrupted state.
+
+### The MySQL Non-Transactional DDL Hazard
+
+In MySQL (and Oracle), DDL statements trigger an **implicit, unpreventable commit**.
+
+If a migration contains:
+1. `ALTER TABLE accounts ADD COLUMN tier VARCHAR(20);` (Implicitly commits!).
+2. `UPDATE accounts SET tier = 'STANDARD';` (Throws syntax error!).
+
+In MySQL, Statement 1 remains committed on disk, while Statement 2 fails! 
+
+The migration is marked as failed in the schema history, but the physical column was already added. If you attempt to re-run the corrected migration, MySQL crashes with `Error: Duplicate column name 'tier'`. Recovering in MySQL requires manual DBA intervention to undo the partial DDL.
+
+---
+
+## Senior Engineer Interview Crucible
+
+### How does the Expand-and-Contract pattern enable zero-downtime schema evolution during rolling Kubernetes pod deployments?
+During rolling Kubernetes deployments, old application pods (Version N) and new pods (Version N+1) execute concurrently against the same shared database. 
+
+A single destructive change (such as dropping or renaming a column) breaks Version N pods that still query the old column. 
+
+The Expand-and-Contract pattern decouples schema evolution into distinct, backward-compatible phases:
+1. **Expand**: Add the new column as nullable or with a default value so existing code continues operating undisturbed.
+2. **Dual-Write**: Deploy application code that writes to both columns and reads with fallback.
+3. **Backfill**: Asynchronously populate historical data into the new column in batches.
+4. **Switch**: Deploy code that relies exclusively on the new column.
+5. **Contract**: Once all old pods are eliminated and traffic is 100% migrated, execute a final migration to drop the obsolete column and enforce constraints.
+
+### Why should CREATE INDEX CONCURRENTLY be used in production PostgreSQL migrations, and how does it affect Flyway's transactional execution?
+Standard `CREATE INDEX` acquires a `ShareLock` on the target table, which blocks all concurrent writes (`INSERT`, `UPDATE`, `DELETE`) until the index build finishes, potentially freezing production for minutes on large tables. 
+
+`CREATE INDEX CONCURRENTLY` builds the index using two separate table scans under a weak `ShareUpdateExclusiveLock`, allowing concurrent reads and writes to proceed without interruption.
+
+Because PostgreSQL forbids `CREATE INDEX CONCURRENTLY` from running inside an active transaction block (`BEGIN ... COMMIT`), Flyway's default behavior of wrapping each migration script in an ACID transaction will fail with `ERROR: CREATE INDEX CONCURRENTLY cannot run inside a transaction block`. To resolve this, you must configure Flyway to execute the script outside a transaction using `-- executeInTransaction=false` in the script header.
+
+### What happens when a migration script fails in PostgreSQL versus MySQL, and how does transactional DDL affect recovery?
+PostgreSQL supports **Transactional DDL**. When a migration fails, PostgreSQL rolls back the entire transaction, including created tables, altered columns, and data updates. The database state reverts cleanly to the exact state before the migration started, allowing developers to fix the script and re-run Flyway without manual schema cleanup.
+
+MySQL does not support Transactional DDL; any DDL statement forces an **implicit commit**. If a multi-statement migration fails on a subsequent step, earlier DDL changes remain committed in the database, while Flyway marks the migration as failed. Re-running the script will fail because the initial changes already exist, requiring manual DBA intervention to remove partially applied columns or tables and repair Flyway history.
+
+### If a developer modifies a Flyway migration file that has already run in production, what error occurs, and how do you resolve it safely?
+Flyway computes a SHA-256 checksum for every migration file and records it in `flyway_schema_history`. 
+
+If an already-applied file is modified, Flyway's startup validation detects that the local file's hash differs from the stored database hash. It aborts application startup with a `FlywayException: Validate failed: Migration checksum mismatch`.
+
+To resolve this safely:
+1. **The Correct Forward Path**: Revert the local file to its exact original state so the checksum matches, and write a brand-new forward migration file (e.g., `V4__patch_previous_mistake.sql`) to apply the desired change.
+2. **If the change was a harmless comment or whitespace edit**: Run Flyway's repair command (`flyway repair` or `mvn flyway:repair`), which recomputes the checksum of the modified file and updates the `flyway_schema_history` table to match the new hash.
