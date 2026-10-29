@@ -107,7 +107,7 @@ flowchart LR
 4. **Direct Execution:** The vtable returns the exact memory address in the JIT Code Cache where native CPU machine instructions live (`0x7FFF004A`).
 
 ### `vtable` vs. `itable`: Why Interfaces Differ
-- **Class Inheritance (`vtable`):** Because Java enforces single inheritance of classes, method offsets in a vtable are **constant across the entire hierarchy**. Slot 2 in the parent is *guaranteed* to be slot 2 in every subclass, allowing direct indexed memory access ($O(1)$).
+- **Class Inheritance (`vtable`):** Because Java enforces single inheritance of classes, method offsets in a vtable are **constant across the entire hierarchy**. Slot 2 in the parent is *guaranteed* to be slot 2 in every subclass, allowing direct indexed memory access (`O(1)`).
 - **Interface Inheritance (`itable`):** Because a class can implement dozens of interfaces in any arbitrary order, the JVM cannot guarantee fixed offsets. It uses an **`itable` (Interface Method Table)**, which performs a rapid offset lookup.
 
 > [!TIP]

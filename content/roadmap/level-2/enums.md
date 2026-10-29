@@ -276,7 +276,7 @@ If you need a map where the keys are enums, never use `HashMap<MyEnum, V>`.
 Use **`EnumMap<MyEnum, V>`**:
 - Internally, an `EnumMap` is backed by a **flat, dense array** indexed by `key.ordinal()`.
 - It requires zero hashing, zero hash collision resolution, and zero linked-node traversal.
-- It delivers instantaneous $O(1)$ reads and writes that hit CPU cache lines directly.
+- It delivers instantaneous `O(1)` reads and writes that hit CPU cache lines directly.
 
 ---
 
