@@ -287,7 +287,7 @@ export default async function TopicPage({
                 className="inline-flex items-center gap-2 text-xs sm:text-sm text-slate-500 dark:text-slate-400 hover:text-foreground transition-colors"
               >
                 <Layers className="w-4 h-4" />
-                <span>View Full 11-Level Roadmap</span>
+                <span>View Full 15-Level Roadmap</span>
               </Link>
             </div>
           </footer>

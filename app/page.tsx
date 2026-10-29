@@ -34,7 +34,7 @@ export default function Home() {
             className="w-full sm:w-auto flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950 font-semibold text-sm hover:opacity-90 transition-all shadow-md group"
           >
             <Map className="w-4 h-4 text-emerald-400 dark:text-slate-950 group-hover:scale-110 transition-transform" />
-            <span>Explore 11-Level Roadmap</span>
+            <span>Explore 15-Level Roadmap</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </Link>
           <Link
@@ -125,7 +125,7 @@ export default function Home() {
       <section className="p-8 sm:p-12 rounded-3xl border border-[var(--color-card-border)] bg-[var(--color-card)] flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xs">
         <div className="flex flex-col gap-2 text-center sm:text-left">
           <h3 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-            Complete 11-Level Mastery Curriculum
+            Complete 15-Level Mastery Curriculum
           </h3>
           <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 max-w-xl">
             Every topic is thoroughly explained with JVM mechanics, real production code examples, failure modes, and interview expectations.

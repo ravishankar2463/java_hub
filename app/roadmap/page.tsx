@@ -16,10 +16,14 @@ const LEVEL_SHORTCUTS = [
   { level: 4, label: "L4: Streams" },
   { level: 5, label: "L5: Threads" },
   { level: 6, label: "L6: Patterns" },
-  { level: 7, label: "L7: SQL & JPA" },
-  { level: 8, label: "L8: Spring" },
-  { level: 9, label: "L9: Cloud" },
-  { level: 10, label: "L10: Arch" },
+  { level: 7, label: "L7: Data & Storage" },
+  { level: 8, label: "L8: Spring Boot" },
+  { level: 9, label: "L9: Security & APIs" },
+  { level: 10, label: "L10: Event Streaming" },
+  { level: 11, label: "L11: Microservices" },
+  { level: 12, label: "L12: Cloud & K8s" },
+  { level: 13, label: "L13: System Design" },
+  { level: 14, label: "L14: Enterprise AI" },
 ];
 
 export default function RoadmapPage() {
@@ -52,7 +56,7 @@ export default function RoadmapPage() {
         <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
           <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[var(--color-card)] border border-[var(--color-border)] text-xs sm:text-sm text-slate-700 dark:text-slate-300 shadow-xs">
             <Layers className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span><strong className="text-slate-900 dark:text-slate-100">11</strong> Mastery Levels</span>
+            <span><strong className="text-slate-900 dark:text-slate-100">15</strong> Mastery Levels</span>
           </div>
           <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[var(--color-card)] border border-[var(--color-border)] text-xs sm:text-sm text-slate-700 dark:text-slate-300 shadow-xs">
             <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />

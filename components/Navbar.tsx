@@ -22,10 +22,14 @@ const LEVELS = [
   { level: 4, title: "Functional Java", short: "L4: Streams" },
   { level: 5, title: "Concurrency", short: "L5: Threads" },
   { level: 6, title: "Design Patterns", short: "L6: Patterns" },
-  { level: 7, title: "Databases & JPA", short: "L7: SQL & JPA" },
-  { level: 8, title: "Spring Ecosystem", short: "L8: Spring" },
-  { level: 9, title: "Microservices", short: "L9: Cloud" },
-  { level: 10, title: "Production Arch", short: "L10: Arch" },
+  { level: 7, title: "Data & Storage", short: "L7: Data" },
+  { level: 8, title: "Spring Boot 3", short: "L8: Spring" },
+  { level: 9, title: "Security & APIs", short: "L9: Security" },
+  { level: 10, title: "Event Streaming", short: "L10: Kafka" },
+  { level: 11, title: "Microservices", short: "L11: Distributed" },
+  { level: 12, title: "Cloud & K8s", short: "L12: Cloud" },
+  { level: 13, title: "System Design & SRE", short: "L13: SRE" },
+  { level: 14, title: "Enterprise AI", short: "L14: AI" },
 ];
 
 export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
@@ -114,7 +118,7 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
                 <Map className="w-3.5 h-3.5" />
                 Roadmap
                 <span className="ml-1 px-1.5 py-0.2 text-[10px] rounded-full bg-[var(--color-card-subtle)] text-slate-500 dark:text-slate-400 border border-[var(--color-border)]">
-                  73 Topics
+                  104 Topics
                 </span>
               </Link>
             </nav>
@@ -202,7 +206,7 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
                     <span>Mastery Roadmap</span>
                   </div>
                   <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-medium">
-                    11 Levels
+                    15 Levels
                   </span>
                 </Link>
               </div>
