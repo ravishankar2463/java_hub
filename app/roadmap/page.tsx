@@ -1,11 +1,11 @@
 import { roadmapData } from "@/data/roadmap";
 import { RoadmapLevelCard } from "@/components/RoadmapLevelCard";
-import { Layers, CheckCircle, Sparkles } from "lucide-react";
+import { Layers, CheckCircle, Sparkles, GitBranch, ExternalLink } from "lucide-react";
 
 export const metadata = {
   title: "Java Mastery Roadmap | JavaHub",
   description:
-    "The comprehensive phase-by-phase curriculum to achieve Java mastery. 11 levels, 73 deep-dive topics from JVM architecture to cloud-native systems.",
+    "The comprehensive phase-by-phase curriculum to achieve Java mastery. 16 levels, 116 deep-dive topics from JVM architecture to low-latency systems and enterprise AI.",
 };
 
 const LEVEL_SHORTCUTS = [
@@ -63,6 +63,18 @@ export default function RoadmapPage() {
             <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             <span><strong className="text-slate-900 dark:text-slate-100">{totalTopics}</strong> Deep-Dive Lessons</span>
           </div>
+          <a
+            href="https://github.com/ravishankar2463/java_hub_resources"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white text-xs sm:text-sm font-medium transition-all shadow-xs border border-slate-700 group cursor-pointer"
+            title="Companion GitHub repository with 116 runnable branches"
+          >
+            <GitBranch className="w-4 h-4 text-emerald-400 group-hover:rotate-12 transition-transform" />
+            <span>Companion Labs:</span>
+            <span className="font-mono text-emerald-300">116 Branches</span>
+            <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-colors" />
+          </a>
         </div>
 
         {/* Level Quick-Jump Navigation Bar */}

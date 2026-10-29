@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Search, Menu, X, Compass, Home, Map, BookOpen } from 'lucide-react'
+import { Search, Menu, X, Compass, Home, Map, BookOpen, Code2, ExternalLink } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { CommandPalette } from './CommandPalette'
 import { ThemeToggle } from './ThemeToggle'
@@ -122,6 +122,17 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
                   116 Topics
                 </span>
               </Link>
+              <a
+                href="https://github.com/ravishankar2463/java_hub_resources"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-[var(--color-card-subtle)]"
+                title="116 Runnable Topic Labs on GitHub"
+              >
+                <Code2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Code Labs</span>
+                <ExternalLink className="w-3 h-3 text-slate-400" />
+              </a>
             </nav>
 
             {/* Right Action Buttons */}
@@ -169,7 +180,7 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
               >
                 <div className="flex items-center gap-2.5">
                   <Search className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Search all 73 topics & articles...</span>
+                  <span>Search all 116 topics & articles...</span>
                 </div>
                 <span className="px-2 py-0.5 text-[11px] rounded bg-[var(--color-card)] border border-[var(--color-border)] font-mono text-slate-500">
                   ⌘K
@@ -210,6 +221,19 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
                     16 Levels
                   </span>
                 </Link>
+                <a
+                  href="https://github.com/ravishankar2463/java_hub_resources"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-between px-3.5 py-3 rounded-xl text-base font-medium transition-colors text-slate-700 dark:text-slate-300 hover:bg-[var(--color-card-subtle)]"
+                >
+                  <div className="flex items-center gap-3">
+                    <Code2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    <span>Code Labs (116 Branches)</span>
+                  </div>
+                  <ExternalLink className="w-4 h-4 text-slate-400" />
+                </a>
               </div>
 
               {/* Jump to Level Section */}

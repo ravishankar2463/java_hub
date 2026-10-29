@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { BentoGrid, BentoGridItem } from "@/components/BentoGrid";
-import { Map, FileText, Sparkles, Terminal, Cpu, Database, Server, ArrowRight } from "lucide-react";
+import { Map, FileText, Sparkles, Terminal, Cpu, Database, Server, ArrowRight, GitBranch, ExternalLink, Code2 } from "lucide-react";
 import { getAllContent } from "@/lib/markdown";
 
 export default function Home() {
@@ -34,16 +34,19 @@ export default function Home() {
             className="w-full sm:w-auto flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950 font-semibold text-sm hover:opacity-90 transition-all shadow-md group"
           >
             <Map className="w-4 h-4 text-emerald-400 dark:text-slate-950 group-hover:scale-110 transition-transform" />
-            <span>Explore 15-Level Roadmap</span>
+            <span>Explore 16-Level Roadmap (116 Topics)</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </Link>
-          <Link
-            href="/roadmap#level-8"
-            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-[var(--color-card)] border border-[var(--color-border)] text-slate-800 dark:text-slate-200 font-medium text-sm hover:bg-[var(--color-card-subtle)] transition-all shadow-xs"
+          <a
+            href="https://github.com/ravishankar2463/java_hub_resources"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-[var(--color-card)] border border-[var(--color-border)] text-slate-800 dark:text-slate-200 font-medium text-sm hover:bg-[var(--color-card-subtle)] hover:border-emerald-500/30 transition-all shadow-xs group"
           >
-            <Server className="w-4 h-4 text-slate-500" />
-            <span>Jump to Spring Boot & Cloud</span>
-          </Link>
+            <GitBranch className="w-4 h-4 text-emerald-600 dark:text-emerald-400 group-hover:rotate-12 transition-transform" />
+            <span>GitHub Labs (116 Branches)</span>
+            <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+          </a>
         </div>
 
         {/* Feature Highlights Grid */}
@@ -79,14 +82,14 @@ export default function Home() {
               Featured Deep-Dives
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-              Hand-crafted architectural guides from the 73-topic curriculum.
+              Hand-crafted architectural guides from the 116-topic curriculum.
             </p>
           </div>
           <Link
             href="/roadmap"
             className="text-xs sm:text-sm font-semibold text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-1"
           >
-            <span>View all 73 lessons</span>
+            <span>View all 116 lessons</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -125,19 +128,30 @@ export default function Home() {
       <section className="p-8 sm:p-12 rounded-3xl border border-[var(--color-card-border)] bg-[var(--color-card)] flex flex-col sm:flex-row items-center justify-between gap-6 shadow-xs">
         <div className="flex flex-col gap-2 text-center sm:text-left">
           <h3 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-            Complete 15-Level Mastery Curriculum
+            Complete 16-Level Mastery Curriculum
           </h3>
           <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 max-w-xl">
-            Every topic is thoroughly explained with JVM mechanics, real production code examples, failure modes, and interview expectations.
+            116 in-depth topics thoroughly explained with JVM mechanics, real production code examples, failure modes, and runnable test suites on GitHub.
           </p>
         </div>
-        <Link
-          href="/roadmap"
-          className="shrink-0 flex items-center gap-2 px-6 py-3.5 rounded-xl bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950 font-semibold text-sm hover:opacity-90 transition-all shadow-md"
-        >
-          <Map className="w-4 h-4 text-emerald-400 dark:text-slate-950" />
-          <span>Launch Roadmap</span>
-        </Link>
+        <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
+          <Link
+            href="/roadmap"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-slate-900 dark:bg-emerald-500 text-white dark:text-slate-950 font-semibold text-sm hover:opacity-90 transition-all shadow-md"
+          >
+            <Map className="w-4 h-4 text-emerald-400 dark:text-slate-950" />
+            <span>Launch Roadmap</span>
+          </Link>
+          <a
+            href="https://github.com/ravishankar2463/java_hub_resources"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-[var(--color-card-subtle)] border border-[var(--color-border)] text-slate-700 dark:text-slate-200 font-medium text-sm hover:border-emerald-500/40 transition-all"
+          >
+            <GitBranch className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Code Labs</span>
+          </a>
+        </div>
       </section>
     </div>
   );

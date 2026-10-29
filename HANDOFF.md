@@ -208,20 +208,35 @@
 - **Mermaid Modal Canvas (`components/MermaidDiagram.tsx`)**: Interactive fullscreen modal with pan & zoom capabilities for complex architectures.
 - **100% Validated Mermaid Diagrams**: All 383 diagrams across all curriculum files are validated against the Mermaid parser AST, with all edge labels with parentheses/brackets safely quoted.
 
+### 4. Companion Hands-On Code Repository (`java_hub_resources`)
+- **Repository URL**: [`https://github.com/ravishankar2463/java_hub_resources`](https://github.com/ravishankar2463/java_hub_resources)
+- **1-to-1 Curriculum Branching**:
+  - Contains **116 dedicated topic branches** matching the curriculum slugging scheme: `topic/level-<N>/<topic-slug>` (e.g. `topic/level-8/spring-core-internals`).
+  - Master `README.md` on `main` provides an interactive 116-topic navigation matrix linking each lesson on JavaHub to its companion Git branch and checkout command.
+  - Each branch contains runnable Java 21 code, verified JUnit 5 + AssertJ test suites, and a dedicated README with direct links back to the live JavaHub lesson.
+  - Includes CLI switcher utilities: `./switch-topic.sh <level> <slug>` and `.\switch-topic.ps1 <level> <slug>`.
+- **Deep-Linking Integration Across JavaHub**:
+  - **Global Navbar**: `Code Labs` link to the companion repository in desktop and mobile views.
+  - **Roadmap Overview (`/roadmap`)**: Banner badge highlighting the 116 runnable branches.
+  - **Every Topic Page**:
+    - Header quick-access pill: direct branch link to `topic/level-<N>/<slug>`.
+    - Hands-On Lab callout section: terminal card with copyable `git checkout topic/level-<N>/<slug>` and "View Lab on GitHub" action.
+
 ---
 
-## 4. Verification Scripts & Quality Gates
+## 5. Verification Scripts & Quality Gates
 
 | Script / Command | Purpose | Verification Result |
 | :--- | :--- | :--- |
 | `node scripts/verify-all-topics.js` | Cross-references `data/roadmap.ts` slugs against `content/roadmap/` files on disk. | **116 / 116 Present, 0 Missing, 0 Placeholders** |
 | `node scripts/check-all-markdown.js` | AST scanner checking 120 markdown files for unescaped raw dollar math (`$O(1)$`) and numbered headings (`### 1. `). | **120 / 120 Files Clean, 0 Formatting Issues** |
 | `node scripts/validate-all-mermaid.js` | Full AST validation of all Mermaid diagrams across all markdown files in the project. | **383 / 383 Diagrams Valid, 0 Errors** |
+| `node scripts/setup-resources-repo.js` | Automated generator and synchronizer for all 116 branches in `java_hub_resources`. | **116 / 116 Branches Generated & Synchronized** |
 | `npm run build` | Next.js Turbopack production compilation and static site generation across all routes. | **125 / 125 Routes Compiled Cleanly** |
 
 ---
 
-## 5. Development Guidelines for Future Contributions
+## 6. Development Guidelines for Future Contributions
 
 1. **Adding or Modifying Topics**:
    - Always run `node scripts/check-all-markdown.js` after writing markdown content.

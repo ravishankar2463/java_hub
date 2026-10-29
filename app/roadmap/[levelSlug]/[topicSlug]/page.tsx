@@ -3,7 +3,7 @@ import { slugify } from "@/utils/slugify";
 import { existsSync } from "node:fs";
 import path from "path";
 import { parseMarkdownFile } from "@/lib/markdown";
-import { ArrowLeft, ArrowRight, ChevronRight, Clock, BookOpen, Layers } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronRight, Clock, BookOpen, Layers, GitBranch, ExternalLink, Code2, Terminal } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CodeBlock } from "@/components/CodeBlock";
@@ -190,9 +190,35 @@ export default async function TopicPage({
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-slate-900 dark:text-slate-100 leading-[1.15] mb-4">
               {currentTopic.topicTitle}
             </h1>
-            <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400">
+            <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400 mb-5">
               {currentTopic.levelTitle} &bull; {currentTopic.levelSubtitle}
             </p>
+
+            {/* GitHub Companion Lab Quick Link */}
+            <div className="flex flex-wrap items-center gap-2.5 pt-2">
+              <a
+                href={`https://github.com/ravishankar2463/java_hub_resources/tree/topic/${currentTopic.levelSlug}/${currentTopic.topicSlug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 text-white text-xs font-medium transition-all shadow-xs border border-slate-700 group cursor-pointer"
+                title="View runnable code and test suite on GitHub"
+              >
+                <GitBranch className="w-3.5 h-3.5 text-emerald-400 group-hover:rotate-12 transition-transform" />
+                <span>Lab Branch:</span>
+                <span className="font-mono text-emerald-300">topic/{currentTopic.levelSlug}/{currentTopic.topicSlug}</span>
+                <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-white transition-colors" />
+              </a>
+
+              <a
+                href="https://github.com/ravishankar2463/java_hub_resources"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--color-card-subtle)] hover:bg-emerald-500/10 text-slate-600 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-300 text-xs font-medium border border-[var(--color-border)] hover:border-emerald-500/30 transition-all cursor-pointer"
+              >
+                <Code2 className="w-3.5 h-3.5" />
+                <span>All 116 Code Labs</span>
+              </a>
+            </div>
           </header>
 
           {/* Mobile Table of Contents (renders on screens < xl) */}
@@ -208,6 +234,38 @@ export default async function TopicPage({
               {markdownContent}
             </ReactMarkdown>
           </div>
+
+          {/* Hands-On Laboratory & Test Suite Card */}
+          <section className="mt-12 p-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                <Terminal className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                  Run Hands-On Lab Locally
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                  Every topic is paired with a verified, runnable Java 21 test suite in <code className="text-xs font-mono font-medium text-emerald-700 dark:text-emerald-400">java_hub_resources</code>.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 rounded-xl bg-slate-950 text-slate-200 border border-slate-800 font-mono text-xs overflow-x-auto">
+              <span className="text-emerald-400 select-all py-1 sm:py-0">
+                git checkout topic/{currentTopic.levelSlug}/{currentTopic.topicSlug}
+              </span>
+              <a
+                href={`https://github.com/ravishankar2463/java_hub_resources/tree/topic/${currentTopic.levelSlug}/${currentTopic.topicSlug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-sans text-xs font-medium transition-colors shrink-0 cursor-pointer shadow-xs"
+              >
+                <span>View Lab on GitHub</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </section>
 
           {/* Sequential Next / Previous Topic Navigation */}
           <footer className="mt-16 pt-8 border-t border-[var(--color-border)] flex flex-col gap-6">
