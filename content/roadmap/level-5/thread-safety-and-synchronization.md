@@ -1,155 +1,314 @@
 ---
 title: "Thread Safety and Synchronization"
-description: "Protect shared invariants with intrinsic locks, coordinate threads with wait and notify, and recognize deadlock, livelock, and starvation."
+description: "Master thread synchronization: monitorenter bytecode, Mark Word lock inflation (lightweight vs heavyweight), reentrancy counters, and deadlock prevention."
 category: "level-5"
 date: "2026-10-29T10:00:00Z"
 ---
 
-The Java Memory Model explains which cross-thread observations are legal; synchronization is how code establishes the ordering and mutual exclusion needed to protect shared state. A class is **thread-safe** when its contract remains correct under the concurrent access it allows.
+When multiple threads execute concurrently, the primary hazard to your application is **Data Incoherence**: two or more threads accessing mutable state simultaneously, leaving shared invariants corrupted.
 
-The central design question is not “should this field be volatile?” but “which state must change together, and what prevents two threads from observing or creating an invalid state?”
+To prevent this, Java provides **Mutual Exclusion (Mutex)** through the **`synchronized`** keyword and intrinsic object monitors.
 
-## Race conditions and critical sections
+However, treating `synchronized` as a magic spell to sprinkle over methods is a recipe for catastrophic performance bottlenecks, thread contention pauses, and fatal **Deadlocks**.
 
-A **race condition** is a correctness failure caused by the outcome depending on thread interleaving. When two threads perform `count++`, each increment is a read-modify-write sequence; the updates can overlap and one can be lost. A **critical section** is the part of an operation that must be protected so the invariant remains true.
+To engineer high-concurrency systems, you must understand what happens inside the JVM when a thread locks an object: **how the Mark Word in the Object Header inflates from lightweight CAS spins to heavyweight OS mutexes**, **why `wait()` releases locks while `sleep()` does not**, and **how to break Coffman's deadlock conditions**.
 
-Protect the state transition, not just one field read. If a balance check and debit must be atomic as a unit, locking only the debit does not protect the invariant.
+---
 
-## Intrinsic locks with `synchronized`
+## What Does "Thread Safety" Actually Mean?
 
-Every object has an associated monitor. A `synchronized` statement acquires that monitor before entering its body and releases it when the body completes, including when it exits by throwing an exception. Only one thread at a time can own a given monitor, and monitor ownership is reentrant for the owning thread.
+A class or method is not "thread-safe" simply because it has synchronized keywords.
+
+According to Brian Goetz in *Java Concurrency in Practice*:
+> *"A class is thread-safe if it behaves correctly when accessed from multiple threads, regardless of the scheduling or interleaving of the execution of those threads by the runtime environment, and with no additional synchronization or other coordination on the part of the calling code."*
+
+### Critical Sections and Invariants
+An **Invariant** is a condition that must always remain true for your domain model to be valid. For example:
+- *"A bank account balance can never drop below zero."*
+- *"The sum of accounts A and B must remain constant during a transfer."*
+
+A **Critical Section** is the block of code that inspects and mutates this invariant. If two threads interleave execution inside a critical section, a **Race Condition** occurs.
+
+```mermaid
+flowchart TD
+    subgraph RaceConditionTrap ["Race Condition: Check-Then-Act Interleaving"]
+        State["Bank Account Balance: USD 100"]
+        T1["Thread 1: check balance (100 >= 100) -> PASS!"]
+        T2["Thread 2: check balance (100 >= 100) -> PASS!"]
+        W1["Thread 1: debit USD 100 -> Balance becomes USD 0"]
+        W2["Thread 2: debit USD 100 -> Balance becomes -USD 100 (CORRUPTED!)"]
+
+        State --> T1
+        State --> T2
+        T1 --> W1
+        T2 --> W2
+    end
+```
+
+To protect the invariant, the check and the mutation must be executed as an **indivisible atomic unit** using a mutual exclusion lock.
+
+---
+
+## How `synchronized` Works at the Bytecode Level
+
+Every single Java object on the Heap can act as an intrinsic lock (a **Monitor**). 
+
+Java supports two syntactic forms of synchronization, and `javac` compiles them into completely different bytecode structures:
+
+### Synchronized Statements (Blocks)
+When you synchronize on an explicit object reference:
 
 ```java
-public class SafeCounter {
-    private final Object lock = new Object();
-    private long value;
-
-    public void increment() {
-        synchronized (lock) {
-            value++;
-        }
-    }
-
-    public long value() {
-        synchronized (lock) {
-            return value;
-        }
+public void process(Object lock) {
+    synchronized (lock) {
+        doCriticalWork();
     }
 }
 ```
 
-Both access paths use the same private lock, so the increment is indivisible relative to the getter, and unlocking the monitor happens-before a later lock of the same monitor. Keeping the lock private avoids making the synchronization policy depend on callers that could synchronize on the counter object themselves.
+The compiler emits explicit **`monitorenter`** and **`monitorexit`** opcodes:
 
-An instance `synchronized` method locks `this`; a `static synchronized` method locks the `Class` object for the declaring class. These locks are different. Public synchronized methods can expose an object's lock to external code and create unexpected contention or lock-order dependencies, so a private lock is often easier to reason about.
+```text
+ 0: aload_1         // Load lock reference onto stack
+ 1: dup
+ 2: astore_2
+ 3: monitorenter    // ACQUIRE MONITOR LOCK
+ 4: aload_0
+ 5: invokevirtual   // Method doCriticalWork()
+ 8: aload_2
+ 9: monitorexit     // RELEASE MONITOR LOCK (Normal path)
+10: goto          18
+13: astore_3        // Exception Handler Table catches Throwable!
+14: aload_2
+15: monitorexit     // RELEASE MONITOR LOCK (Exceptional path!)
+16: aload_3
+17: athrow
+18: return
+```
 
-Use the smallest lock scope that still protects the whole invariant. Avoid holding a monitor while doing slow I/O, invoking unknown callbacks, or calling other components that may acquire unrelated locks.
+> [!IMPORTANT]
+> Notice lines 13-17 in the bytecode! The compiler generates a synthetic exception handler table that wraps your entire critical section. This **guarantees that `monitorexit` is executed even if a RuntimeException or Error is thrown**, preventing permanent lock leaks!
 
-## Waiting for a condition
+### Synchronized Methods
+When you mark a method `public synchronized void doWork()`:
+- The compiler does **NOT** emit `monitorenter` or `monitorexit` instructions!
+- Instead, it sets the **`ACC_SYNCHRONIZED`** flag in the method's access flags table.
+- When the JVM invokes the method, it inspects this flag. If set, the calling thread automatically acquires the object monitor (`this` for instance methods, `MyClass.class` for static methods) before executing the first instruction, and automatically releases it upon method return.
 
-`wait`, `notify`, and `notifyAll` operate on an object's monitor and wait set. A thread must own that monitor before calling one of them. `wait()` adds the thread to the object's wait set and releases its monitor ownership while waiting; before it returns, the thread reacquires the monitor. A notification does not transfer the lock directly to the waiting thread.
+---
 
-Always test the condition in a `while` loop under the same lock:
+## Lock Inflation: How HotSpot Optimizes Monitors
+
+Historically, Java 1.0 acquired a heavy native operating system kernel lock (`pthread_mutex` on Linux) on every synchronized call. This required crossing user-to-kernel space boundaries, costing hundreds of nanoseconds.
+
+Modern HotSpot JVMs optimize monitors by dynamically **inflating locks** through the **Mark Word** in the 64-bit Object Header:
+
+```mermaid
+flowchart TD
+    Unlocked["1. Unlocked Object<br/>(Mark Word ends in 001)"]
+    Lightweight["2. Lightweight Locking (Lock Record on Thread Stack)<br/>Acquired via fast CPU CAS! (Mark Word ends in 000)"]
+    Heavyweight["3. Heavyweight Locking (OS Mutex via ObjectMonitor)<br/>Threads block and park on OS queue! (Mark Word ends in 010)"]
+
+    Unlocked -->|"First thread arrives (Uncontended)"| Lightweight
+    Lightweight -->|"Contention detected! (Second thread arrives)"| Heavyweight
+```
+
+### Lightweight Locking (Zero Kernel Overhead)
+When a thread attempts to acquire an uncontended lock:
+1. The JVM pushes a **Lock Record** onto the current thread's execution stack.
+2. It executes a single CPU atomic **Compare-And-Swap (CAS)** instruction to swap the object's Mark Word with a pointer to that thread's stack Lock Record.
+3. If the CAS succeeds, the lock is held! **Zero kernel context-switching occurs.** The operation completes in 2 to 5 nanoseconds.
+
+### Heavyweight Locking (ObjectMonitor Inflation)
+If a second thread attempts to acquire the lock while the first thread is still holding it:
+- The lightweight CAS fails.
+- The JVM initiates **Lock Inflation**: it allocates an internal C++ **`ObjectMonitor`** structure in native memory.
+- The Object's Mark Word is updated to point directly to this native `ObjectMonitor`.
+- Competing threads are suspended (parked) using OS kernel mutex primitives, waiting on the monitor's `_EntryList` queue.
+
+### Compiler Optimizations: Lock Coarsening & Lock Elimination
+The JIT compiler analyzes lock behavior using Escape Analysis:
+- **Lock Elimination:** If the JIT proves an object never escapes the declaring method (e.g. `synchronized (new Object())`), it **completely removes the lock opcodes** from compiled machine code!
+- **Lock Coarsening:** If a loop repeatedly acquires and releases the same lock (e.g. `for (...) { synchronized(lock) { ... } }`), the JIT expands the lock boundary outside the loop, acquiring it once to eliminate synchronization churn.
+
+---
+
+## Reentrancy: Why Java Locks Don't Deadlock Themselves
+
+Java intrinsic locks are **Reentrant**.
+
+If a thread already holds a lock on an object, it can acquire the same lock again without blocking itself:
 
 ```java
-public class WaitForReady {
-    static final class Gate {
-        private boolean ready;
-
-        synchronized void awaitReady() throws InterruptedException {
-            while (!ready) {
-                wait();
-            }
-        }
-
-        synchronized void open() {
-            ready = true;
-            notifyAll();
-        }
+public class ReentrantDemo {
+    public synchronized void outer() {
+        // Thread acquires lock on 'this' (recursions = 1)
+        inner();
     }
 
-    public static void main(String[] args) throws InterruptedException {
-        Gate gate = new Gate();
-        Thread worker = new Thread(() -> {
-            try {
-                gate.awaitReady();
-                System.out.println("Proceed");
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-            }
-        });
-
-        worker.start();
-        gate.open();
-        worker.join();
+    public synchronized void inner() {
+        // Thread already owns 'this' lock! Reentrancy counter increments: recursions = 2
+        System.out.println("Executing inner method safely!");
     }
 }
 ```
 
-The condition is the state (`ready`), not the notification. A notification can happen before a thread starts waiting, so code that waits for “a notification” without checking state can wait forever. The loop is also required because the JLS permits spurious wake-ups and because another thread may acquire the monitor first and change the condition before the awakened thread does.
+### How Reentrancy Works Under the Hood
+Inside the native `ObjectMonitor`, HotSpot tracks two critical fields:
+1. `_owner`: A pointer to the thread currently holding the monitor.
+2. `_recursions`: An integer counter.
 
-`notify()` wakes one arbitrarily selected thread in the wait set; `notifyAll()` wakes all waiters. The awakened threads still have to compete to reacquire the monitor, and each must re-check its own condition. When a monitor protects multiple conditions, `notifyAll()` is often safer than choosing one unknown waiter, though it may wake threads whose conditions are still false.
+When a thread enters a synchronized block:
+- If `_owner == currentThread`, the JVM simply increments `_recursions++`.
+- Upon `monitorexit`, it decrements `_recursions--`.
+- The lock is released to other threads **only when `_recursions` reaches zero**!
 
-`wait()` can throw `InterruptedException`. Propagate it when the method contract allows; otherwise restore the interrupt status if the current method cannot handle interruption. Do not silently swallow it.
+Without reentrancy, subclassing would be impossible: a subclass overriding a synchronized method and calling `super.method()` would instantly deadlock itself!
 
-## Deadlock, livelock, and starvation
+---
 
-These are different failures to make progress:
+## Coordination: `wait()`, `notify()`, and `notifyAll()`
 
-- **Deadlock:** threads wait forever for locks held by one another. A circular lock-order dependency is a common cause.
-- **Livelock:** threads keep reacting to one another but make no useful progress, such as repeatedly backing off and retrying in sync.
-- **Starvation:** a thread is continually denied the CPU or a needed lock/resource while other work proceeds.
+Synchronization provides mutual exclusion, but threads frequently need to coordinate: *"Thread B must pause until Thread A produces a message."*
 
-This lock-order pattern can deadlock if two threads enter the two methods at the same time:
+This is accomplished via `wait()` and `notify()`.
+
+```mermaid
+flowchart TD
+    subgraph MonitorQueues ["The Anatomy of an ObjectMonitor"]
+        EntryList["_EntryList Queue<br/>(Threads waiting to acquire the lock)"]
+        ActiveLock["_owner Thread<br/>(Thread currently executing critical section)"]
+        WaitSet["_WaitSet Queue<br/>(Threads that called wait() and released lock!)"]
+
+        EntryList -->|"Acquires lock"| ActiveLock
+        ActiveLock -->|"Calls wait()"| WaitSet
+        WaitSet -->|"notifyAll() moves waiters"| EntryList
+    end
+```
+
+### The Three Golden Rules of Condition Waiting
+
+#### Always Wait Inside a while Loop, Never an if Statement
 
 ```java
-public class LockOrderExample {
-    private final Object first = new Object();
-    private final Object second = new Object();
-
-    void acquireFirstThenSecond() {
-        synchronized (first) {
-            synchronized (second) {
-                System.out.println("Both locks held");
-            }
-        }
+// ❌ DANGEROUS BUG: Using 'if'
+synchronized (lock) {
+    if (!condition) {
+        lock.wait(); // Vulnerable to spurious wakeups and race conditions!
     }
+    consumeData();
+}
 
-    void acquireSecondThenFirst() {
-        synchronized (second) {
-            synchronized (first) {
-                System.out.println("Both locks held");
-            }
-        }
+// ✅ THREAD-SAFE: Always loop until condition is verified!
+synchronized (lock) {
+    while (!condition) {
+        lock.wait();
     }
+    consumeData();
 }
 ```
 
-If one thread holds `first` and waits for `second` while another holds `second` and waits for `first`, neither can continue:
+Why is the `while` loop mandatory?
+- **Spurious Wakeups:** The operating system and JVM specification permit threads to wake up from `wait()` without any `notify()` call having been issued!
+- **State Theft:** If Thread A calls `notifyAll()`, waking up Thread B and Thread C, Thread B might win the lock first and consume the data. When Thread C finally acquires the lock, the condition is false again! The `while` loop forces Thread C to re-verify the condition and go back to sleep.
+
+#### wait() Releases the Lock; sleep() Does Not
+- **`Thread.sleep(ms)`**: Puts the calling thread to sleep, but **maintains ownership of all acquired locks**. Other threads remain blocked!
+- **`object.wait()`**: Atomically releases the monitor lock on `object` and suspends the thread, allowing other threads to enter the synchronized critical section!
+
+#### Prefer notifyAll() Over notify()
+- `notify()` wakes up **one arbitrary thread** from the `_WaitSet`. If that thread cannot proceed because its specific condition isn't met, it goes back to sleep, and the notification is lost forever!
+- `notifyAll()` wakes up **all threads** in the `_WaitSet`, ensuring any thread whose condition has been satisfied has an opportunity to execute.
+
+---
+
+## Deadlocks: The Coffman Conditions and Prevention
+
+A **Deadlock** occurs when two or more threads are permanently blocked, each holding a lock that the other needs:
 
 ```mermaid
 flowchart LR
-    threadA["Thread A holds first"] -->|"waits for"| lockSecond["second lock"]
-    lockSecond -->|"held by"| threadB["Thread B"]
-    threadB -->|"waits for"| lockFirst["first lock"]
-    lockFirst -->|"held by"| threadA
+    Thread1["Thread 1"]
+    Thread2["Thread 2"]
+    LockA["Lock A (Account 101)"]
+    LockB["Lock B (Account 102)"]
+
+    Thread1 -->|"Holds"| LockA
+    Thread1 -.->|"Blocked waiting for"| LockB
+    Thread2 -->|"Holds"| LockB
+    Thread2 -.->|"Blocked waiting for"| LockA
 ```
 
-Use a consistent global lock order when an operation must acquire multiple locks, or redesign the operation so it does not hold one lock while acquiring another. Timeouts can help detect a stalled attempt when using explicit-lock APIs, but do not by themselves prove the system is free of deadlocks.
+```java
+// ❌ DEADLOCK TRAP: Inconsistent Lock Ordering
+public void transferMoney(Account from, Account to, double amount) {
+    synchronized (from) {
+        synchronized (to) {
+            from.debit(amount);
+            to.credit(amount);
+        }
+    }
+}
 
-## Practical rules
+// What happens in production:
+// Thread 1: transferMoney(accA, accB, 50) -> Locks accA, waits for accB
+// Thread 2: transferMoney(accB, accA, 25) -> Locks accB, waits for accA
+// DEADLOCK! Server threads freeze forever!
+```
 
-- Identify the invariant and guard all reads and writes that depend on it with the same synchronization strategy.
-- Use `synchronized` when intrinsic mutual exclusion and its visibility guarantees fit the design.
-- Keep monitor ownership private where practical; document lock order when multiple locks are necessary.
-- Guard condition waits with a `while` loop and update the condition before notifying.
-- Choose `notifyAll()` when the correct individual waiter cannot be selected safely.
-- Treat interruption as a control signal; propagate it or restore the interrupt status.
-- Diagnose deadlock, livelock, and starvation separately: they need different remedies.
+### The 4 Coffman Conditions for Deadlock
+For a deadlock to occur, all four conditions must be present simultaneously:
+1. **Mutual Exclusion:** Resources cannot be shared; only one thread holds a lock at a time.
+2. **Hold and Wait:** A thread holding at least one resource is waiting to acquire additional resources held by other threads.
+3. **No Preemption:** Resources cannot be forcibly confiscated from a thread holding them.
+4. **Circular Wait:** A closed chain of threads exists, each waiting for a resource held by the next thread.
 
-## Further reading
+### The Cure: Strict Global Lock Ordering
+You cannot eliminate Mutual Exclusion, but you can **shatter the Circular Wait condition** by enforcing a strict global lock hierarchy:
 
-- [Java Language Specification, Java SE 21, Section 17.1: Synchronization](https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html#jls-17.1)
-- [Java Language Specification, Java SE 21, Section 17.2: Wait Sets and Notification](https://docs.oracle.com/javase/specs/jls/se21/html/jls-17.html#jls-17.2)
-- [Java Language Specification, Java SE 21, Section 8.4.3.6: `synchronized` Methods](https://docs.oracle.com/javase/specs/jls/se21/html/jls-8.html#jls-8.4.3.6)
-- [Java 21 `Object.wait`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html#wait())
-- [Java 21 `Object.notifyAll`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/lang/Object.html#notifyAll())
+```java
+// ✅ DEADLOCK-PROOF: Global Lock Ordering via Identity HashCode
+public void safeTransfer(Account from, Account to, double amount) {
+    int fromHash = System.identityHashCode(from);
+    int toHash = System.identityHashCode(to);
+
+    Account firstLock = fromHash < toHash ? from : to;
+    Account secondLock = fromHash < toHash ? to : from;
+
+    // Both threads are forced to acquire locks in the exact same physical order!
+    synchronized (firstLock) {
+        synchronized (secondLock) {
+            from.debit(amount);
+            to.credit(amount);
+        }
+    }
+}
+```
+
+---
+
+## Summary & Mental Model Checkpoint
+
+1. **Thread Safety**: Guarantees invariant correctness under arbitrary thread scheduling without external caller synchronization.
+2. **`monitorenter` Bytecode**: Synchronized blocks emit `monitorenter` and `monitorexit` opcodes with an automatic compiler exception table to prevent lock leaks.
+3. **Lock Inflation**: Uncontended locks use lightweight stack CAS records; contested locks inflate to heavyweight OS `ObjectMonitor` mutexes.
+4. **Reentrancy Counter**: Intrinsic locks allow recursive acquisitions by the owning thread via the `_recursions` counter.
+5. **Always `while (condition)` for `wait()`**: Defends against spurious wakeups and state theft by competitor threads.
+6. **`wait()` vs `sleep()`**: `wait()` releases the monitor lock; `sleep()` retains all held locks.
+7. **Deadlock Elimination**: Break the Circular Wait condition by enforcing strict global lock ordering using tie-breakers like `System.identityHashCode()`.
+
+---
+
+## 🎯 Senior Engineer Interview Questions
+
+### What happens inside the JVM Object Header Mark Word when a lock progresses from unlocked to lightweight locking, and finally inflates to heavyweight locking?
+> **Answer:** In HotSpot 64-bit architectures, the Object Header contains a 64-bit Mark Word whose lowest bits represent the lock state. When an object is **unlocked**, the lowest 3 bits are `001`. When Thread A attempts to synchronize on this uncontended object, the JVM uses **Lightweight Locking**: it pushes a `BasicObjectLock` record onto Thread A's execution stack and executes an atomic CPU Compare-And-Swap (CAS) to update the object's Mark Word to point directly to Thread A's stack address, changing the tag bits to `000`. If Thread B arrives while Thread A still holds the lock, Thread B's CAS fails. HotSpot detects contention and triggers **Lock Inflation**: it allocates a native C++ `ObjectMonitor` structure in C-heap memory, sets its `_owner` to Thread A, links Thread B to the `_EntryList` wait queue, updates the object's Mark Word to point to the `ObjectMonitor`, and sets the state bits to `010` (**Heavyweight Lock**). Thread B is then suspended using operating system kernel primitives (`pthread_mutex`/`park`), incurring context-switching overhead.
+
+### Why must `Object.wait()` always be invoked inside a `while` loop rather than an `if` block, and what causes a thread to resume execution when no `notify()` was called?
+> **Answer:** Invoking `wait()` inside an `if` block is a severe concurrency defect because of two distinct realities: (1) **Spurious Wakeups:** Under both POSIX threads and the JVM specification, a waiting thread can wake up from the wait set without receiving any explicit `notify()` or `notifyAll()` signal due to OS kernel interrupts or signal deliveries. (2) **State Invalidation (State Theft):** Even when awakened by an intentional `notifyAll()` signal, the awakened thread does not instantly acquire the lock; it transitions to the monitor's entry queue to compete with other threads. By the time the thread finally reacquires the lock, a competitor thread may have acquired the lock first and mutated the shared state back to an invalid condition. Evaluating `wait()` inside a `while (!condition)` loop guarantees that upon awakening, the thread is forced to re-evaluate the invariant predicate before executing downstream logic, returning to the wait state if the condition is not met.
+
+### What is the architectural difference between a synchronized block and a synchronized method at the compiled bytecode level?
+> **Answer:** A `synchronized` block explicitly targets an object reference and compiles into explicit **`monitorenter`** and **`monitorexit`** bytecode opcodes. To guarantee that the acquired monitor is released under all circumstances, `javac` automatically synthesizes an internal exception handler table in the class file that catches `any` `Throwable`, invokes `monitorexit`, and re-throws the exception, preventing lock abandonment. In contrast, a `synchronized` method emits neither `monitorenter` nor `monitorexit` instructions. Instead, the compiler tags the method descriptor in the constant pool with the **`ACC_SYNCHRONIZED`** access flag. When the JVM's execution engine invokes the method, it inspects this flag: if present, the runtime automatically acquires the monitor (`this` for instance methods, or the `Class<?>` mirror for static methods) prior to entering the frame, and automatically releases it when the method frame pops via return or an unhandled exception.
+
+### How do you diagnose and identify a thread deadlock in a production Java application without attaching an interactive debugger?
+> **Answer:** In production environments where attaching an interactive debugger would freeze live traffic, thread deadlocks can be identified non-invasively through several JVM diagnostic tools: (1) **`jcmd <pid> Thread.print`** or **`jstack <pid>`**: Generates a complete thread dump of all active threads. HotSpot includes an internal deadlock detection algorithm that scans object monitors and `Lock` synchronizers. If a deadlock exists, the bottom of the thread dump outputs a dedicated section explicitly titled `Found one Java-level deadlock:`, detailing the exact thread names, their stack traces, and the hexadecimal memory addresses of the conflicting locks. (2) **Java Flight Recorder (JFR) & JDK Mission Control**: Emits `jdk.JavaMonitorBlocked` and lock contention events, visualizing lock wait relationships without runtime overhead. (3) **Programmatically via JMX**: Invoking `ManagementFactory.getThreadMXBean().findDeadlockedThreads()` periodically inside a health-check probe returns an array of deadlocked thread IDs for automated alerting.
