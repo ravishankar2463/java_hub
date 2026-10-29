@@ -1,25 +1,25 @@
 # Project Handoff & Architecture Blueprint
 **Date:** October 29, 2026  
 **Project:** Zero to Java God (`JavaHub`) — Interactive Next.js Mastery Roadmap  
-**Status:** 100% Curriculum Completion (104 / 104 Topics Across 15 Levels Written, Verified & Pushed)  
+**Status:** 100% Curriculum Completion (116 / 116 Topics Across 16 Levels Written, Verified & Pushed)  
 
 ---
 
 ## 1. Executive Summary & Current State
-`JavaHub` is a production-grade, dark/light mode responsive Next.js application built to serve as the definitive curriculum for mastering Java from absolute zero to hyperscale enterprise engineering and modern AI orchestration.
+`JavaHub` is a production-grade, dark/light mode responsive Next.js application built to serve as the definitive curriculum for mastering Java from absolute zero to hyperscale enterprise engineering, modern AI orchestration, and sub-microsecond low-latency systems.
 
-- **Expanded 15-Level Curriculum**: 100% of all **104 roadmap topics** across **Levels 0 through 14** are authored, verified, and pushed to `origin/master`. Zero placeholder files exist.
+- **Expanded 16-Level Curriculum**: 100% of all **116 roadmap topics** across **Levels 0 through 15** are authored, verified, and pushed to `origin/master`. Zero placeholder files exist.
 - **Empathetic Senior Engineering Voice**: Every topic is written in a conversational, senior-mentor human tone that avoids dry dictionary definitions. It emphasizes *why* design decisions were made, hardware and memory realities (CPU cache lines, L1/L2 locality, Metaspace, GC roots, off-heap buffers), failure modes, and real-world production post-mortems.
 - **Architecture & Lifecycle Diagrams**: Mermaid v11 flowcharts, sequence diagrams, and state machines illustrate memory layouts, distributed pipelines, and protocol handshakes. All node labels containing brackets or parentheses are strictly double-quoted to prevent Mermaid parser errors.
 - **Senior Interview Crucibles**: Every topic concludes with 4 rigorous, senior-level interview questions paired with deep-dive technical answers.
 - **Zero-Tolerance Quality Gates**:
   - **Zero LaTeX Math Artifacts**: Every topic uses clean markdown backticks (`` `O(1)` ``) and Unicode symbols rather than unescaped dollar signs (`$O(1)$` or `$$...$$`), preventing KaTeX rendering glitches.
   - **Zero Numbered Headings**: Clean headings (`### Headings`) ensure `github-slugger` generates predictable, resilient Table of Contents anchor slugs.
-- **Next.js Static Site Generation**: `npm run build` generates **113 static pages** (104 roadmap topics + 4 deep-dive articles + homepage + roadmap index + 404) with zero errors.
+- **Next.js Static Site Generation**: `npm run build` generates **125 static pages** (116 roadmap topics + 4 deep-dive articles + homepage + roadmap index + 404) with zero errors.
 
 ---
 
-## 2. Complete 15-Level Curriculum Breakdown (104/104 Topics)
+## 2. Complete 16-Level Curriculum Breakdown (116/116 Topics)
 
 ### Level 0: The Absolute Beginner (7 Topics - 100%)
 *Foundational systems understanding, runtime environments, and syntax.*
@@ -31,7 +31,7 @@
 - [x] `arrays-2d-matrices.md`: Contiguous memory layout, L1/L2 CPU cache lines, row-major traversal locality, `System.arraycopy`.
 - [x] `intro-to-oops.md`: Metaspace vs Heap, object lifecycle, `this` pointer in Local Variable Slot 0, null reference defense.
 
-### Level 1: The Object-Oriented Thinker (9 Topics - 100%)
+### Level 1: The Object-Oriented Thinker (10 Topics - 100%)
 *Object modeling, encapsulation, polymorphism, and memory references.*
 - [x] `classes-and-objects.md`: ClassLoader pipeline, Metaspace, constructor chaining, the `this` escape hazard, Builder pattern.
 - [x] `the-static-keyword.md`: Metaspace vs Heap storage, `invokestatic` vs `invokevirtual`, `<clinit>`, Bill Pugh Singleton.
@@ -42,8 +42,9 @@
 - [x] `composition-over-inheritance.md`: Fragile Base Class disaster, Decorator pattern, forwarding wrappers, delegation.
 - [x] `polymorphism.md`: Virtual Method Tables (vtable), dynamic dispatch, inline caching, JIT monomorphic call site inlining.
 - [x] `advanced-class-design.md`: Static nested vs non-static inner classes, synthetic `this$0` memory leak trap, local & anonymous classes.
+- [x] `sealed-classes-and-pattern-matching.md`: Algebraic Data Types (Sum & Product types), `sealed`, `non-sealed`, `permits`, exhaustive `switch`, record pattern deconstruction, eliminating the Visitor pattern.
 
-### Level 2: The Core Master (Part 1) (6 Topics - 100%)
+### Level 2: The Core Master (Part 1) (7 Topics - 100%)
 *Error resilience, string memory layouts, modern core APIs, and I/O channels.*
 - [x] `exception-handling.md`: Exception hierarchy, cost of filling stack traces, try-with-resources, suppressed exceptions, custom exceptions.
 - [x] `enums.md`: Bytecode decomposition (`final class extends Enum`), custom state and methods, high-speed `EnumSet` and `EnumMap`.
@@ -51,8 +52,9 @@
 - [x] `modern-core-apis.md`: `java.time` (JSR-310), immutable collections (`List.of`), Java 16 Records, Pattern Matching (`instanceof`).
 - [x] `io-and-nio2.md`: Classic stream I/O vs non-blocking NIO.2, `Path`, `Files`, Channels, Buffers, Memory-Mapped Files (`FileChannel`).
 - [x] `network-socket-programming.md`: TCP handshake, `ServerSocket`, `Socket`, thread-per-client scalability limits, NIO `Selector` multiplexing.
+- [x] `regular-expressions-and-redos-defense.md`: `java.util.regex` NFA architecture, catastrophic backtracking exponential complexity, greedy vs possessive quantifiers, atomic groups, timeout guards against ReDoS attacks.
 
-### Level 3: The Core Master (Part 2) (6 Topics - 100%)
+### Level 3: The Core Master (Part 2) (7 Topics - 100%)
 *Type erasure, JVM internals, garbage collection, and dynamic reflection.*
 - [x] `generics.md`: Type erasure, reification, bridge methods, bounded wildcards (PECS - Producer Extends, Consumer Super).
 - [x] `the-collections-framework-lists-sets.md`: ArrayList growth strategy, LinkedList cache-miss penalties, HashSet hashing mechanics.
@@ -60,6 +62,7 @@
 - [x] `jvm-architecture-internals.md`: ClassLoader subsystem, Runtime Data Areas (Heap, Stack, Metaspace), Execution Engine (Interpreter, JIT, GC).
 - [x] `garbage-collection-basics.md`: Generational hypothesis, GC roots, Stop-The-World pauses, Serial vs Parallel vs CMS vs G1GC.
 - [x] `reflection-api-custom-annotations.md`: `Class<T>`, dynamic instantiation, method invocation, custom runtime annotations, performance impact.
+- [x] `java-platform-module-system-jpms.md`: Project Jigsaw, `module-info.java`, `requires transitive`, qualified exports, `opens` reflection boundaries, split package diagnosis, custom 35MB `jlink` minimal container runtimes.
 
 ### Level 4: The Functional Java Dev (5 Topics - 100%)
 *Functional abstractions, stream pipelines, and reactive specifications.*
@@ -69,7 +72,7 @@
 - [x] `optional-api.md`: Monadic design, `map`, `flatMap`, `filter`, preventing `NullPointerException`, Optional antipatterns.
 - [x] `reactive-programming-basics.md`: Reactive Streams specification (Publisher, Subscriber, Subscription), backpressure, Project Reactor (Mono, Flux).
 
-### Level 5: The Concurrency Expert (6 Topics - 100%)
+### Level 5: The Concurrency Expert (7 Topics - 100%)
 *Hardware memory models, lock-free algorithms, thread pools, and Virtual Threads.*
 - [x] `the-java-memory-model-jmm.md`: CPU caches, hardware write buffers, memory reordering, Happens-Before relationship, `volatile` semantics.
 - [x] `thread-safety-and-synchronization.md`: Race conditions, critical sections, intrinsic locks (synchronized / monitor), lock contention, deadlocks.
@@ -77,14 +80,16 @@
 - [x] `executors-and-thread-pools.md`: `ThreadPoolExecutor` parameters, rejection policies, work queues, sizing thread pools (CPU vs I/O bound).
 - [x] `asynchronous-programming.md`: `CompletableFuture` composition (`thenApply`, `thenCompose`, `thenCombine`), exception handling, async pipeline design.
 - [x] `project-loom-virtual-threads.md`: OS carrier threads vs virtual threads, continuation suspension, thread pinning pitfalls, structured concurrency.
+- [x] `structured-concurrency-and-scoped-values.md`: The flaws of unstructured concurrency, `StructuredTaskScope` (`ShutdownOnFailure`, `ShutdownOnSuccess`), subtask cancellation cascades, `ScopedValue` replacing memory-leaking ThreadLocal.
 
-### Level 6: The Architect (5 Topics - 100%)
+### Level 6: The Architect (6 Topics - 100%)
 *Object-oriented design principles, Gang of Four patterns, and modern modularity.*
 - [x] `solid-principles-basics.md`: Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion with Java refactorings.
 - [x] `creational-patterns.md`: Singleton (Bill Pugh), Factory Method, Abstract Factory, Builder, Prototype, Object Pool.
 - [x] `structural-patterns.md`: Adapter, Decorator, Facade, Composite, Proxy (Dynamic vs CGLIB), Flyweight.
 - [x] `behavioral-patterns.md`: Strategy, Observer, Command, Template Method, Chain of Responsibility, State.
 - [x] `architectural-patterns.md`: Layered / N-Tier Architecture, Hexagonal / Ports and Adapters, Onion Architecture, Clean Architecture.
+- [x] `domain-driven-design-tactical-patterns.md`: Strategic vs Tactical DDD, Entities vs Value Objects (Records), Aggregates & Aggregate Roots as transactional invariant boundaries, Domain Events with Spring Data, Repositories vs DAO antipatterns, Anti-Corruption Layers (ACL).
 
 ### Level 7: The Data & Storage Architect (11 Topics - 100%)
 *Engine storage internals, B-Trees, transactions, ORM caching, Redis, and search engines.*
@@ -122,8 +127,8 @@
 - [x] `high-performance-grpc-in-java.md`: Protocol Buffers, HTTP/2 multiplexing, unary vs client/server streaming, deadline propagation, interceptors.
 - [x] `real-time-messaging-websockets-sse.md`: Server-Sent Events (SSE) vs full-duplex WebSockets, STOMP message broker integration, connection lifecycle management.
 
-### Level 10: Event-Driven Architecture & Message Streaming (8 Topics - 100%)
-*Kafka architecture, transactional patterns, CDC with Debezium, Avro, and DLQs.*
+### Level 10: Event-Driven Architecture & Message Streaming (9 Topics - 100%)
+*Kafka architecture, transactional patterns, CDC with Debezium, Avro, and Kafka Streams.*
 - [x] `message-brokers-vs-event-streaming.md`: Queues vs append-only logs, consumer pull vs push models, backpressure, ordered event stream fundamentals.
 - [x] `apache-kafka-internals.md`: Partitions, segments, index files, zero-copy `sendfile()`, ISR (In-Sync Replicas), KRaft consensus metadata.
 - [x] `kafka-producers-and-delivery-guarantees.md`: `acks=all`, idempotent producer sequence numbers, record batching, partitioners, retries.
@@ -132,6 +137,7 @@
 - [x] `change-data-capture-with-debezium.md`: WAL/binlog extraction, streaming row mutations to Kafka, snapshotting, schema evolution.
 - [x] `schema-registry-and-apache-avro.md`: Binary serialization, schema evolution rules (Backward, Forward, Full), Schema Registry ID prepending.
 - [x] `resilient-event-processing-and-dead-letter-queues.md`: Exponential backoff with non-blocking retry topics, dead letter queues (DLQ), poison pill handling.
+- [x] `stateful-stream-processing-with-kafka-streams.md`: KStream vs KTable duality, GlobalKTable, embedded RocksDB state stores, tumbling/hopping/sliding window aggregations, co-partitioning constraints, changelog topic recovery, and `exactly_once_v2` semantics.
 
 ### Level 11: Distributed Systems & Microservices Patterns (8 Topics - 100%)
 *Service discovery, circuit breakers, Sagas, Temporal workflows, rate limiting, and contract testing.*
@@ -162,13 +168,22 @@
 - [x] `production-metrics-with-micrometer-and-prometheus.md`: Timers, gauges, counters, percentiles, distribution summaries, custom Grafana dashboards for JVM and connection pools.
 - [x] `zero-downtime-deployments-blue-green-and-canary.md`: Traffic shifting, Kubernetes readiness gating, database backward compatibility, automated rollbacks.
 
-### Level 14: Enterprise Java & AI Orchestration (5 Topics - 100%)
-*Spring AI, LLM clients, structured records, vector stores, RAG pipelines, and tool/function execution.*
+### Level 14: Enterprise Java & AI Orchestration (6 Topics - 100%)
+*Spring AI, LLM clients, structured records, vector stores, RAG pipelines, and autonomous multi-agent orchestration.*
 - [x] `the-ai-landscape-for-java-spring-ai.md`: AI landscape for Java developers, Spring AI client architecture, portable model abstractions, prompt engineering.
 - [x] `llm-integration-and-structured-records.md`: Type-safe LLM outputs, Java 16 Records with BeanOutputConverter, schema enforcement, retry mechanics.
 - [x] `vector-databases-and-semantic-search.md`: Embeddings generation, vector math (Cosine, Euclidean), PGvector and Milvus indexing (HNSW vs IVFFlat), hybrid search.
 - [x] `retrieval-augmented-generation-rag.md`: Document chunking strategies, metadata filtering, contextual compression, hallucination mitigation, token budget management.
 - [x] `llm-tool-calling-and-function-execution.md`: Agentic tool calling, registering Java functions as LLM tools, dynamic execution loop, security sandboxing, human-in-the-loop approvals.
+- [x] `multi-agent-orchestration-and-autonomous-systems.md`: Cognitive architectures, the ReAct (Reason + Act) loop in Java, sliding window working memory vs long-term vector memory, Supervisor-Worker agent topologies, adversarial Critic agents, and Human-in-the-Loop (HITL) safety tiers.
+
+### Level 15: Ultra-Low Latency & Mechanical Sympathy (5 Topics - 100%)
+*Sub-microsecond systems, CPU cache lines, lock-free ring buffers, Project Panama, and kernel bypass.*
+- [x] `mechanical-sympathy-and-cpu-architecture.md`: Designing software for hardware reality, CPU cache hierarchies (L1, L2, L3) and access latencies, 64-byte cache lines, spatial locality in arrays vs linked lists, False Sharing disaster under MESI protocol, field padding and `@Contended`, branch predictors and branch-free coding, hardware memory barriers (`VarHandle.setRelease` vs `volatile`).
+- [x] `project-panama-foreign-function-memory-api.md`: Retiring JNI and `sun.misc.Unsafe` (JEP 454), `MemorySegment`, `MemoryLayout` modeling C structs in Java, deterministic `Arena` scopes (`ofConfined`, `ofShared`), native downcalls via `Linker` and `MethodHandle`, upcalls from C to Java callbacks, zero-GC 32GB off-heap order books.
+- [x] `the-lmax-disruptor-and-lock-free-ring-buffers.md`: Why `ArrayBlockingQueue` collapses under contention (locks, false sharing, GC allocations), circular pre-allocated Ring Buffer topology, power-of-two bit masking (`sequence & (bufferSize - 1)`), Single Producer vs Multi-Producer sequencers, gating sequences, wait strategies (`BusySpinWaitStrategy` with `Thread.onSpinWait()`), and diamond dependency execution graphs.
+- [x] `zero-allocation-java-and-garbage-free-patterns.md`: Starving the Garbage Collector completely, heap allocation overhead (object headers, TLAB, card tables), why Escape Analysis fails in production, the mutable Flyweight pattern for message carriers, open-addressing primitive collections (Agrona `Long2DoubleHashMap`), thread affinity and CPU core pinning (`AffinityLock`, `isolcpus`), and garbage-free asynchronous logging with Log4j2.
+- [x] `ultra-low-latency-messaging-aeron-and-chronicle-queue.md`: The microsecond barrier in network stacks, Aeron Media Driver decoupled architecture, shared memory log buffers in `/dev/shm`, three-buffer term rotation, reliable UDP with NAK flow control, Chronicle Queue sub-100ns memory-mapped IPC, and Kernel Bypass networking (Solarflare OpenOnload, DPDK) reading packets directly from physical NIC memory.
 
 ---
 
@@ -198,9 +213,9 @@
 
 | Script / Command | Purpose | Verification Result |
 | :--- | :--- | :--- |
-| `node scripts/verify-all-topics.js` | Cross-references `data/roadmap.ts` slugs against `content/roadmap/` files on disk. | **104 / 104 Present, 0 Missing, 0 Placeholders** |
-| `node scripts/check-all-markdown.js` | AST scanner checking 108 markdown files for unescaped raw dollar math (`$O(1)$`) and numbered headings (`### 1. `). | **108 / 108 Files Clean, 0 Formatting Issues** |
-| `npm run build` | Next.js Turbopack production compilation and static site generation across all routes. | **113 / 113 Routes Compiled Cleanly** |
+| `node scripts/verify-all-topics.js` | Cross-references `data/roadmap.ts` slugs against `content/roadmap/` files on disk. | **116 / 116 Present, 0 Missing, 0 Placeholders** |
+| `node scripts/check-all-markdown.js` | AST scanner checking 120 markdown files for unescaped raw dollar math (`$O(1)$`) and numbered headings (`### 1. `). | **120 / 120 Files Clean, 0 Formatting Issues** |
+| `npm run build` | Next.js Turbopack production compilation and static site generation across all routes. | **125 / 125 Routes Compiled Cleanly** |
 
 ---
 
