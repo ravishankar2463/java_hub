@@ -232,6 +232,7 @@
 | `node scripts/check-all-markdown.js` | AST scanner checking 120 markdown files for unescaped raw dollar math (`$O(1)$`) and numbered headings (`### 1. `). | **120 / 120 Files Clean, 0 Formatting Issues** |
 | `node scripts/validate-all-mermaid.js` | Full AST validation of all Mermaid diagrams across all markdown files in the project. | **383 / 383 Diagrams Valid, 0 Errors** |
 | `node scripts/setup-resources-repo.js` | Automated generator and synchronizer for all 116 branches in `java_hub_resources`. | **116 / 116 Branches Generated & Synchronized** |
+| `node scripts/deploy-rich-resources.js` | Deploys deep-dive Java 21 domain implementations & JUnit 5 tests across all 116 branches. | **116 / 116 Branches Populated & Pushed to Origin** |
 | `npm run build` | Next.js Turbopack production compilation and static site generation across all routes. | **125 / 125 Routes Compiled Cleanly** |
 
 ---

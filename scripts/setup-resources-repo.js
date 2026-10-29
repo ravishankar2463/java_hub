@@ -439,3 +439,4 @@ function toPascalCase(str) {
 function escapeString(str) {
   return str.replace(/"/g, '\\"');
 }
+
