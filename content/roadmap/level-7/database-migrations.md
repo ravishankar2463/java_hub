@@ -144,27 +144,27 @@ To achieve true zero-downtime deployments, senior architects execute breaking sc
 
 ```mermaid
 flowchart TD
-    subgraph "Phase 1: Expand (Release N+1)"
+    subgraph P1 ["Phase 1: Expand (Release N+1)"]
         E1["Migration V2: Add 'display_name' (Nullable)"]
         E2["Deploy App v1.1: Writes to BOTH 'full_name' and 'display_name'"]
     end
 
-    subgraph "Phase 2: Backfill (Async Batch Job)"
+    subgraph P2 ["Phase 2: Backfill (Async Batch Job)"]
         B1["Backfill Task: UPDATE users SET display_name = full_name WHERE display_name IS NULL"]
     end
 
-    subgraph "Phase 3: Switch Reads (Release N+2)"
+    subgraph P3 ["Phase 3: Switch Reads (Release N+2)"]
         S1["Deploy App v1.2: Reads EXCLUSIVELY from 'display_name'"]
     end
 
-    subgraph "Phase 4: Contract (Release N+3)"
+    subgraph P4 ["Phase 4: Contract (Release N+3)"]
         C1["Deploy App v1.3: Ceases writing to 'full_name'"]
         C2["Migration V3: Drop 'full_name' column & enforce NOT NULL on 'display_name'"]
     end
 
-    Phase 1 --> Phase 2
-    Phase 2 --> Phase 3
-    Phase 3 --> Phase 4
+    E2 --> B1
+    B1 --> S1
+    S1 --> C1
 ```
 
 ### Walkthrough: Renaming `full_name` to `display_name`

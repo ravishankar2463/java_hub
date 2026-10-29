@@ -46,7 +46,7 @@ flowchart TD
     ParamCopy -->|"points to"| TV
 
     style CallerStack fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#f8fafc
-    CalleeStack fill:#1e293b,stroke:#64748b,stroke-width:2px,color:#f8fafc
+    style CalleeStack fill:#1e293b,stroke:#64748b,stroke-width:2px,color:#f8fafc
     style HeapMemory fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#f8fafc
     style Original fill:#312e81,color:#f8fafc
     style ParamCopy fill:#312e81,color:#f8fafc

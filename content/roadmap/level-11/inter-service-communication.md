@@ -22,18 +22,15 @@ Every inter-service interaction falls into one of two fundamental communication 
 ```mermaid
 flowchart TD
     subgraph Synchronous ["Synchronous Request-Response (REST / gRPC)"]
-        Client1["Order Service"] -->|1. HTTP Request (Blocks / Awaits)| Server1["Payment Service"]
-        Server1 -->|2. Processes & Returns Response| Client1
-        Note1["Temporal Coupling:
-Both services MUST be online and reachable simultaneously."]
+        Client1["Order Service"] -->|"1. HTTP Request (Blocks / Awaits)"| Server1["Payment Service"]
+        Server1 -->|"2. Processes & Returns Response"| Client1
+        Note1["Temporal Coupling:<br/>Both services MUST be online and reachable simultaneously."]
     end
 
     subgraph Asynchronous ["Asynchronous Event-Driven (Kafka / RabbitMQ)"]
-        Client2["Order Service"] -->|1. Publish Event| Broker["Message Broker"]
-        Broker -.->|2. Consume Event When Ready| Server2["Fulfillment Service"]
-        Note2["Temporal Decoupling:
-Producer does NOT wait.
-Consumer can be offline or restart safely."]
+        Client2["Order Service"] -->|"1. Publish Event"| Broker["Message Broker"]
+        Broker -.->|"2. Consume Event When Ready"| Server2["Fulfillment Service"]
+        Note2["Temporal Decoupling:<br/>Producer does NOT wait.<br/>Consumer can be offline or restart safely."]
     end
 ```
 

@@ -295,3 +295,4 @@ Log4j2 eliminates garbage generation through three core mechanisms:
 1. **Thread-Local Reusable Formatters:** Log4j2 maintains pre-allocated, thread-local `StringBuilder` instances. Log messages are formatted directly into these reusable buffers without instantiating intermediate `String` objects.
 2. **Unboxed Primitive Overloads:** The Logger API provides specialized overloads (e.g., `info(String, long, double)`) that accept primitives directly, avoiding autoboxing.
 3. **Direct Encoders & Disruptor Ring Buffers:** Instead of creating a new `LogEvent` object per message, Log4j2 utilizes the LMAX Disruptor with pre-allocated `RingBufferLogEvent` slots. The message text is converted directly into bytes within a reusable off-heap `ByteBuffer` and streamed asynchronously to disk, resulting in zero heap object allocations during steady-state logging.
+

@@ -19,10 +19,10 @@ flowchart TD
         Plan --> Executor["Execution Engine"]
         
         Executor --> Buffers["Shared Buffers Pool (8KB Pages in RAM)"]
-        Buffers -.->|Buffer Miss: Random I/O| DiskData["Data Files on Disk (Heap Tables)"]
+        Buffers -.->|"Buffer Miss: Random I/O"| DiskData["Data Files on Disk (Heap Tables)"]
         
-        Executor -->|Transaction Commit| WAL["Write-Ahead Log Buffer (WAL)"]
-        WAL -->|Sequential Flush (fsync)| WALDisk["WAL Logs on Disk (Durability Guarantee)"]
+        Executor -->|"Transaction Commit"| WAL["Write-Ahead Log Buffer (WAL)"]
+        WAL -->|"Sequential Flush (fsync)"| WALDisk["WAL Logs on Disk (Durability Guarantee)"]
     end
 ```
 

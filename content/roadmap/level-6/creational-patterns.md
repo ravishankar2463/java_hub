@@ -133,8 +133,8 @@ flowchart TD
         Creator["<<abstract>><br/>NotificationDispatcher"] -->|calls| FactoryMethod["createTransport()"]
         Creator -->|executes| Send["dispatch()"]
         
-        EmailDispatcher["EmailNotificationDispatcher"] --|> Creator
-        SmsDispatcher["SmsNotificationDispatcher"] --|> Creator
+        EmailDispatcher["EmailNotificationDispatcher"] -->|"extends"| Creator
+        SmsDispatcher["SmsNotificationDispatcher"] -->|"extends"| Creator
         
         EmailDispatcher -->|creates| EmailTransport["EmailTransport"]
         SmsDispatcher -->|creates| SmsTransport["SmsTransport"]

@@ -204,8 +204,9 @@
 ### 3. Sequential Topic Navigation & Reading Experience
 - **Dynamic Reading Progress Bar**: Real-time progress bar tracking scroll depth across the article.
 - **Bi-Directional Lesson Navigation**: Next and Previous topic cards at the end of every topic with level badges and topic titles.
-- **Enhanced Code Blocks (`components/CodeBlock.tsx`)**: Highlighting for `bash`, `java`, `yaml`, `dockerfile`, `diff`, with line counts and an instant clipboard copy button.
+- **Enhanced Code Blocks (`components/CodeBlock.tsx`)**: Highlighting for `bash`, `java`, `yaml`, `dockerfile`, `diff`, with line counts and an instant clipboard copy button. Shiki highlighter is cached globally as a Promise singleton, eliminating multiple highlighter instance warnings.
 - **Mermaid Modal Canvas (`components/MermaidDiagram.tsx`)**: Interactive fullscreen modal with pan & zoom capabilities for complex architectures.
+- **100% Validated Mermaid Diagrams**: All 383 diagrams across all curriculum files are validated against the Mermaid parser AST, with all edge labels with parentheses/brackets safely quoted.
 
 ---
 
@@ -215,6 +216,7 @@
 | :--- | :--- | :--- |
 | `node scripts/verify-all-topics.js` | Cross-references `data/roadmap.ts` slugs against `content/roadmap/` files on disk. | **116 / 116 Present, 0 Missing, 0 Placeholders** |
 | `node scripts/check-all-markdown.js` | AST scanner checking 120 markdown files for unescaped raw dollar math (`$O(1)$`) and numbered headings (`### 1. `). | **120 / 120 Files Clean, 0 Formatting Issues** |
+| `node scripts/validate-all-mermaid.js` | Full AST validation of all Mermaid diagrams across all markdown files in the project. | **383 / 383 Diagrams Valid, 0 Errors** |
 | `npm run build` | Next.js Turbopack production compilation and static site generation across all routes. | **125 / 125 Routes Compiled Cleanly** |
 
 ---

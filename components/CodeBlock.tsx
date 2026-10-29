@@ -4,7 +4,30 @@ import { useEffect, useState } from 'react'
 import { createHighlighter, Highlighter } from 'shiki'
 import { Check, Copy, Code2 } from 'lucide-react'
 
-let highlighter: Highlighter | null = null
+let highlighterPromise: Promise<Highlighter> | null = null;
+
+function getHighlighter(): Promise<Highlighter> {
+  if (!highlighterPromise) {
+    highlighterPromise = createHighlighter({
+      themes: ['github-dark-dimmed'],
+      langs: [
+        'java',
+        'typescript',
+        'javascript',
+        'bash',
+        'json',
+        'xml',
+        'powershell',
+        'sql',
+        'yaml',
+        'dockerfile',
+        'markdown',
+        'diff',
+      ],
+    });
+  }
+  return highlighterPromise;
+}
 
 const LANGUAGE_MAP: Record<string, string> = {
   sh: 'bash',
@@ -33,54 +56,39 @@ export function CodeBlock({
     let isCancelled = false
 
     async function highlight() {
-      if (!highlighter) {
-        highlighter = await createHighlighter({
-          themes: ['github-dark-dimmed'],
-          langs: [
-            'java',
-            'typescript',
-            'javascript',
-            'bash',
-            'json',
-            'xml',
-            'powershell',
-            'sql',
-            'yaml',
-            'dockerfile',
-            'markdown',
-            'diff',
-          ],
-        })
-      }
-
-      if (isCancelled) return
-
       try {
-        const output = highlighter.codeToHtml(code, {
-          lang: normalizedLang,
-          theme: 'github-dark-dimmed',
-        })
-        if (!isCancelled) setHtml(output)
-      } catch {
-        // Fallback to markdown if language isn't supported
+        const hl = await getHighlighter();
+        if (isCancelled) return;
+
         try {
-          const output = highlighter.codeToHtml(code, {
-            lang: 'markdown',
+          const output = hl.codeToHtml(code, {
+            lang: normalizedLang,
             theme: 'github-dark-dimmed',
-          })
-          if (!isCancelled) setHtml(output)
+          });
+          if (!isCancelled) setHtml(output);
         } catch {
-          if (!isCancelled) setHtml('')
+          // Fallback to markdown if language isn't supported
+          try {
+            const output = hl.codeToHtml(code, {
+              lang: 'markdown',
+              theme: 'github-dark-dimmed',
+            });
+            if (!isCancelled) setHtml(output);
+          } catch {
+            if (!isCancelled) setHtml('');
+          }
         }
+      } catch (err) {
+        console.error('Failed to highlight code block', err);
       }
     }
 
-    highlight()
+    highlight();
 
     return () => {
-      isCancelled = true
-    }
-  }, [code, normalizedLang])
+      isCancelled = true;
+    };
+  }, [code, normalizedLang]);
 
   const copyToClipboard = async () => {
     try {

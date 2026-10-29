@@ -68,17 +68,16 @@ flowchart TD
     end
 
     subgraph DatabaseTier["Shared Persistent Database Tier"]
-        DB[(PostgreSQL Primary)]
+        DB[("PostgreSQL Primary")]
     end
 
     UserTraffic --> Router
     Router -->|"1. Currently Routing 100% Traffic"| BluePods
     Router -.->|"2. Internal Smoke Testing & QA"| GreenPods
+    Router ==>|"3. Instant Traffic Flip: 100% Cutover"| GreenPods
     
     BluePods --> DB
     GreenPods --> DB
-
-    Note over Router: 3. Instant Traffic Flip: Route 100% to Green!
 ```
 
 ### The Deployment Execution Flow:

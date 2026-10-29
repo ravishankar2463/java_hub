@@ -246,3 +246,4 @@ When a sibling subtask fails, `StructuredTaskScope` invokes `interrupt()` on all
 **Answer:** Both `StructuredTaskScope` and `ScopedValue` work perfectly with traditional OS Platform Threads. They are independent JVM language and runtime features introduced in Project Loom.
 
 However, using `StructuredTaskScope` with Platform Threads limits your concurrency scalability. Because `StructuredTaskScope` encourages fine-grained concurrency—splitting even trivial sequential I/O operations into parallel subtasks—running hundreds of subtasks on heavy platform threads (where each thread consumes 1MB of stack memory) will quickly trigger OS thread limits and out-of-memory errors. The true enterprise power of Structured Concurrency is realized when combined with Virtual Threads, where millions of concurrent subtasks can be forked and destroyed with microsecond latency and minimal heap overhead.
+

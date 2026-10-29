@@ -21,16 +21,12 @@ The `ApplicationEventPublisher` interface allows Spring beans to publish domain 
 
 ```mermaid
 flowchart TD
-    Service["OrderService
-(ApplicationEventPublisher)"] -->|publishEvent(OrderPlacedEvent)| Multicaster["SimpleApplicationEventMulticaster"]
+    Service["OrderService<br/>(ApplicationEventPublisher)"] -->|"publishEvent(OrderPlacedEvent)"| Multicaster["SimpleApplicationEventMulticaster"]
 
     subgraph Listeners ["Registered Listeners"]
-        Multicaster --> L1["InventoryListener
-(@EventListener - Sync on HTTP thread)"]
-        Multicaster --> L2["EmailNotificationListener
-(@Async @EventListener - Separate ThreadPool)"]
-        Multicaster --> L3["BillingAuditListener
-(@TransactionalEventListener - AFTER_COMMIT)"]
+        Multicaster --> L1["InventoryListener<br/>(@EventListener - Sync on HTTP thread)"]
+        Multicaster --> L2["EmailNotificationListener<br/>(@Async @EventListener - Separate ThreadPool)"]
+        Multicaster --> L3["BillingAuditListener<br/>(@TransactionalEventListener - AFTER_COMMIT)"]
     end
 ```
 

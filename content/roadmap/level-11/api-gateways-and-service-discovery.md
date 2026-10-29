@@ -223,14 +223,14 @@ Hardcoding IP addresses in configuration files is impossible. Services require a
 ```mermaid
 flowchart TD
     subgraph ClientSide ["Client-Side Discovery (e.g., Netflix Eureka + Spring Cloud LoadBalancer)"]
-        Caller1["Calling Service"] -->|1. Query Registry| Registry["Discovery Server (Eureka / Consul)"]
-        Registry -->>|2. Returns Instance List [10.0.1.5, 10.0.1.6]| Caller1
-        Caller1 -->|3. Client-Side Round-Robin Direct Call| TargetInstance["Target Service Pod 10.0.1.5"]
+        Caller1["Calling Service"] -->|"1. Query Registry"| Registry["Discovery Server (Eureka / Consul)"]
+        Registry -.->|"2. Returns Instance List [10.0.1.5, 10.0.1.6]"| Caller1
+        Caller1 -->|"3. Client-Side Round-Robin Direct Call"| TargetInstance["Target Service Pod 10.0.1.5"]
     end
 
     subgraph ServerSide ["Server-Side Discovery (e.g., Kubernetes Services / AWS ALB)"]
-        Caller2["Calling Service"] -->|1. Call Stable Virtual IP / DNS: order-service| K8sService["K8s Service / Proxy (kube-proxy)"]
-        K8sService -->|2. Internal IPTables / IPVS Load Balancing| K8sPod["Target Pod 10.244.1.88"]
+        Caller2["Calling Service"] -->|"1. Call Stable Virtual IP / DNS: order-service"| K8sService["K8s Service / Proxy (kube-proxy)"]
+        K8sService -->|"2. Internal IPTables / IPVS Load Balancing"| K8sPod["Target Pod 10.244.1.88"]
     end
 ```
 

@@ -123,9 +123,9 @@ flowchart TD
         O3["FraudDetectionAnalyticsListener"]
     end
 
-    Subject -->|1. notifyObservers(event)| O1
-    Subject -->|2. notifyObservers(event)| O2
-    Subject -->|3. notifyObservers(event)| O3
+    Subject -->|"1. notifyObservers(event)"| O1
+    Subject -->|"2. notifyObservers(event)"| O2
+    Subject -->|"3. notifyObservers(event)"| O3
 ```
 
 ### The Lapsed Listener Memory Leak
@@ -404,11 +404,11 @@ When multiple classes share a fixed, mandatory sequence of operations (such as d
 ```mermaid
 flowchart TD
     Base["DataIngestionPipeline (Base Class)"]
-    Base -->|1. authenticate() [final]| S1["Step 1: Auth"]
-    Base -->|2. extractData() [abstract hook]| S2["Step 2: Extract (Subclass)"]
-    Base -->|3. validate() [final]| S3["Step 3: Invariant Validation"]
-    Base -->|4. transform() [abstract hook]| S4["Step 4: Transform (Subclass)"]
-    Base -->|5. logAudit() [final]| S5["Step 5: Audit Log"]
+    Base -->|"1. authenticate() [final]"| S1["Step 1: Auth"]
+    Base -->|"2. extractData() [abstract hook]"| S2["Step 2: Extract (Subclass)"]
+    Base -->|"3. validate() [final]"| S3["Step 3: Invariant Validation"]
+    Base -->|"4. transform() [abstract hook]"| S4["Step 4: Transform (Subclass)"]
+    Base -->|"5. logAudit() [final]"| S5["Step 5: Audit Log"]
 ```
 
 ### Production Implementation: Safe Ingestion Pipeline

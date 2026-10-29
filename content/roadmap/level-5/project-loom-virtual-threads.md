@@ -271,12 +271,12 @@ Java 21 introduces `StructuredTaskScope` (Preview JEP 453) to enforce **Structur
 flowchart TD
     subgraph "Structured Scope Boundary"
         Parent["Parent Task (StructuredTaskScope)"]
-        Parent -->|fork()| Child1["Child Task 1: Fetch Orders"]
-        Parent -->|fork()| Child2["Child Task 2: Fetch Profile"]
+        Parent -->|"fork()"| Child1["Child Task 1: Fetch Orders"]
+        Parent -->|"fork()"| Child2["Child Task 2: Fetch Profile"]
         
-        Child1 -.->|Fails with Exception!| Cancel["Shutdown Triggered"]
-        Cancel -->|Interrupt Signal| Child2
-        Cancel --> Parent["Parent rethrows exception; zero leaked threads!"]
+        Child1 -.->|"Fails with Exception!"| Cancel["Shutdown Triggered"]
+        Cancel -->|"Interrupt Signal"| Child2
+        Cancel -->|"Cleanup & Abort"| ParentOut["Parent rethrows exception - zero leaked threads!"]
     end
 ```
 

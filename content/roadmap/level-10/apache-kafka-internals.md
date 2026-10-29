@@ -166,8 +166,7 @@ flowchart TD
     Leader -->|"Replication Fetch"| F1
     Leader -.->|"Slow / Paused"| F2
 
-    Consumer["Consumer Client"] -->|"Fetch Committed Messages"| Leader
-    Note over Consumer: Can ONLY read up to High Watermark (HW = 104)!
+    Consumer["Consumer Client<br/>(Can ONLY read up to HW: 104)"] -->|"Fetch Committed Messages"| Leader
 ```
 
 ### Critical Replication Metrics

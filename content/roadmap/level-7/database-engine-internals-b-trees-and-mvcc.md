@@ -218,24 +218,24 @@ sequenceDiagram
 
     Note over DB: Row: id=1, balance=100 (xmin: 90, xmax: 0)
 
-    T1->>DB: BEGIN; SELECT balance FROM account WHERE id=1;
+    T1->>DB: BEGIN - SELECT balance FROM account WHERE id=1
     DB-->>T1: Returns 100 (xmin:90 is committed, xmax is 0)
 
-    T2->>DB: BEGIN (txid=102);
-    T2->>DB: UPDATE account SET balance=250 WHERE id=1;
+    T2->>DB: BEGIN (txid=102)
+    T2->>DB: UPDATE account SET balance=250 WHERE id=1
     Note over DB: Version 1: balance=100 (xmin:90, xmax:102)<br/>Version 2: balance=250 (xmin:102, xmax:0)
 
-    T1->>DB: SELECT balance FROM account WHERE id=1;
+    T1->>DB: SELECT balance FROM account WHERE id=1
     Note over T1: T1 snapshot excludes active tx 102.<br/>Ignores Version 2, reads Version 1.
     DB-->>T1: Returns 100 (Consistent Snapshot!)
 
-    T2->>DB: COMMIT;
+    T2->>DB: COMMIT
     Note over DB: Transaction 102 committed.
 
-    T1->>DB: SELECT balance FROM account WHERE id=1;
+    T1->>DB: SELECT balance FROM account WHERE id=1
     Note over T1: Under REPEATABLE READ, snapshot is unchanged.
     DB-->>T1: Still returns 100!
-    T1->>DB: COMMIT;
+    T1->>DB: COMMIT
 ```
 
 When Transaction 101 reads the row, it evaluates visibility rules against its active **Read View (Snapshot)**:

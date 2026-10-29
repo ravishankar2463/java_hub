@@ -50,9 +50,9 @@ The core JDBC API is defined in `java.sql`. It follows a nested resource ownersh
 ```mermaid
 flowchart TD
     subgraph "Nested JDBC Resource Lifecycle"
-        DS["DataSource (Pool / Factory)"] -->|1. getConnection()| C["Connection"]
-        C -->|2. prepareStatement(sql)| S["PreparedStatement"]
-        S -->|3. executeQuery()| R["ResultSet"]
+        DS["DataSource (Pool / Factory)"] -->|"1. getConnection()"| C["Connection"]
+        C -->|"2. prepareStatement(sql)"| S["PreparedStatement"]
+        S -->|"3. executeQuery()"| R["ResultSet"]
         
         R -.->|AutoCloseable: Closes First| S
         S -.->|AutoCloseable: Closes Second| C

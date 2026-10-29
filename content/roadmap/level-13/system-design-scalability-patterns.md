@@ -58,14 +58,14 @@ In 2012, computer scientist Daniel Abadi noted that CAP only describes what happ
 flowchart TD
     PACELC{"PACELC Classification"}
 
-    PACELC -->|If Partition (P)| Choice1{"Availability (A) or Consistency (C)?"}
-    PACELC -->|Else Normal (E)| Choice2{"Latency (L) or Consistency (C)?"}
+    PACELC -->|"If Partition (P)"| Choice1{"Availability (A) or Consistency (C)?"}
+    PACELC -->|"Else Normal (E)"| Choice2{"Latency (L) or Consistency (C)?"}
 
-    Choice1 -->|A| PA["PA: High Availability"]
-    Choice1 -->|C| PC["PC: Strict Consistency"]
+    Choice1 -->|"A"| PA["PA: High Availability"]
+    Choice1 -->|"C"| PC["PC: Strict Consistency"]
 
-    Choice2 -->|L| EL["EL: Low Latency (Async replication)"]
-    Choice2 -->|C| EC["EC: High Consistency (Sync replication)"]
+    Choice2 -->|"L"| EL["EL: Low Latency (Async replication)"]
+    Choice2 -->|"C"| EC["EC: High Consistency (Sync replication)"]
 ```
 
 ### Real-World PACELC Systems
@@ -206,10 +206,10 @@ A **Content Delivery Network (CDN)** deploys hundreds of Points of Presence (PoP
 
 ```mermaid
 flowchart LR
-    User["End User (Tokyo)"] -->|5ms Latency| PoP["CDN Edge Server (Tokyo PoP)"]
+    User["End User (Tokyo)"] -->|"5ms Latency"| PoP["CDN Edge Server (Tokyo PoP)"]
     
-    PoP -->|Cache Hit (Static Assets / Cached API)| User
-    PoP -.->|Cache Miss (Pass to Origin)| Origin["Origin API (AWS US-East Virginia - 180ms)"]
+    PoP -->|"Cache Hit (Static Assets / Cached API)"| User
+    PoP -.->|"Cache Miss (Pass to Origin)"| Origin["Origin API (AWS US-East Virginia - 180ms)"]
 ```
 
 ### Modern Dynamic API Caching with `Cache-Control`

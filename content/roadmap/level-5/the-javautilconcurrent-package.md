@@ -159,7 +159,7 @@ flowchart LR
         TB["Thread 2"] --> C2["Cell[1] (Padded)"]
         TC["Thread 3"] --> C3["Cell[2] (Padded)"]
         TD["Thread 4"] --> C4["Cell[3] (Padded)"]
-        C1 & C2 & C3 & C4 -->|sum() aggregation| Total["Total Count"]
+        C1 & C2 & C3 & C4 -->|"sum() aggregation"| Total["Total Count"]
     end
 ```
 

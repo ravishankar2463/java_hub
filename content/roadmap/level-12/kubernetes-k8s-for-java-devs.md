@@ -180,26 +180,23 @@ The single most common source of outages in Kubernetes-hosted Java is misconfigu
 
 ```mermaid
 flowchart TD
-    PodStart["Pod Container Starts"] --> StartupProbe{"Startup Probe Passing?
-/actuator/health/startup"}
-    StartupProbe -->|No / Waiting| WaitStart["Wait (Holds Liveness & Readiness Disabled)"]
+    PodStart["Pod Container Starts"] --> StartupProbe{"Startup Probe Passing?<br/>/actuator/health/startup"}
+    StartupProbe -->|"No / Waiting"| WaitStart["Wait (Holds Liveness & Readiness Disabled)"]
     WaitStart --> StartupProbe
     
-    StartupProbe -->|Passed!| RunProbes["Activate Liveness and Readiness Probes"]
+    StartupProbe -->|"Passed!"| RunProbes["Activate Liveness and Readiness Probes"]
 
     subgraph ActiveProbes ["Continuous Pod Lifecycle Monitoring"]
-        LivenessProbe{"Liveness Probe
-/actuator/health/liveness"}
-        ReadinessProbe{"Readiness Probe
-/actuator/health/readiness"}
+        LivenessProbe{"Liveness Probe<br/>/actuator/health/liveness"}
+        ReadinessProbe{"Readiness Probe<br/>/actuator/health/readiness"}
     end
 
     RunProbes --> LivenessProbe
     RunProbes --> ReadinessProbe
 
-    LivenessProbe -->|Fails! (Deadlock)| Restart["KUBERNETES KILLS POD! (Container Restart)"]
-    ReadinessProbe -->|Fails! (Cache warming)| Unroute["Remove Pod from Service Endpoints (No Traffic Sent)"]
-    ReadinessProbe -->|Passes!| Route["Forward Incoming HTTP Requests"]
+    LivenessProbe -->|"Fails! (Deadlock)"| Restart["KUBERNETES KILLS POD! (Container Restart)"]
+    ReadinessProbe -->|"Fails! (Cache warming)"| Unroute["Remove Pod from Service Endpoints (No Traffic Sent)"]
+    ReadinessProbe -->|"Passes!"| Route["Forward Incoming HTTP Requests"]
 ```
 
 ### The Startup Probe: Protecting Slow JVM Boot Times

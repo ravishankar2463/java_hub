@@ -316,3 +316,4 @@ Because this memory resides completely outside the JVM garbage-collected heap, t
 3. Allocating 50 gigabytes of off-heap data creates **zero GC Stop-The-World pause overhead**.
 
 The only on-heap artifacts are lightweight Java wrapper instances (`MemorySegment` descriptors). If developers prefer automated GC-driven cleanup rather than deterministic `try-with-resources` management, `Arena.ofAuto()` links the off-heap allocation to the lifetime of the `MemorySegment` wrapper using Java's internal `Cleaner` mechanism, automatically deallocating the native memory once the segment becomes phantom-reachable.
+

@@ -81,20 +81,19 @@ When you type `git init` in an empty folder, Git creates a hidden directory name
 ```mermaid
 classDiagram
     class Blob {
-        +Raw File Bytes
-        +SHA-1 Hash
-        (No filename, no permissions)
+        +byte[] rawFileBytes
+        +String sha1Hash
     }
     class Tree {
-        +List of Blobs (files)
-        +List of Subtrees (folders)
-        +Filenames and permissions
+        +List blobs
+        +List subtrees
+        +String filePermissions
     }
     class Commit {
-        +Pointer to Root Tree
-        +Pointer to Parent Commit(s)
-        +Author & Timestamp
-        +Commit Message
+        +String rootTreeHash
+        +String parentCommitHash
+        +String authorAndTimestamp
+        +String commitMessage
     }
     
     Commit --> Tree : "points to snapshot"
@@ -145,7 +144,7 @@ Because the parent’s hash is baked into the child’s hash, **history in Git i
 
 ```mermaid
 flowchart LR
-    C1["Commit A<br/>Hash: 3f9a..."] <-- "parent" -- C2["Commit B<br/>Hash: 8b1c..."] <-- "parent" -- C3["Commit C<br/>Hash: e4d2..."]
+    C3["Commit C<br/>Hash: e4d2..."] -->|"parent"| C2["Commit B<br/>Hash: 8b1c..."] -->|"parent"| C1["Commit A<br/>Hash: 3f9a..."]
 ```
 
 If someone attempts to stealthily alter a single character in a file from three years ago, that file's blob hash changes. That changes the tree hash, which changes Commit A's hash, which breaks Commit B's parent pointer, cascading all the way to today. Git will immediately detect the corruption.
@@ -171,7 +170,7 @@ When you type `git branch feature-checkout`, Git doesn't duplicate a single line
 ```mermaid
 flowchart TD
     subgraph Commits ["Commit History (DAG)"]
-        C1["Commit 1 (a1b2)"] <-- C2["Commit 2 (c3d4)"] <-- C3["Commit 3 (e5f6)"]
+        C3["Commit 3 (e5f6)"] --> C2["Commit 2 (c3d4)"] --> C1["Commit 1 (a1b2)"]
     end
 
     Main["main pointer"] --> C3
