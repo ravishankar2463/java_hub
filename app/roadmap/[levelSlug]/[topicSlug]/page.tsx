@@ -196,7 +196,7 @@ export default async function TopicPage({
           </header>
 
           {/* Mobile Table of Contents (renders on screens < xl) */}
-          <TableOfContents headings={headings} />
+          <TableOfContents headings={headings} variant="mobile" />
 
           {/* Markdown Content */}
           <div className="prose prose-base sm:prose-lg dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 prose-headings:text-slate-900 dark:prose-headings:text-slate-100 prose-headings:font-bold prose-headings:tracking-tight prose-a:text-emerald-700 dark:prose-a:text-emerald-400 hover:prose-a:underline prose-pre:bg-transparent prose-pre:p-0 prose-headings:scroll-mt-24">
@@ -294,9 +294,7 @@ export default async function TopicPage({
         </article>
 
         {/* Desktop Sticky Table of Contents (renders on screens >= xl) */}
-        <div className="hidden xl:block">
-          <TableOfContents headings={headings} />
-        </div>
+        <TableOfContents headings={headings} variant="desktop" />
       </div>
     </div>
   );

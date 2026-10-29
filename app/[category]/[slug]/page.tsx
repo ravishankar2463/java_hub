@@ -165,7 +165,8 @@ export default async function ArticlePage({
             )}
           </header>
 
-          <TableOfContents headings={headings} />
+          {/* Mobile Table of Contents (renders on screens < xl) */}
+          <TableOfContents headings={headings} variant="mobile" />
 
           <div className="prose prose-base sm:prose-lg dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 prose-headings:text-slate-900 dark:prose-headings:text-slate-100 prose-headings:font-bold prose-headings:tracking-tight prose-a:text-emerald-700 dark:prose-a:text-emerald-400 hover:prose-a:underline prose-pre:bg-transparent prose-pre:p-0 prose-headings:scroll-mt-24">
             <ReactMarkdown
@@ -194,9 +195,8 @@ export default async function ArticlePage({
           </footer>
         </article>
 
-        <div className="hidden xl:block">
-          <TableOfContents headings={headings} />
-        </div>
+        {/* Desktop Sticky Table of Contents (renders on screens >= xl) */}
+        <TableOfContents headings={headings} variant="desktop" />
       </div>
     </div>
   );
