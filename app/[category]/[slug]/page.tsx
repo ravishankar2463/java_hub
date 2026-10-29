@@ -1,5 +1,5 @@
 import { getArticles } from "@/lib/markdown";
-import { ArrowLeft, ChevronRight, Clock, Calendar, Bookmark } from "lucide-react";
+import { ArrowLeft, ChevronRight, Clock, Calendar } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CodeBlock } from "@/components/CodeBlock";

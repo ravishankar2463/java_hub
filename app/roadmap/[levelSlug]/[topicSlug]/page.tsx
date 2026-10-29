@@ -3,7 +3,7 @@ import { slugify } from "@/utils/slugify";
 import { existsSync } from "node:fs";
 import path from "path";
 import { parseMarkdownFile } from "@/lib/markdown";
-import { ArrowLeft, ArrowRight, ChevronRight, Clock, BookOpen, Layers, Share2, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronRight, Clock, BookOpen, Layers } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CodeBlock } from "@/components/CodeBlock";

@@ -5,17 +5,14 @@ import mermaid from 'mermaid';
 import { Maximize2, X, ZoomIn, ZoomOut, RotateCcw, Move } from 'lucide-react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { createPortal } from 'react-dom';
+import { useMounted } from '@/lib/useMounted';
 
 export function MermaidDiagram({ chart }: { chart: string }) {
   const [svg, setSvg] = useState('');
-  const [mounted, setMounted] = useState(false);
+  const mounted = useMounted();
   const id = `mermaid-${useId().replace(/:/g, '')}`;
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Handle escape key to close modal
   useEffect(() => {

@@ -1,7 +1,6 @@
 import { roadmapData } from "@/data/roadmap";
 import { RoadmapLevelCard } from "@/components/RoadmapLevelCard";
-import { Map, Layers, CheckCircle, Sparkles } from "lucide-react";
-import Link from "next/link";
+import { Layers, CheckCircle, Sparkles } from "lucide-react";
 
 export const metadata = {
   title: "Java Mastery Roadmap | JavaHub",

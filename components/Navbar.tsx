@@ -33,10 +33,12 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
 
-  // Close mobile menu whenever pathname changes
-  useEffect(() => {
+  // Reset mobile menu whenever pathname changes without triggering cascading renders in effect
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname);
     setMobileMenuOpen(false);
-  }, [pathname]);
+  }
 
   // Lock body scroll when mobile menu is active
   useEffect(() => {

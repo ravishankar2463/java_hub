@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { RoadmapLevel } from "@/data/roadmap";
-import { CheckCircle2, ArrowRight, BookOpen, Layers } from "lucide-react";
+import { CheckCircle2, ArrowRight, BookOpen } from "lucide-react";
 import Link from "next/link";
 import { slugify } from "@/utils/slugify";
 
