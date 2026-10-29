@@ -79,12 +79,12 @@ Apply this exact standard of deep-dive rigorousness and Mermaid SVG architectura
 - [x] Garbage Collection Basics (Human voice, Weak Generational Hypothesis, GC Root tracing, Mark-Copy vs Mark-Compact, G1 vs ZGC sub-millisecond, death of finalize)
 - [x] Reflection API & Custom Annotations (Human voice, Class metadata mirror, getDeclared vs get, custom DI container, inflation threshold, MethodHandles)
 
-**Level 4 Status:**
-- [x] Lambdas and Functional Interfaces
-- [x] The Streams API
-- [x] Advanced Streams & Collectors
-- [x] Optional API
-- [x] Reactive Programming Basics
+**Level 4 Status (Complete Human Voice Overhaul Done):**
+- [x] Lambdas and Functional Interfaces (Human voice, invokedynamic bytecode, LambdaMetafactory, effectively final variable capture, higher-order functions)
+- [x] The Streams API (Human voice, lazy loop fusion, Spliterators, stateless vs stateful barriers, ForkJoinPool common pool trap)
+- [x] Advanced Streams & Collectors (Human voice, reduce vs collect, 4-function Collector contract, downstream grouping, Java 12 teeing, custom batch collector)
+- [x] Optional API (Human voice, return contract philosophy, eager orElse vs lazy orElseGet, 4 cardinal sins, monadic flatMap)
+- [x] Reactive Programming Basics (Human voice, Reactive Streams Flow specification, backpressure dynamic demand, Project Reactor Mono/Flux, Schedulers vs Loom)
 
 **Level 5 Status:**
 - [x] The Java Memory Model (JMM)
