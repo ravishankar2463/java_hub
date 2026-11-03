@@ -213,7 +213,12 @@
 - **1-to-1 Curriculum Branching**:
   - Contains **116 dedicated topic branches** matching the curriculum slugging scheme: `topic/level-<N>/<topic-slug>` (e.g. `topic/level-8/spring-core-internals`).
   - Master `README.md` on `main` provides an interactive 116-topic navigation matrix linking each lesson on JavaHub to its companion Git branch and checkout command.
-  - Each branch contains runnable Java 21 code, verified JUnit 5 + AssertJ test suites, and a dedicated README with direct links back to the live JavaHub lesson.
+  - **Full Production-Grade Application Setups Across All 116 Topics**:
+    - **Levels 7–11 & 14 (Enterprise Spring Boot 3 Microservices — 50 Topics)**: Full multi-file Spring Boot 3 (`3.3.4`) services complete with `pom.xml`, `application.yml`, entity/domain models, DTOs, `@RestController`s, service layer, `@SpringBootTest` + `MockMvc` test suites, and rich `README.md` guides with runnable cURL commands.
+    - **Level 12 (DevOps, Containers & K8s — 6 Topics)**: Production-grade Spring Boot 3 apps packaged with multi-stage `Dockerfile`s, Google Jib daemonless plugins, complete Kubernetes manifests (`deployment.yaml`, `service.yaml`, `hpa.yaml`), full Helm charts (`Chart.yaml`, `values.yaml`, `templates/`), CRaC serverless checkpoint handlers, and GitHub Actions CI/CD + Terraform IaC pipelines.
+    - **Level 13 (High-Scale Observability & SRE — 6 Topics)**: Full Spring Boot 3 apps with consistent hashing ring routers, custom Java Flight Recorder (JFR) `@Event` triggers, Generational ZGC & G1GC memory diagnostics, OpenTelemetry distributed tracing filters with W3C TraceContext propagation, Micrometer Prometheus metrics, and canary traffic routers.
+    - **Level 15 (Ultra-Low Latency & Mechanical Sympathy — 5 Topics)**: Java 21 high-performance projects featuring 64-byte L1 cache line padding, branch predictor benchmarks, Project Panama off-heap `Arena` memory segments, LMAX Disruptor lock-free ring buffers with bitwise sequence masking, zero-allocation flyweights, and memory-mapped IPC queues.
+    - **Levels 0–6 (Foundations, OOP, Core Java, JVM & Concurrency — 49 Topics)**: Multi-class Java 21 domain architectures configured with `exec-maven-plugin` (`mvn compile exec:java`) providing interactive CLI demonstrations, detailed diagnostic reports, and comprehensive JUnit 5 + AssertJ test suites.
   - Includes CLI switcher utilities: `./switch-topic.sh <level> <slug>` and `.\switch-topic.ps1 <level> <slug>`.
 - **Deep-Linking Integration Across JavaHub**:
   - **Global Navbar**: `Code Labs` link to the companion repository in desktop and mobile views.

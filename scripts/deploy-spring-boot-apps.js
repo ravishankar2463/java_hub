@@ -10,14 +10,26 @@ if (!fs.existsSync(resourcesDir)) {
   process.exit(1);
 }
 
+const level7Apps = require('./apps/level7-apps.js');
 const level8Apps = require('./apps/level8-apps.js');
 const level9Apps = require('./apps/level9-apps.js');
 const level10Apps = require('./apps/level10-apps.js');
+const level11Apps = require('./apps/level11-apps.js');
+const level12Apps = require('./apps/level12-apps.js');
+const level13Apps = require('./apps/level13-apps.js');
+const level14Apps = require('./apps/level14-apps.js');
+const level15Apps = require('./apps/level15-apps.js');
 
 const allApps = [
+  ...Object.values(level7Apps),
   ...Object.values(level8Apps),
   ...Object.values(level9Apps),
-  ...Object.values(level10Apps)
+  ...Object.values(level10Apps),
+  ...Object.values(level11Apps),
+  ...Object.values(level12Apps),
+  ...Object.values(level13Apps),
+  ...Object.values(level14Apps),
+  ...Object.values(level15Apps)
 ];
 
 console.log(`Starting deployment of ${allApps.length} full Spring Boot applications to java_hub_resources...`);
