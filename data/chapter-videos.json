@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T22:37:31.510Z",
-  "totalVideos": 99,
+  "updatedAt": "2026-11-24T22:49:36.715Z",
+  "totalVideos": 103,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -1783,6 +1783,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/architectural-patterns",
       "branchName": "topic/level-6/architectural-patterns",
       "renderedAt": "2026-11-24T22:37:31.508Z"
+    },
+    {
+      "chapterId": "level-6/creational-patterns",
+      "level": "level-6",
+      "slug": "creational-patterns",
+      "chapterTitle": "Creational Patterns",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-singleton-and-di",
+      "partTitle": "Singleton: DI vs. Manual",
+      "format": "shorts",
+      "durationSec": 49,
+      "file": "level-6/creational-patterns/part-1-singleton-and-di.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__creational-patterns__part-1-singleton-and-di.mp4",
+      "releaseTag": "videos-level-6",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/creational-patterns",
+      "branchName": "topic/level-6/creational-patterns",
+      "renderedAt": "2026-11-24T22:45:49.991Z"
+    },
+    {
+      "chapterId": "level-6/creational-patterns",
+      "level": "level-6",
+      "slug": "creational-patterns",
+      "chapterTitle": "Creational Patterns",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-factories",
+      "partTitle": "Factory Patterns Decoupled",
+      "format": "shorts",
+      "durationSec": 48.5,
+      "file": "level-6/creational-patterns/part-2-factories.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__creational-patterns__part-2-factories.mp4",
+      "releaseTag": "videos-level-6",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/creational-patterns",
+      "branchName": "topic/level-6/creational-patterns",
+      "renderedAt": "2026-11-24T22:47:08.282Z"
+    },
+    {
+      "chapterId": "level-6/creational-patterns",
+      "level": "level-6",
+      "slug": "creational-patterns",
+      "chapterTitle": "Creational Patterns",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-builders",
+      "partTitle": "Builders vs. Records",
+      "format": "shorts",
+      "durationSec": 45.1,
+      "file": "level-6/creational-patterns/part-3-builders.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__creational-patterns__part-3-builders.mp4",
+      "releaseTag": "videos-level-6",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/creational-patterns",
+      "branchName": "topic/level-6/creational-patterns",
+      "renderedAt": "2026-11-24T22:48:22.330Z"
+    },
+    {
+      "chapterId": "level-6/creational-patterns",
+      "level": "level-6",
+      "slug": "creational-patterns",
+      "chapterTitle": "Creational Patterns",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-prototype-summary",
+      "partTitle": "Prototype & Final Recap",
+      "format": "shorts",
+      "durationSec": 44.2,
+      "file": "level-6/creational-patterns/part-4-prototype-summary.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__creational-patterns__part-4-prototype-summary.mp4",
+      "releaseTag": "videos-level-6",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/creational-patterns",
+      "branchName": "topic/level-6/creational-patterns",
+      "renderedAt": "2026-11-24T22:49:36.714Z"
     }
   ]
 }
