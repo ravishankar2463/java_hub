@@ -10,6 +10,7 @@ import { slugify } from "@/utils/slugify";
 import Link from "next/link";
 import { Compass } from "lucide-react";
 import { getStaticBasePath } from "@/lib/site-paths.mjs";
+import { SITE_URL } from "@/lib/seo.mjs";
 
 const basePath = getStaticBasePath();
 
@@ -24,8 +25,29 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "JavaHub | Modern Java Developer Platform",
-  description: "The complete senior engineering curriculum: 16 levels, 116 deep-dive topics, JVM internals, Project Loom, Spring Boot 3, Distributed Systems, AI Orchestration, and Ultra-Low Latency Java.",
+  metadataBase: new URL(`${SITE_URL}/`),
+  title: {
+    default: "Java Developer Roadmap",
+    template: "%s | JavaHub",
+  },
+  description:
+    "Follow a practical Java developer roadmap from Core Java and JVM fundamentals to Spring Boot, security, microservices, and production systems. Explore 16 levels, 116 topics, and hands-on labs.",
+  applicationName: "JavaHub",
+  openGraph: {
+    type: "website",
+    siteName: "JavaHub",
+    title: "Java Developer Roadmap: Java, Spring Boot & Backend Engineering | JavaHub",
+    description:
+      "A practical Java learning path covering Core Java, JVM internals, Spring Boot, security, microservices, and production systems across 16 levels and 116 topics.",
+    url: `${SITE_URL}/`,
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary",
+    title: "Java Developer Roadmap: Java, Spring Boot & Backend Engineering | JavaHub",
+    description:
+      "A practical Java learning path covering Core Java, JVM internals, Spring Boot, security, microservices, and production systems.",
+  },
   icons: {
     icon: `${basePath}/icons/icon-192.png`,
     apple: `${basePath}/icons/apple-touch-icon.png`,
@@ -83,11 +105,24 @@ export default function RootLayout({
             </main>
             <footer className="w-full border-t border-[var(--color-border)] py-8 px-4 sm:px-6 lg:px-8 mt-auto bg-[var(--color-card)]">
               <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-                <div className="flex items-center gap-2">
-                  <Compass className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">JavaHub</span>
-                  <span>&bull;</span>
-                  <span>16 Levels &bull; 116 Roadmap Topics</span>
+                <div className="flex flex-col items-center gap-2 sm:flex-row sm:gap-4">
+                  <div className="flex items-center gap-2">
+                    <Compass className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="font-semibold text-slate-900 dark:text-slate-100">JavaHub</span>
+                    <span>&bull;</span>
+                    <span>16 Levels &bull; 116 Roadmap Topics</span>
+                  </div>
+                  <span>
+                    Made by{" "}
+                    <a
+                      href="https://github.com/ravishankar2463/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-slate-700 transition-colors hover:text-emerald-700 hover:underline dark:text-slate-300 dark:hover:text-emerald-400"
+                    >
+                      Ravi Shankar
+                    </a>
+                  </span>
                 </div>
                 <div className="flex items-center gap-6">
                   <Link href="/" className="hover:text-foreground transition-colors">

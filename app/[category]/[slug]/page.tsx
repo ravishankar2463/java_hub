@@ -12,6 +12,7 @@ import rehypeSlug from "rehype-slug";
 import GithubSlugger from "github-slugger";
 import type { Components } from "react-markdown";
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/seo.mjs";
 
 export async function generateStaticParams() {
   const articles = getArticles();
@@ -38,9 +39,29 @@ export async function generateMetadata({
     };
   }
 
+  const title = article.frontmatter.title;
+  const description =
+    article.frontmatter.description || "In-depth Java article and guide.";
+  const canonical = getSiteUrl(`/${category}/${slug}`);
+
   return {
-    title: `${article.frontmatter.title} | JavaHub Articles`,
-    description: article.frontmatter.description || "In-depth Java article and guide.",
+    title,
+    description,
+    alternates: {
+      canonical,
+    },
+    openGraph: {
+      type: "article",
+      siteName: "JavaHub",
+      title,
+      description,
+      url: canonical,
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+    },
   };
 }
 

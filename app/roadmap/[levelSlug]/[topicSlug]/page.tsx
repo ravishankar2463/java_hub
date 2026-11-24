@@ -17,6 +17,7 @@ import rehypeSlug from "rehype-slug";
 import GithubSlugger from "github-slugger";
 import type { Components } from "react-markdown";
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/seo.mjs";
 
 export const dynamicParams = false;
 
@@ -55,9 +56,40 @@ export async function generateMetadata({
     };
   }
 
+  const filePath = path.join(
+    process.cwd(),
+    "content",
+    "roadmap",
+    levelSlug,
+    `${topicSlug}.md`
+  );
+  const topicDocument = existsSync(filePath) ? parseMarkdownFile(filePath) : null;
+  const title = `${topic.topicTitle} | Java Roadmap`;
+  const description =
+    topicDocument?.frontmatter.description ||
+    `Learn ${topic.topicTitle} in Java as part of the ${topic.levelTitle} developer roadmap.`;
+  const canonical = getSiteUrl(
+    `/roadmap/${topic.levelSlug}/${topic.topicSlug}`
+  );
+
   return {
-    title: `${topic.topicTitle} - ${topic.levelTitle} | JavaHub`,
-    description: `Deep-dive guide and architectural patterns for ${topic.topicTitle} in Java. Part of the Java Mastery Roadmap.`,
+    title,
+    description,
+    alternates: {
+      canonical,
+    },
+    openGraph: {
+      type: "article",
+      siteName: "JavaHub",
+      title,
+      description,
+      url: canonical,
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description,
+    },
   };
 }
 
