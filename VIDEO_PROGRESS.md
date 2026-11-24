@@ -6,13 +6,13 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 5 / 116 (4.3%)
-- **Total Shorts Rendered:** 18
+- **Chapters Completed:** 6 / 116 (5.2%)
+- **Total Shorts Rendered:** 22
 - **Last Updated:** 2026-11-24
 
 ---
 
-## Level 0: The Absolute Beginner (5/7)
+## Level 0: The Absolute Beginner (6/7)
 
 - [x] **Environment Setup** (level-0/environment-setup) — 3 Shorts: [Part 1 (66s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__environment-setup__part-1-jdk-jre-jvm-bytecode.mp4) · [Part 2 (71s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__environment-setup__part-2-install-lts-path-java-home.mp4) · [Part 3 (67s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__environment-setup__part-3-cli-workflow-and-ide-setup.mp4)
 - [x] **Git & Version Control** (level-0/git-version-control) — 3 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__git-version-control__part-1-snapshots-and-four-areas.mp4) · [Part 2 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__git-version-control__part-2-daily-workflow-and-habits.mp4) · [Part 3 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__git-version-control__part-3-branching-conflicts-and-reflog.mp4)
@@ -20,7 +20,7 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **Variables and Data Types** (level-0/variables-and-data-types)
 - [x] **Control Flow** (level-0/control-flow) — 5 Shorts: [Part 1 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__control-flow__part-1-boolean-strictness-and-short-circuiting.mp4) · [Part 2 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__control-flow__part-2-modern-switch-expressions-and-patterns.mp4) · [Part 3 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__control-flow__part-3-loops-and-collection-mutation.mp4) · [Part 4 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__control-flow__part-4-flow-disruption-and-labeled-jumps.mp4) · [Part 5 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__control-flow__part-5-hardware-branch-prediction-and-summary.mp4)
 - [x] **Arrays & 2D Matrices** (level-0/arrays-2d-matrices) — 4 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-1-heap-memory-and-indexing.mp4) · [Part 2 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-2-copying-and-bounds-pitfalls.mp4) · [Part 3 (60s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-3-2d-matrices-and-cpu-cache.mp4) · [Part 4 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-4-javautil-arrays-and-sorting.mp4)
-- [ ] **Intro to OOPS** (level-0/intro-to-oops)
+- [x] **Intro to OOPS** (level-0/intro-to-oops) — 4 Shorts: [Part 1 (55s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-1-class-vs-object.mp4) · [Part 2 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-2-constructors-and-new-keyword.mp4) · [Part 3 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-3-this-keyword-and-static-methods.mp4) · [Part 4 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-4-references-and-npe.mp4)
 
 ## Level 1: The Object-Oriented Thinker (0/10)
 

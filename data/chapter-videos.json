@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T19:29:12.398Z",
-  "totalVideos": 18,
+  "updatedAt": "2026-11-24T19:36:45.173Z",
+  "totalVideos": 22,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -325,6 +325,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/git-version-control",
       "branchName": "topic/level-0/git-version-control",
       "renderedAt": "2026-11-24T18:04:42.847Z"
+    },
+    {
+      "chapterId": "level-0/intro-to-oops",
+      "level": "level-0",
+      "slug": "intro-to-oops",
+      "chapterTitle": "Intro to OOPS",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-class-vs-object",
+      "partTitle": "Class Blueprints & Heap vs Metaspace Memory",
+      "format": "shorts",
+      "durationSec": 55.2,
+      "file": "level-0/intro-to-oops/part-1-class-vs-object.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-1-class-vs-object.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/intro-to-oops",
+      "branchName": "topic/level-0/intro-to-oops",
+      "renderedAt": "2026-11-24T19:32:26.754Z"
+    },
+    {
+      "chapterId": "level-0/intro-to-oops",
+      "level": "level-0",
+      "slug": "intro-to-oops",
+      "chapterTitle": "Intro to OOPS",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-constructors-and-new-keyword",
+      "partTitle": "Constructors & What Happens During new",
+      "format": "shorts",
+      "durationSec": 51.2,
+      "file": "level-0/intro-to-oops/part-2-constructors-and-new-keyword.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-2-constructors-and-new-keyword.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/intro-to-oops",
+      "branchName": "topic/level-0/intro-to-oops",
+      "renderedAt": "2026-11-24T19:33:51.590Z"
+    },
+    {
+      "chapterId": "level-0/intro-to-oops",
+      "level": "level-0",
+      "slug": "intro-to-oops",
+      "chapterTitle": "Intro to OOPS",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-this-keyword-and-static-methods",
+      "partTitle": "The this Keyword Bytecode & Static vs Instance Methods",
+      "format": "shorts",
+      "durationSec": 51.1,
+      "file": "level-0/intro-to-oops/part-3-this-keyword-and-static-methods.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-3-this-keyword-and-static-methods.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/intro-to-oops",
+      "branchName": "topic/level-0/intro-to-oops",
+      "renderedAt": "2026-11-24T19:35:17.156Z"
+    },
+    {
+      "chapterId": "level-0/intro-to-oops",
+      "level": "level-0",
+      "slug": "intro-to-oops",
+      "chapterTitle": "Intro to OOPS",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-references-and-npe",
+      "partTitle": "Object References, Memory Aliasing & NPE Diagnostics",
+      "format": "shorts",
+      "durationSec": 54.2,
+      "file": "level-0/intro-to-oops/part-4-references-and-npe.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-4-references-and-npe.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/intro-to-oops",
+      "branchName": "topic/level-0/intro-to-oops",
+      "renderedAt": "2026-11-24T19:36:45.172Z"
     }
   ]
 }
