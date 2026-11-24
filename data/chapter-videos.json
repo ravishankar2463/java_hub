@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T17:57:17.551Z",
-  "totalVideos": 6,
+  "updatedAt": "2026-11-24T18:04:42.848Z",
+  "totalVideos": 9,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -109,6 +109,60 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/environment-setup",
       "branchName": "topic/level-0/environment-setup",
       "renderedAt": "2026-11-24T17:57:17.551Z"
+    },
+    {
+      "chapterId": "level-0/git-version-control",
+      "level": "level-0",
+      "slug": "git-version-control",
+      "chapterTitle": "Git & Version Control",
+      "partNumber": 1,
+      "totalParts": 3,
+      "partSlug": "part-1-snapshots-and-four-areas",
+      "partTitle": "Why Git Uses Snapshots & 4 Areas (Not Deltas)",
+      "format": "shorts",
+      "durationSec": 58.1,
+      "file": "level-0/git-version-control/part-1-snapshots-and-four-areas.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__git-version-control__part-1-snapshots-and-four-areas.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/git-version-control",
+      "branchName": "topic/level-0/git-version-control",
+      "renderedAt": "2026-11-24T18:01:06.734Z"
+    },
+    {
+      "chapterId": "level-0/git-version-control",
+      "level": "level-0",
+      "slug": "git-version-control",
+      "chapterTitle": "Git & Version Control",
+      "partNumber": 2,
+      "totalParts": 3,
+      "partSlug": "part-2-daily-workflow-and-habits",
+      "partTitle": "Daily Git Workflow, fetch vs. pull & Java Habits",
+      "format": "shorts",
+      "durationSec": 57.6,
+      "file": "level-0/git-version-control/part-2-daily-workflow-and-habits.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__git-version-control__part-2-daily-workflow-and-habits.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/git-version-control",
+      "branchName": "topic/level-0/git-version-control",
+      "renderedAt": "2026-11-24T18:02:51.896Z"
+    },
+    {
+      "chapterId": "level-0/git-version-control",
+      "level": "level-0",
+      "slug": "git-version-control",
+      "chapterTitle": "Git & Version Control",
+      "partNumber": 3,
+      "totalParts": 3,
+      "partSlug": "part-3-branching-conflicts-and-reflog",
+      "partTitle": "Branching, Merge vs. Rebase, Conflicts & git reflog",
+      "format": "shorts",
+      "durationSec": 60.5,
+      "file": "level-0/git-version-control/part-3-branching-conflicts-and-reflog.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__git-version-control__part-3-branching-conflicts-and-reflog.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/git-version-control",
+      "branchName": "topic/level-0/git-version-control",
+      "renderedAt": "2026-11-24T18:04:42.847Z"
     }
   ]
 }
