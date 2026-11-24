@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 19 / 116 (16.4%)
-- **Total Shorts Rendered:** 76
+- **Chapters Completed:** 20 / 116 (17.2%)
+- **Total Shorts Rendered:** 80
 - **Last Updated:** 2026-11-24
 
 ---
@@ -63,12 +63,12 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Optional API** (level-4/optional-api) — 4 Shorts: [Part 1 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-1-optional-basics.mp4) · [Part 2 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-2-performance-traps.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-3-monadic-chaining.mp4) · [Part 4 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-4-anti-patterns.mp4)
 - [x] **Reactive Programming Basics** (level-4/reactive-programming-basics) — 4 Shorts: [Part 1 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__reactive-programming-basics__part-1-observer-to-reactive.mp4) · [Part 2 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__reactive-programming-basics__part-2-mono-flux-assembly.mp4) · [Part 3 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__reactive-programming-basics__part-3-schedulers-threading.mp4) · [Part 4 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__reactive-programming-basics__part-4-reactive-vs-virtual-threads.mp4)
 
-## Level 5: The Concurrency Expert (0/7)
+## Level 5: The Concurrency Expert (1/7)
 
 - [ ] **The Java Memory Model (JMM)** (level-5/the-java-memory-model-jmm)
 - [ ] **Thread Safety and Synchronization** (level-5/thread-safety-and-synchronization)
 - [ ] **The java.util.concurrent Package** (level-5/the-javautilconcurrent-package)
-- [ ] **Executors and Thread Pools** (level-5/executors-and-thread-pools)
+- [x] **Executors and Thread Pools** (level-5/executors-and-thread-pools) — 4 Shorts: [Part 1 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__executors-and-thread-pools__part-1-the-executor-hierarchy.mp4) · [Part 2 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__executors-and-thread-pools__part-2-threadpoolexecutor-internals.mp4) · [Part 3 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__executors-and-thread-pools__part-3-callable-future-pitfalls.mp4) · [Part 4 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__executors-and-thread-pools__part-4-sizing-and-virtual-threads.mp4)
 - [ ] **Asynchronous Programming** (level-5/asynchronous-programming)
 - [ ] **Project Loom (Virtual Threads)** (level-5/project-loom-virtual-threads)
 - [ ] **Structured Concurrency and Scoped Values** (level-5/structured-concurrency-and-scoped-values)
