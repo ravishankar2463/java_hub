@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T22:49:36.715Z",
-  "totalVideos": 103,
+  "updatedAt": "2026-11-24T22:55:52.686Z",
+  "totalVideos": 107,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -1855,6 +1855,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/creational-patterns",
       "branchName": "topic/level-6/creational-patterns",
       "renderedAt": "2026-11-24T22:49:36.714Z"
+    },
+    {
+      "chapterId": "level-6/domain-driven-design-tactical-patterns",
+      "level": "level-6",
+      "slug": "domain-driven-design-tactical-patterns",
+      "chapterTitle": "Domain-Driven Design Tactical Patterns",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-anemic-vs-rich-models",
+      "partTitle": "Stop Writing Anemic Domain Models",
+      "format": "shorts",
+      "durationSec": 44.6,
+      "file": "level-6/domain-driven-design-tactical-patterns/part-1-anemic-vs-rich-models.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-1-anemic-vs-rich-models.mp4",
+      "releaseTag": "videos-level-6",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/domain-driven-design-tactical-patterns",
+      "branchName": "topic/level-6/domain-driven-design-tactical-patterns",
+      "renderedAt": "2026-11-24T22:52:12.873Z"
+    },
+    {
+      "chapterId": "level-6/domain-driven-design-tactical-patterns",
+      "level": "level-6",
+      "slug": "domain-driven-design-tactical-patterns",
+      "chapterTitle": "Domain-Driven Design Tactical Patterns",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-aggregate-roots",
+      "partTitle": "Aggregate Roots & Invariants",
+      "format": "shorts",
+      "durationSec": 46.6,
+      "file": "level-6/domain-driven-design-tactical-patterns/part-2-aggregate-roots.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-2-aggregate-roots.mp4",
+      "releaseTag": "videos-level-6",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/domain-driven-design-tactical-patterns",
+      "branchName": "topic/level-6/domain-driven-design-tactical-patterns",
+      "renderedAt": "2026-11-24T22:53:29.168Z"
+    },
+    {
+      "chapterId": "level-6/domain-driven-design-tactical-patterns",
+      "level": "level-6",
+      "slug": "domain-driven-design-tactical-patterns",
+      "chapterTitle": "Domain-Driven Design Tactical Patterns",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-domain-events",
+      "partTitle": "Decoupling with Domain Events",
+      "format": "shorts",
+      "durationSec": 43.2,
+      "file": "level-6/domain-driven-design-tactical-patterns/part-3-domain-events.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-3-domain-events.mp4",
+      "releaseTag": "videos-level-6",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/domain-driven-design-tactical-patterns",
+      "branchName": "topic/level-6/domain-driven-design-tactical-patterns",
+      "renderedAt": "2026-11-24T22:54:42.188Z"
+    },
+    {
+      "chapterId": "level-6/domain-driven-design-tactical-patterns",
+      "level": "level-6",
+      "slug": "domain-driven-design-tactical-patterns",
+      "chapterTitle": "Domain-Driven Design Tactical Patterns",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-anti-corruption-layer",
+      "partTitle": "Anti-Corruption Layers",
+      "format": "shorts",
+      "durationSec": 43.1,
+      "file": "level-6/domain-driven-design-tactical-patterns/part-4-anti-corruption-layer.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-4-anti-corruption-layer.mp4",
+      "releaseTag": "videos-level-6",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/domain-driven-design-tactical-patterns",
+      "branchName": "topic/level-6/domain-driven-design-tactical-patterns",
+      "renderedAt": "2026-11-24T22:55:52.685Z"
     }
   ]
 }
