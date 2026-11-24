@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T23:12:46.237Z",
-  "totalVideos": 116,
+  "updatedAt": "2026-11-24T23:20:15.193Z",
+  "totalVideos": 120,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -2089,6 +2089,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-7/database-engine-internals-b-trees-and-mvcc",
       "branchName": "topic/level-7/database-engine-internals-b-trees-and-mvcc",
       "renderedAt": "2026-11-24T23:12:46.236Z"
+    },
+    {
+      "chapterId": "level-7/database-migrations",
+      "level": "level-7",
+      "slug": "database-migrations",
+      "chapterTitle": "Database Migrations",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-why-migrations",
+      "partTitle": "Stop Using ddl-auto=update",
+      "format": "shorts",
+      "durationSec": 59,
+      "file": "level-7/database-migrations/part-1-why-migrations.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-migrations__part-1-why-migrations.mp4",
+      "releaseTag": "videos-level-7",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-7/database-migrations",
+      "branchName": "topic/level-7/database-migrations",
+      "renderedAt": "2026-11-24T23:15:58.313Z"
+    },
+    {
+      "chapterId": "level-7/database-migrations",
+      "level": "level-7",
+      "slug": "database-migrations",
+      "chapterTitle": "Database Migrations",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-locking-and-performance",
+      "partTitle": "Avoid Production Table Locks",
+      "format": "shorts",
+      "durationSec": 57.5,
+      "file": "level-7/database-migrations/part-2-locking-and-performance.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-migrations__part-2-locking-and-performance.mp4",
+      "releaseTag": "videos-level-7",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-7/database-migrations",
+      "branchName": "topic/level-7/database-migrations",
+      "renderedAt": "2026-11-24T23:17:30.450Z"
+    },
+    {
+      "chapterId": "level-7/database-migrations",
+      "level": "level-7",
+      "slug": "database-migrations",
+      "chapterTitle": "Database Migrations",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-expand-contract",
+      "partTitle": "Zero-Downtime Schema Evolution",
+      "format": "shorts",
+      "durationSec": 50,
+      "file": "level-7/database-migrations/part-3-expand-contract.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-migrations__part-3-expand-contract.mp4",
+      "releaseTag": "videos-level-7",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-7/database-migrations",
+      "branchName": "topic/level-7/database-migrations",
+      "renderedAt": "2026-11-24T23:18:52.427Z"
+    },
+    {
+      "chapterId": "level-7/database-migrations",
+      "level": "level-7",
+      "slug": "database-migrations",
+      "chapterTitle": "Database Migrations",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-summary",
+      "partTitle": "Final Checklist & Lab",
+      "format": "shorts",
+      "durationSec": 51.6,
+      "file": "level-7/database-migrations/part-4-summary.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-migrations__part-4-summary.mp4",
+      "releaseTag": "videos-level-7",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-7/database-migrations",
+      "branchName": "topic/level-7/database-migrations",
+      "renderedAt": "2026-11-24T23:20:15.192Z"
     }
   ]
 }
