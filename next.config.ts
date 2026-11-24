@@ -35,6 +35,9 @@ if (process.env.NODE_ENV !== 'production') {
 
 
 const nextConfig: NextConfig = {
+  experimental: {
+    agentUpgrade: 'security',
+  },
   output: 'export',
   images: {
     unoptimized: true,
