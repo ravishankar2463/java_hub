@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T19:45:01.893Z",
-  "totalVideos": 26,
+  "updatedAt": "2026-11-24T20:02:21.699Z",
+  "totalVideos": 30,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -469,6 +469,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/variables-and-data-types",
       "branchName": "topic/level-0/variables-and-data-types",
       "renderedAt": "2026-11-24T19:45:01.892Z"
+    },
+    {
+      "chapterId": "level-1/advanced-class-design",
+      "level": "level-1",
+      "slug": "advanced-class-design",
+      "chapterTitle": "Advanced Class Design",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-static-vs-inner-classes",
+      "partTitle": "Static Nested Classes vs. Memory-Leaking Inner Classes",
+      "format": "shorts",
+      "durationSec": 57.2,
+      "file": "level-1/advanced-class-design/part-1-static-vs-inner-classes.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__advanced-class-design__part-1-static-vs-inner-classes.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/advanced-class-design",
+      "branchName": "topic/level-1/advanced-class-design",
+      "renderedAt": "2026-11-24T19:57:21.885Z"
+    },
+    {
+      "chapterId": "level-1/advanced-class-design",
+      "level": "level-1",
+      "slug": "advanced-class-design",
+      "chapterTitle": "Advanced Class Design",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-local-and-anonymous-classes",
+      "partTitle": "Local Classes, Anonymous Types & Stack Captures",
+      "format": "shorts",
+      "durationSec": 58,
+      "file": "level-1/advanced-class-design/part-2-local-and-anonymous-classes.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__advanced-class-design__part-2-local-and-anonymous-classes.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/advanced-class-design",
+      "branchName": "topic/level-1/advanced-class-design",
+      "renderedAt": "2026-11-24T19:58:57.701Z"
+    },
+    {
+      "chapterId": "level-1/advanced-class-design",
+      "level": "level-1",
+      "slug": "advanced-class-design",
+      "chapterTitle": "Advanced Class Design",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-java-16-records-and-defensive-copying",
+      "partTitle": "Java 16 Records & The Shallow Immutability Trap",
+      "format": "shorts",
+      "durationSec": 58.1,
+      "file": "level-1/advanced-class-design/part-3-java-16-records-and-defensive-copying.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__advanced-class-design__part-3-java-16-records-and-defensive-copying.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/advanced-class-design",
+      "branchName": "topic/level-1/advanced-class-design",
+      "renderedAt": "2026-11-24T20:00:33.477Z"
+    },
+    {
+      "chapterId": "level-1/advanced-class-design",
+      "level": "level-1",
+      "slug": "advanced-class-design",
+      "chapterTitle": "Advanced Class Design",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-serialization-and-record-patterns",
+      "partTitle": "Record Serialization & Java 21 Record Patterns",
+      "format": "shorts",
+      "durationSec": 65.3,
+      "file": "level-1/advanced-class-design/part-4-serialization-and-record-patterns.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__advanced-class-design__part-4-serialization-and-record-patterns.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/advanced-class-design",
+      "branchName": "topic/level-1/advanced-class-design",
+      "renderedAt": "2026-11-24T20:02:21.698Z"
     }
   ]
 }
