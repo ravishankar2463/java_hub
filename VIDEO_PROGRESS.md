@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 26 / 116 (22.4%)
-- **Total Shorts Rendered:** 107
+- **Chapters Completed:** 27 / 116 (23.3%)
+- **Total Shorts Rendered:** 111
 - **Last Updated:** 2026-11-24
 
 ---
@@ -73,11 +73,11 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Project Loom (Virtual Threads)** (level-5/project-loom-virtual-threads) — 4 Shorts: [Part 1 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__project-loom-virtual-threads__part-1-virtual-threads-architecture.mp4) · [Part 2 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__project-loom-virtual-threads__part-2-thread-pinning.mp4) · [Part 3 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__project-loom-virtual-threads__part-3-structured-concurrency.mp4) · [Part 4 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__project-loom-virtual-threads__part-4-scoped-values.mp4)
 - [ ] **Structured Concurrency and Scoped Values** (level-5/structured-concurrency-and-scoped-values)
 
-## Level 6: The Architect (3/6)
+## Level 6: The Architect (4/6)
 
 - [ ] **SOLID Principles Basics** (level-6/solid-principles-basics)
 - [x] **Creational Patterns** (level-6/creational-patterns) — 4 Shorts: [Part 1 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__creational-patterns__part-1-singleton-and-di.mp4) · [Part 2 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__creational-patterns__part-2-factories.mp4) · [Part 3 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__creational-patterns__part-3-builders.mp4) · [Part 4 (44s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__creational-patterns__part-4-prototype-summary.mp4)
-- [ ] **Structural Patterns** (level-6/structural-patterns)
+- [x] **Structural Patterns** (level-6/structural-patterns) — 4 Shorts: [Part 1 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__structural-patterns__part-1-adapter-vs-decorator.mp4) · [Part 2 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__structural-patterns__part-2-facade-pattern.mp4) · [Part 3 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__structural-patterns__part-3-proxy-pattern.mp4) · [Part 4 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__structural-patterns__part-4-composite-pattern.mp4)
 - [ ] **Behavioral Patterns** (level-6/behavioral-patterns)
 - [x] **Architectural Patterns** (level-6/architectural-patterns) — 5 Shorts: [Part 1 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-1-hexagonal-core.mp4) · [Part 2 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-2-archunit-enforcement.mp4) · [Part 3 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-3-cqrs-patterns.mp4) · [Part 4 (42s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-4-strangler-fig.mp4) · [Part 5 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-5-modular-monolith.mp4)
 - [x] **Domain-Driven Design Tactical Patterns** (level-6/domain-driven-design-tactical-patterns) — 4 Shorts: [Part 1 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-1-anemic-vs-rich-models.mp4) · [Part 2 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-2-aggregate-roots.mp4) · [Part 3 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-3-domain-events.mp4) · [Part 4 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-4-anti-corruption-layer.mp4)

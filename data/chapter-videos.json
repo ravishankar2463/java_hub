@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T22:55:52.686Z",
-  "totalVideos": 107,
+  "updatedAt": "2026-11-24T23:03:29.659Z",
+  "totalVideos": 111,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -1927,6 +1927,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/domain-driven-design-tactical-patterns",
       "branchName": "topic/level-6/domain-driven-design-tactical-patterns",
       "renderedAt": "2026-11-24T22:55:52.685Z"
+    },
+    {
+      "chapterId": "level-6/structural-patterns",
+      "level": "level-6",
+      "slug": "structural-patterns",
+      "chapterTitle": "Structural Patterns",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-adapter-vs-decorator",
+      "partTitle": "Adapter vs Decorator: The Wrapper War",
+      "format": "shorts",
+      "durationSec": 52.8,
+      "file": "level-6/structural-patterns/part-1-adapter-vs-decorator.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__structural-patterns__part-1-adapter-vs-decorator.mp4",
+      "releaseTag": "videos-level-6",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/structural-patterns",
+      "branchName": "topic/level-6/structural-patterns",
+      "renderedAt": "2026-11-24T22:59:16.415Z"
+    },
+    {
+      "chapterId": "level-6/structural-patterns",
+      "level": "level-6",
+      "slug": "structural-patterns",
+      "chapterTitle": "Structural Patterns",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-facade-pattern",
+      "partTitle": "Facade: Shielding Complexity",
+      "format": "shorts",
+      "durationSec": 51.1,
+      "file": "level-6/structural-patterns/part-2-facade-pattern.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__structural-patterns__part-2-facade-pattern.mp4",
+      "releaseTag": "videos-level-6",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/structural-patterns",
+      "branchName": "topic/level-6/structural-patterns",
+      "renderedAt": "2026-11-24T23:00:41.286Z"
+    },
+    {
+      "chapterId": "level-6/structural-patterns",
+      "level": "level-6",
+      "slug": "structural-patterns",
+      "chapterTitle": "Structural Patterns",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-proxy-pattern",
+      "partTitle": "Proxy: Access Control & Interception",
+      "format": "shorts",
+      "durationSec": 52.6,
+      "file": "level-6/structural-patterns/part-3-proxy-pattern.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__structural-patterns__part-3-proxy-pattern.mp4",
+      "releaseTag": "videos-level-6",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/structural-patterns",
+      "branchName": "topic/level-6/structural-patterns",
+      "renderedAt": "2026-11-24T23:02:07.003Z"
+    },
+    {
+      "chapterId": "level-6/structural-patterns",
+      "level": "level-6",
+      "slug": "structural-patterns",
+      "chapterTitle": "Structural Patterns",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-composite-pattern",
+      "partTitle": "Composite: Uniform Tree Traversal",
+      "format": "shorts",
+      "durationSec": 49.9,
+      "file": "level-6/structural-patterns/part-4-composite-pattern.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__structural-patterns__part-4-composite-pattern.mp4",
+      "releaseTag": "videos-level-6",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-6/structural-patterns",
+      "branchName": "topic/level-6/structural-patterns",
+      "renderedAt": "2026-11-24T23:03:29.659Z"
     }
   ]
 }
