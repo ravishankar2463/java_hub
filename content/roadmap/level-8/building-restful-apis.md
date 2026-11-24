@@ -1,64 +1,53 @@
 ---
 title: "Building RESTful APIs"
-description: "Master resource-oriented API design with Spring MVC: DispatcherServlet internals, Jackson DTO binding, Jakarta Validation, and RFC 9457 Problem Details."
+description: "How Spring Web MVC routes HTTP requests through DispatcherServlet, validates immutable record DTOs with Jakarta Validation, and formats errors with RFC 9457 ProblemDetail."
 category: "level-8"
 date: "2026-10-29T10:00:00Z"
 ---
 
-If you have ever had to integrate with an API that faithfully returned `HTTP 200 OK` with a response payload of `{"success": false, "error": "NullPointerException at line 348"}`, you already know the visceral frustration of poorly designed web services. 
+Anyone who has integrated with a service that returns `HTTP 200 OK` along with `{"success": false, "error": "NullPointerException at OrderService.java:142"}` has seen what happens when HTTP is treated as a dumb pipe for JSON. Monitoring dashboards stay green during outages, caches store error payloads as valid responses, and clients have to parse fragile ad-hoc strings just to figure out whether a call succeeded.
 
-REST (Representational State Transfer) is often misunderstood as merely "sending JSON over HTTP." In reality, REST is an architectural style designed by Roy Fielding to leverage the native strengths of the World Wide Web: uniform interfaces, stateless interactions, explicit caching, and standardized status codes.
-
-In this guide, we will step behind the scenes of Spring Web MVC. We will trace the lifecycle of a request through the `DispatcherServlet`, enforce rock-solid boundary security with Java 21 records and Jakarta Validation, implement RFC 9457 Problem Details, and expose the subtle bugs that separate amateur endpoints from battle-tested production APIs.
+REST (Representational State Transfer) uses the semantics HTTP already provides: resource URIs, standard methods, meaningful status codes, content negotiation, and structured error payloads. Understanding how Spring Web MVC maps incoming HTTP requests onto Java controller methods, and where validation, serialization, and exception handling plug into that pipeline, lets you build APIs that are predictable for both clients and operations teams.
 
 ---
 
 ## The Richardson Maturity Model
 
-In 2008, Leonard Richardson proposed a model to break down how closely a web service aligns with the architectural constraints of REST. Understanding this model prevents religious arguments about what is "truly RESTful" and helps engineering teams make pragmatic design choices.
+Leonard Richardson's maturity model groups HTTP APIs into four levels based on how much of HTTP's native design they actually use. It is a useful vocabulary for design reviews without turning every conversation into an argument over purity.
 
 ```mermaid
 flowchart TD
-    L0["Level 0: The Swamp of POX (Plain Old XML/JSON)
-Single URI, single POST verb, RPC calls wrapped in payloads"]
-    L1["Level 1: Resources
-Multiple distinct URIs, but still uniform or generic verbs"]
-    L2["Level 2: HTTP Verbs and Status Codes
-Standard verbs (GET, POST, PUT, DELETE) and true HTTP status semantics"]
-    L3["Level 3: Hypermedia Controls (HATEOAS)
-Representations contain discoverable next-action hypermedia links"]
+    L0["Level 0: POX / RPC over HTTP<br/>Single URI, usually POST, operation hidden in body"]
+    L1["Level 1: Resources<br/>Distinct URIs per resource, still using a single verb"]
+    L2["Level 2: HTTP Verbs and Status Codes<br/>GET, POST, PUT, PATCH, DELETE with proper 2xx/4xx/5xx codes"]
+    L3["Level 3: Hypermedia Controls (HATEOAS)<br/>Responses include links describing valid next actions"]
 
-    L0 --> L1
-    L1 --> L2
-    L2 --> L3
+    L0 --> L1 --> L2 --> L3
 ```
 
-### Level 0: The Swamp of POX (Plain Old XML/JSON)
-At Level 0, the API uses HTTP purely as a transport tunnel. All requests are sent to a single endpoint (for example, `/api/service`) using `POST`, and the operation name is hidden inside the body:
+### Level 0: Plain Old XML/JSON (RPC Tunneling)
+All operations hit a single endpoint (such as `POST /api/service`) with the action buried in the payload:
 
 ```json
 POST /api/service
 {"action": "cancelOrder", "orderId": "ORD-1234"}
 ```
-This is essentially Remote Procedure Call (RPC) or SOAP masquerading as web services. Caching proxies cannot tell what is safe to cache, load balancers cannot route based on resource paths, and every error returns `200 OK`.
+
+HTTP caches cannot tell reads from writes, API gateways cannot apply per-resource rate limits cleanly, and failures often come back as `200 OK`.
 
 ### Level 1: Resources
-Level 1 introduces individual URIs for distinct resources. Instead of a single dumping ground, you address resources directly:
-- `/orders/ORD-1234`
-- `/customers/CUST-88`
-
-However, Level 1 often still uses a single verb (such as `POST`) for all actions on those resources.
+Each entity or collection gets its own URI (`/orders/ORD-1234`, `/customers/CUST-88`), though requests may still use `POST` for everything.
 
 ### Level 2: HTTP Verbs and Status Codes
-Level 2 is the pragmatic sweet spot where 95% of high-scale enterprise systems operate. You leverage the standard HTTP method vocabulary and meaningful HTTP status codes:
-- `GET /orders/ORD-1234` -> Retrieve order (safe, idempotent, returns `200 OK` or `404 Not Found`).
-- `POST /orders` -> Create a new order (unsafe, non-idempotent, returns `201 Created` with a `Location` header).
-- `PUT /orders/ORD-1234` -> Full replacement of order state (idempotent, returns `200 OK` or `204 No Content`).
-- `PATCH /orders/ORD-1234` -> Partial update (returns `200 OK` or `204 No Content`).
-- `DELETE /orders/ORD-1234` -> Delete order (idempotent, returns `204 No Content`).
+Level 2 is where most production REST APIs land. Methods communicate safety and idempotency, and status codes communicate outcomes:
+- `GET /api/v1/orders/ORD-1234`: Read a resource (safe, idempotent; `200 OK` or `404 Not Found`).
+- `POST /api/v1/orders`: Create a new resource (non-idempotent; `201 Created` with a `Location` header).
+- `PUT /api/v1/orders/ORD-1234`: Replace the entire resource state (idempotent; `200 OK` or `204 No Content`).
+- `PATCH /api/v1/orders/ORD-1234`: Apply a partial update (`200 OK` or `204 No Content`).
+- `DELETE /api/v1/orders/ORD-1234`: Remove the resource (idempotent; `204 No Content`).
 
 ### Level 3: Hypermedia Controls (HATEOAS)
-Hypermedia As The Engine Of Application State (HATEOAS) requires the server response to contain self-descriptive links indicating what actions the client can take next based on the resource's current lifecycle state:
+With HATEOAS (Hypermedia As The Engine Of Application State), responses include links telling the client which state transitions are currently allowed:
 
 ```json
 {
@@ -66,109 +55,102 @@ Hypermedia As The Engine Of Application State (HATEOAS) requires the server resp
   "status": "AWAITING_PAYMENT",
   "total": 149.50,
   "_links": {
-    "self": { "href": "https://api.store.com/orders/ORD-1234" },
-    "cancel": { "href": "https://api.store.com/orders/ORD-1234/cancellation" },
-    "payment": { "href": "https://api.store.com/orders/ORD-1234/payments" }
+    "self": { "href": "https://api.store.com/api/v1/orders/ORD-1234" },
+    "cancel": { "href": "https://api.store.com/api/v1/orders/ORD-1234/cancellation" },
+    "payment": { "href": "https://api.store.com/api/v1/orders/ORD-1234/payments" }
   }
 }
 ```
 
 > [!NOTE]
-> **Why do most teams stop at Level 2?**  
-> While HATEOAS sounds elegant on paper, building smart clients that dynamically parse link relations rather than relying on compiled TypeScript or OpenAPI contracts adds significant development friction. Most teams standardize on OpenAPI/Swagger contracts at Level 2, avoiding the operational overhead of Level 3 hypermedia parsing.
+> Most teams intentionally stop at **Level 2** paired with an **OpenAPI 3.1** specification. Generating strongly typed clients from OpenAPI contracts is simpler for mobile and web teams than writing dynamic hypermedia link-following clients, so HATEOAS is typically reserved for public APIs with complex, evolving workflows.
 
 ---
 
-## Spring MVC Request Pipeline: Under the Hood
+## Spring Web MVC Architecture and `DispatcherServlet`
 
-When an HTTP request arrives on port 8080, how does Spring Boot translate raw TCP bytes into an invocation of your Java controller method? The entire architecture hinges on the **Front Controller** pattern, implemented by `DispatcherServlet`.
+Spring Web MVC uses the **Front Controller** pattern. Every incoming HTTP request from the servlet container (Tomcat, Jetty, or Undertow) passes through a single central servlet: `DispatcherServlet`.
 
 ```mermaid
 flowchart TD
-    Client["HTTP Client Request"] --> Tomcat["Embedded Servlet Container (Tomcat/Jetty)"]
-    Tomcat --> DS["DispatcherServlet"]
-    
-    subgraph SpringMVC ["Spring MVC Request Pipeline"]
-        DS --> HM["HandlerMapping
-(Matches URI pattern to HandlerMethod)"]
-        HM --> HA["HandlerAdapter
-(RequestMappingHandlerAdapter)"]
-        
-        HA --> HMAR["HandlerMethodArgumentResolver
-(Deserializes JSON via Jackson & runs Jakarta Validation)"]
-        HMAR --> Controller["@RestController Method Execution"]
-        Controller --> ServiceLayer["Domain / Service Layer"]
-        ServiceLayer --> Controller
-        
-        Controller --> HMRVH["HandlerMethodReturnValueHandler
-(Transforms Java object to HTTP response)"]
-        HMRVH --> MC["HttpMessageConverter
-(MappingJackson2HttpMessageConverter)"]
+    Client["HTTP Client"] --> Container["Servlet Container (Tomcat / Jetty / Undertow)"]
+    Container --> DS["DispatcherServlet"]
+
+    subgraph SpringMVC["Spring Web MVC Pipeline"]
+        DS --> HM["HandlerMapping<br/>(RequestMappingHandlerMapping)"]
+        HM --> HA["HandlerAdapter<br/>(RequestMappingHandlerAdapter)"]
+        HA --> ArgRes["HandlerMethodArgumentResolver<br/>(Path, Query, JSON via Jackson + @Valid)"]
+        ArgRes --> Ctrl["@RestController Method"]
+        Ctrl --> Svc["Service / Domain Layer"]
+        Svc --> Ctrl
+        Ctrl --> RetH["HandlerMethodReturnValueHandler<br/>(ResponseEntity / @ResponseBody)"]
+        RetH --> MsgConv["HttpMessageConverter<br/>(MappingJackson2HttpMessageConverter)"]
     end
-    
-    MC --> DS
-    DS --> ClientResponse["HTTP Response (Headers, Status, Body)"]
-    
-    Controller -.->|Exception Thrown| HER["HandlerExceptionResolver
-(@RestControllerAdvice)"]
+
+    MsgConv --> DS
+    DS --> Resp["HTTP Response (Status, Headers, Body)"]
+
+    Ctrl -.->|"Exception"| HER["HandlerExceptionResolver<br/>(@RestControllerAdvice)"]
     HER --> DS
 ```
 
-### The Seven Steps of Request Processing
-1. **DispatcherServlet Entry**: The servlet container routes the `HttpServletRequest` to `DispatcherServlet.doDispatch()`.
-2. **HandlerMapping Lookup**: Spring queries a chain of `HandlerMapping` beans (primarily `RequestMappingHandlerAdapter`) to match the incoming HTTP method and URI path against the `@RequestMapping` metadata registered during startup.
-3. **HandlerExecutionChain**: Spring retrieves not just the target controller method, but also all registered `HandlerInterceptor` instances configured for that path (pre-handle security checks, tracing span setup).
-4. **Argument Resolution & Validation**: The `HandlerAdapter` iterates over the controller method parameters. For each parameter, it selects an appropriate `HandlerMethodArgumentResolver`:
-   - `@PathVariable` uses `PathVariableMethodArgumentResolver`.
-   - `@RequestParam` uses `RequestParamMethodArgumentResolver`.
-   - `@RequestBody` triggers `RequestResponseBodyMethodProcessor`, which invokes `MappingJackson2HttpMessageConverter` to deserialize JSON into a Java DTO and fires `LocalValidatorFactoryBean` if `@Valid` is present.
-5. **Controller Invocation**: Using reflection (or pre-compiled MethodHandles), the controller method is executed with the resolved arguments.
-6. **Return Value Handling**: The returned object is handed to `HandlerMethodReturnValueHandler`. Because the controller is marked `@RestController` (or `@ResponseBody`), Spring bypasses View resolution and delegates straight to Jackson to serialize the object into the HTTP response body stream.
-7. **Exception Resolution**: If an exception escapes the controller, the `DispatcherServlet` catches it and delegates to `HandlerExceptionResolverComposite`, triggering your `@RestControllerAdvice` methods.
+### Tracing a Request Step by Step
+
+1. **Entry (`DispatcherServlet.doDispatch`)**: The servlet container hands the `HttpServletRequest` and `HttpServletResponse` to `DispatcherServlet`.
+2. **Handler Lookup (`HandlerMapping`)**: `DispatcherServlet` queries its registered `HandlerMapping` beans, primarily **`RequestMappingHandlerMapping`**, to match the HTTP method, URI path, headers, and media types against `@RequestMapping` metadata indexed at startup.
+3. **`HandlerExecutionChain`**: The lookup returns a `HandlerExecutionChain` containing the matched `HandlerMethod` (your controller method) along with any matching `HandlerInterceptor` instances.
+4. **Adapter Selection (`HandlerAdapter`)**: `DispatcherServlet` finds the `HandlerAdapter` capable of invoking that handler. For annotated controllers, this is **`RequestMappingHandlerAdapter`**.
+5. **Argument Resolution & Validation**: `RequestMappingHandlerAdapter` delegates each method parameter to a matching `HandlerMethodArgumentResolver`:
+   - `@PathVariable` is handled by `PathVariableMethodArgumentResolver`.
+   - `@RequestParam` is handled by `RequestParamMethodArgumentResolver`.
+   - `@RequestBody` is handled by `RequestResponseBodyMethodProcessor`, which uses an `HttpMessageConverter` (typically `MappingJackson2HttpMessageConverter`) to deserialize JSON and invokes Jakarta Validation if `@Valid` or `@Validated` is present.
+6. **Invocation and Return Value Handling**: The controller method runs. Because `@RestController` combines `@Controller` and `@ResponseBody`, `HandlerMethodReturnValueHandler` skips HTML view resolution and writes the return value through `HttpMessageConverter` directly to the HTTP response body.
+7. **Exception Resolution**: If validation fails or an exception escapes the controller, `DispatcherServlet` catches it and delegates to `HandlerExceptionResolverComposite`, which routes it to your `@RestControllerAdvice` handlers.
 
 ---
 
-## DTOs vs Entities: The Cardinal Rule of API Boundaries
+## Separating API Contracts from JPA Entities
 
-One of the most dangerous anti-patterns in enterprise Java is returning JPA entities directly from `@RestController` methods:
+Returning or accepting JPA `@Entity` classes directly in controller methods is a frequent source of security and stability bugs:
 
 ```java
-// ANTI-PATTERN: NEVER DO THIS IN PRODUCTION
+// Avoid: directly exposing a JPA entity at the HTTP boundary
 @GetMapping("/users/{id}")
 public User getUser(@PathVariable Long id) {
     return userRepository.findById(id).orElseThrow();
 }
 ```
 
-### Why Exposing Entities Kills Applications
-1. **Mass Assignment Vulnerabilities**: If your entity has a `boolean isAdmin` field and you accept the entity as a `@RequestBody`, an attacker can send `{"isAdmin": true}` in their JSON registration payload. Jackson will eagerly bind it, promoting the attacker to an administrator.
-2. **Infinite Recursion / StackOverflowError**: Bidirectional JPA relationships (`@OneToMany` / `@ManyToOne`) cause Jackson to serialize Parent -> Child -> Parent -> Child in an infinite loop until the JVM crashes with `StackOverflowError`.
-3. **LazyInitializationException**: Outside an active Hibernate transaction, accessing an uninitialized lazy collection during JSON serialization throws a 500 error.
-4. **Leaking Private Data**: Accidental exposure of password hashes, internal database IDs, audit columns, or soft-delete flags.
-5. **Rigid Coupling**: Changing a database column name breaks your public API contract and ruins client backward compatibility.
+Exposing entities causes five concrete problems:
+- **Mass assignment (over-posting)**: If `User` has a `role` or `accountBalance` field with a setter and you accept `User` as `@RequestBody`, a client can send `"role": "ADMIN"` and Jackson will bind it.
+- **Serialization loops**: Bidirectional `@OneToMany` / `@ManyToOne` associations cause Jackson to recurse until the JVM throws `StackOverflowError`.
+- **`LazyInitializationException`**: If Open-Session-in-View is disabled (as it should be in high-throughput APIs), serializing an uninitialized lazy collection outside a transaction throws a 500 error.
+- **Accidental data leakage**: Internal columns such as password hashes, soft-delete flags, or internal audit fields can slip into responses after a schema change.
+- **Tight schema coupling**: Renaming a database column or refactoring an entity breaks external API consumers.
 
-### The Modern Java 21 Record DTO Pattern
-Always define explicit, immutable records for incoming requests and outgoing responses:
+### Immutable Record DTOs
+
+Java records give you concise, immutable request and response contracts that explicitly allowlist what enters and leaves your service:
 
 ```java
 package com.example.ecommerce.api.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Positive;
-import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
 
-// Immutable incoming request contract
+import java.math.BigDecimal;
+import java.util.List;
+
 public record CreateOrderRequest(
     @NotBlank(message = "Customer ID is required")
     String customerId,
 
+    // @Valid on the list element cascades validation into each OrderItemRequest
     @NotEmpty(message = "Order must contain at least one item")
-    List<OrderItemRequest> items
+    List<@Valid OrderItemRequest> items
 ) {
     public record OrderItemRequest(
         @NotBlank(message = "SKU is required")
@@ -177,7 +159,7 @@ public record CreateOrderRequest(
         @Positive(message = "Quantity must be greater than zero")
         int quantity,
 
-        @DecimalMin(value = "0.01", message = "Price must be positive")
+        @DecimalMin(value = "0.01", message = "Unit price must be positive")
         BigDecimal unitPrice
     ) {}
 }
@@ -191,7 +173,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-// Immutable outgoing response contract
 public record OrderResponse(
     UUID id,
     String customerId,
@@ -211,9 +192,9 @@ public record OrderResponse(
 
 ---
 
-## Implementing the Controller
+## Writing REST Controllers with Spring MVC
 
-Let's look at a production-grade controller adhering to REST conventions:
+A clean controller stays thin: it maps HTTP inputs (`@PathVariable`, `@RequestParam`, `@RequestBody`), triggers validation with `@Valid`, delegates to a service, and builds an HTTP response with accurate status codes and headers.
 
 ```java
 package com.example.ecommerce.api;
@@ -221,13 +202,22 @@ package com.example.ecommerce.api;
 import com.example.ecommerce.api.dto.CreateOrderRequest;
 import com.example.ecommerce.api.dto.OrderResponse;
 import com.example.ecommerce.domain.OrderService;
+import com.example.ecommerce.domain.OrderStatus;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -244,7 +234,6 @@ public class OrderController {
     public ResponseEntity<OrderResponse> createOrder(@Valid @RequestBody CreateOrderRequest request) {
         OrderResponse created = orderService.createOrder(request);
 
-        // Build the Location URI: /api/v1/orders/{id}
         URI location = ServletUriComponentsBuilder.fromCurrentRequest()
                 .path("/{id}")
                 .buildAndExpand(created.id())
@@ -255,8 +244,13 @@ public class OrderController {
 
     @GetMapping("/{id}")
     public ResponseEntity<OrderResponse> getOrder(@PathVariable UUID id) {
-        OrderResponse order = orderService.getOrderById(id);
-        return ResponseEntity.ok(order);
+        return ResponseEntity.ok(orderService.getOrderById(id));
+    }
+
+    @GetMapping
+    public ResponseEntity<List<OrderResponse>> listOrders(
+            @RequestParam(required = false) OrderStatus status) {
+        return ResponseEntity.ok(orderService.listOrders(status));
     }
 
     @DeleteMapping("/{id}")
@@ -267,38 +261,45 @@ public class OrderController {
 }
 ```
 
-### Essential REST Details Implemented Above
-- **`201 Created` with `Location` Header**: When a new resource is created via `POST`, REST requires the server to return the direct URI where the client can retrieve that newly minted resource. `ServletUriComponentsBuilder.fromCurrentRequest()` inspects the current request URL (even behind reverse proxies when `ForwardedHeaderFilter` is enabled) and appends the newly generated ID.
-- **`204 No Content` for Deletions**: A successful `DELETE` operation doesn't need to transmit an empty JSON object `{}`. Returning HTTP status `204 No Content` with an empty body saves network bandwidth and signals successful removal.
+Two details here matter in real systems:
+- **`201 Created` + `Location` header**: `ServletUriComponentsBuilder.fromCurrentRequest()` builds the canonical URL of the newly created resource (and respects `X-Forwarded-*` headers when `server.forward-headers-strategy=framework` is configured behind a reverse proxy).
+- **`204 No Content` on delete**: Signals successful removal without sending an unnecessary empty body.
 
 ---
 
-## Input Validation with Jakarta Validation API
+## Input Validation with Jakarta Validation
 
-Validation must happen right at the network perimeter before untrusted client data penetrates your application service layer.
+With `spring-boot-starter-validation` on the classpath, Spring integrates Hibernate Validator (the Jakarta Validation reference implementation) directly into request binding.
 
-### Built-in Jakarta Annotations Reference
-| Annotation | Validates | Notes |
-|---|---|---|
-| `@NotNull` | Element is not `null` | Allows empty string `""` or whitespace `" "` |
-| `@NotEmpty` | Not `null` and length/size > 0 | Applies to Strings, Collections, Arrays, Maps |
-| `@NotBlank` | Not `null` and trimmed length > 0 | Strings only. Best for user-facing text fields |
-| `@Positive` / `@PositiveOrZero` | Numeric value > 0 / >= 0 | For counts, quantities, monetary amounts |
-| `@Min` / `@Max` | Numeric bounds check | Inclusive limits |
-| `@Email` | Valid email address syntax | Regex-based RFC 5322 check |
-| `@Pattern(regexp = "...")` | Matches specified regex | For zip codes, tax IDs, phone numbers |
+### Common Built-In Constraints
 
-### Building a Custom Constraint Validator
-When standard annotations fall short (e.g., verifying a business-specific currency code), create a custom validator:
+| Annotation | Behavior | Notes |
+| :--- | :--- | :--- |
+| `@NotNull` | Value is not `null` | Allows empty `""` or whitespace `"   "` |
+| `@NotEmpty` | Not `null` and size/length > 0 | Works on `String`, `Collection`, `Map`, and arrays |
+| `@NotBlank` | Not `null` and trimmed length > 0 | `String` only; best default for required text fields |
+| `@Positive` / `@PositiveOrZero` | Numeric value > 0 or >= 0 | Good for quantities and counts |
+| `@DecimalMin` / `@DecimalMax` | Exact decimal bounds | Preferred for `BigDecimal` monetary fields |
+| `@Email` | Email syntax check | Format check only; does not verify deliverability |
+| `@Pattern(regexp = "...")` | Regular expression match | Useful for SKUs, postal codes, or identifiers |
+| `@Valid` | Cascades validation into nested objects/elements | Required on nested DTO fields and `List<@Valid T>` |
+
+### Writing a Custom Constraint Validator
+
+When built-in constraints are not enough (such as validating an ISO 4217 currency code), pair a custom `@Constraint` annotation with a `ConstraintValidator`:
 
 ```java
 package com.example.ecommerce.validation;
 
 import jakarta.validation.Constraint;
 import jakarta.validation.Payload;
-import java.lang.annotation.*;
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-@Target({ElementType.FIELD, ElementType.PARAMETER})
+@Target({ElementType.FIELD, ElementType.PARAMETER, ElementType.TYPE_USE})
 @Retention(RetentionPolicy.RUNTIME)
 @Constraint(validatedBy = CurrencyCodeValidator.class)
 @Documented
@@ -328,38 +329,41 @@ public class CurrencyCodeValidator implements ConstraintValidator<ValidCurrency,
     @Override
     public boolean isValid(String value, ConstraintValidatorContext context) {
         if (value == null) {
-            return true; // Let @NotBlank handle null checks if required
+            // Convention: let @NotNull / @NotBlank handle nullability independently
+            return true;
         }
-        return VALID_CURRENCIES.contains(value.toUpperCase().trim());
+        return VALID_CURRENCIES.contains(value.trim().toUpperCase());
     }
 }
 ```
 
+Returning `true` when `value == null` follows the Jakarta Validation convention so the constraint composes cleanly with optional fields (and pairs with `@NotBlank` when required).
+
 ---
 
-## Global Error Handling with RFC 9457 Problem Details
+## Global Exception Handling with `@RestControllerAdvice` and `ProblemDetail`
 
-For years, every engineering team invented their own ad-hoc error JSON format. Spring Boot 3 standardized on **RFC 7807 / RFC 9457 Problem Details for HTTP APIs** (`application/problem+json`).
+Instead of inventing a custom error envelope for every microservice, Spring Framework 6 and Spring Boot 3 provide first-class support for **RFC 9457 Problem Details for HTTP APIs** (which obsoleted RFC 7807) via `org.springframework.http.ProblemDetail` and the `application/problem+json` media type.
 
-A standard Problem Detail payload contains:
-- `type`: A URI reference identifying the error type (documentation link).
-- `title`: A short, human-readable summary of the problem.
-- `status`: The HTTP status code.
-- `detail`: An occurrence-specific explanation safe for client consumption.
-- `instance`: A URI identifying the specific request/occurrence.
-- Custom extensions (e.g., validation field errors, timestamp, error code).
+Enable RFC 9457 formatting for built-in Spring MVC exceptions in `application.properties`:
 
-### Production Controller Advice Implementation
+```properties
+spring.mvc.problemdetails.enabled=true
+```
+
+Then centralize domain and validation error handling in a `@RestControllerAdvice` class extending `ResponseEntityExceptionHandler`:
 
 ```java
 package com.example.ecommerce.api;
 
 import com.example.ecommerce.domain.OrderNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -374,11 +378,11 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
-    // 1. Handle Domain Not Found Exceptions (404)
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(OrderNotFoundException.class)
     public ProblemDetail handleOrderNotFound(OrderNotFoundException ex) {
-        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatus.NOT_FOUND, ex.getMessage());
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
         problem.setTitle("Order Not Found");
         problem.setType(URI.create("https://api.store.com/errors/order-not-found"));
         problem.setProperty("timestamp", Instant.now());
@@ -386,22 +390,22 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem;
     }
 
-    // 2. Override default Spring MVC validation handler to supply detailed field errors (400)
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
             MethodArgumentNotValidException ex,
-            org.springframework.http.HttpHeaders headers,
+            HttpHeaders headers,
             HttpStatusCode status,
             WebRequest request) {
 
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
-                HttpStatus.BAD_REQUEST, "One or more request parameters failed validation.");
+                HttpStatus.BAD_REQUEST,
+                "One or more request fields failed validation."
+        );
         problem.setTitle("Validation Failure");
         problem.setType(URI.create("https://api.store.com/errors/validation-error"));
         problem.setProperty("timestamp", Instant.now());
 
-        // Extract human-friendly field-level error messages
-        List<Map<String, String>> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
+        List<Map<String, String>> invalidParams = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> Map.of(
                         "field", error.getField(),
                         "rejectedValue", String.valueOf(error.getRejectedValue()),
@@ -409,20 +413,19 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 ))
                 .toList();
 
-        problem.setProperty("invalidParams", fieldErrors);
-
-        return ResponseEntity.status(status).body(problem);
+        problem.setProperty("invalidParams", invalidParams);
+        return ResponseEntity.status(status).headers(headers).body(problem);
     }
 
-    // 3. Catch-all for unexpected internal exceptions (500)
     @ExceptionHandler(Exception.class)
-    public ProblemDetail handleGeneralException(Exception ex) {
-        // Log the full stack trace internally! Never expose it to the external caller.
-        logger.error("Unhandled server exception encountered", ex);
+    public ProblemDetail handleUnexpected(Exception ex) {
+        // Log full details internally; return only a safe generic message externally
+        log.error("Unhandled exception while processing HTTP request", ex);
 
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.INTERNAL_SERVER_ERROR,
-                "An unexpected internal error occurred. Please contact customer support.");
+                "An unexpected error occurred. Please try again or contact support."
+        );
         problem.setTitle("Internal Server Error");
         problem.setType(URI.create("https://api.store.com/errors/internal-error"));
         problem.setProperty("timestamp", Instant.now());
@@ -431,15 +434,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 }
 ```
 
-### What the Client Receives on Invalid Input
-When a client sends an empty customer ID and negative quantity, Spring MVC produces this standard JSON:
+When a client submits a blank `customerId` and a negative item quantity, Spring returns `400 Bad Request` with `Content-Type: application/problem+json`:
 
 ```json
 {
   "type": "https://api.store.com/errors/validation-error",
   "title": "Validation Failure",
   "status": 400,
-  "detail": "One or more request parameters failed validation.",
+  "detail": "One or more request fields failed validation.",
   "timestamp": "2026-10-29T10:15:30.123Z",
   "invalidParams": [
     {
@@ -458,50 +460,26 @@ When a client sends an empty customer ID and negative quantity, Spring MVC produ
 
 ---
 
-## Architectural Traps and Real-World Outages
+## Common API Pitfalls
 
-### The "HTTP 200 False Positive" Monitoring Blindspot
-A high-volume fintech platform designed all their microservices to catch every exception and return `200 OK` with `{ "success": false, "code": "DB_UNAVAILABLE" }`. 
-When their database cluster lost quorum during an AWS availability zone outage, their monitoring alarms (Datadog/Prometheus) looked completely green because the HTTP 5xx error rate was exactly 0.00%. Thousands of credit card payments failed silently for two hours while on-call engineers slept, because their alerting relied on standard HTTP status codes.
+### Returning `200 OK` on Application Errors
+If a service catches database failures and returns `200 OK` with `{"success": false}`, standard HTTP observability breaks immediately. Load balancers, Prometheus/Datadog 5xx alerts, and client retry policies all look at HTTP status codes. Reserve `2xx` for success, `4xx` for client errors (do not blindly retry), and `5xx` for server failures (alert on-call).
 
-### The "Over-Posting" Data Corruption Bug
-A developer exposed a `UserProfile` JPA entity directly in a `@PutMapping("/profile")`. An end user sent this JSON in a curl command:
-
-```json
-{
-  "bio": "Software Engineer",
-  "accountBalance": 1000000.00,
-  "role": "SYSTEM_ADMIN"
-}
-```
-Because the entity had setters for all fields and Jackson mapped everything dynamically, the user successfully credited their account with USD 1,000,000 and escalated their privileges. Always use explicit DTO records to whitelist precisely what the client is permitted to mutate.
+### Binding Directly to Entities on Update Endpoints
+Accepting a `UserProfile` JPA entity in a `PUT` endpoint allows a client to add fields like `"role": "ADMIN"` or `"verified": true` to the JSON payload even if the UI form never sends them. Dedicated request DTO records ensure only explicitly allowed fields can be deserialized and mapped onto your domain model.
 
 ---
 
-## Senior Interview Questions
+## Interview Questions
 
-### Question 1: What is the semantic difference between `PUT` and `PATCH`, and how do you handle partial null updates in Spring Boot?
-**Answer:**  
-`PUT` represents a complete resource replacement and is strictly idempotent: sending the exact same `PUT` request ten times results in the identical server state as sending it once. Any fields omitted in a `PUT` payload should conceptually be reset to their default values or cleared.
+### What is the semantic difference between `PUT` and `PATCH`, and what makes `PATCH` tricky in Java?
+`PUT` replaces the target resource in full and is idempotent: repeating the same request produces the same state, and omitted fields are reset. `PATCH` applies a partial update and is not guaranteed to be idempotent. In Java, a standard DTO cannot distinguish between `"nickname": null` (explicitly clear the field) and omitting `"nickname"` altogether (leave it unchanged), because both deserialize to `null`. Teams handle this with `JsonNullable<T>` (from OpenAPITools Jackson), RFC 6902 JSON Patch (`application/json-patch+json`), or explicit command endpoints for specific state changes.
 
-`PATCH` (RFC 5789) represents a partial modification and is not guaranteed to be idempotent. Handling `PATCH` in Spring Boot has a subtle trap: how do you distinguish between a client sending `"nickname": null` (meaning "please clear my nickname") versus omitting `"nickname"` altogether (meaning "do not touch my current nickname")? Standard Java POJOs deserialize both scenarios to `null`. 
+### How does `DispatcherServlet` route an incoming HTTP request to the right controller method?
+At startup, `RequestMappingHandlerMapping` scans `@Controller` and `@RestController` beans and builds a lookup registry of `RequestMappingInfo` entries (path patterns, HTTP methods, headers, `consumes`, and `produces`) mapped to `HandlerMethod` objects. When a request arrives, `DispatcherServlet` asks its `HandlerMapping` beans for a match, receives a `HandlerExecutionChain` (the `HandlerMethod` plus matching `HandlerInterceptor` instances), and delegates execution to `RequestMappingHandlerAdapter` to resolve arguments, validate inputs, invoke the method, and serialize the response.
 
-To solve this, senior engineers use `JsonNullable<T>` from the OpenAPITools Jackson module or accept `Map<String, Object>`/RFC 6902 JSON Patch structures, allowing the application to detect whether a key was explicitly present in the incoming JSON token stream.
+### Why should `@RestControllerAdvice` extend `ResponseEntityExceptionHandler`?
+Spring MVC raises many framework exceptions before your controller body runs, including `HttpRequestMethodNotSupportedException` (405), `HttpMediaTypeNotSupportedException` (415), `MethodArgumentNotValidException` (400), and `MissingServletRequestParameterException` (400). Extending `ResponseEntityExceptionHandler` gives you consistent RFC 9457 `ProblemDetail` responses and proper HTTP status codes for all of those automatically, while letting you override only the specific handlers you want to customize (such as adding field-level validation details).
 
-### Question 2: How does `DispatcherServlet` find the appropriate controller method for an incoming request?
-**Answer:**  
-During application startup, `RequestMappingHandlerMapping` scans all Spring beans marked with `@Controller` or `@RestController`. It reflects over their methods looking for `@RequestMapping` (and composed variants like `@GetMapping`). For each method, it creates a `RequestMappingInfo` object representing the path patterns, HTTP methods, parameters, headers, and media types (`consumes`/`produces`).
-
-When a request arrives, `DispatcherServlet` queries `getHandler(request)` on its registered `HandlerMapping` beans. The `RequestMappingHandlerMapping` searches its internal lookup registry. If multiple mappings match (e.g., `/orders/{id}` vs `/orders/special`), it uses a Comparator to evaluate specificity, selects the best match, and packages it into a `HandlerExecutionChain` along with any matching interceptors.
-
-### Question 3: Why should `@RestControllerAdvice` extend `ResponseEntityExceptionHandler` instead of creating standalone `@ExceptionHandler` methods for everything?
-**Answer:**  
-Spring MVC can throw dozens of internal standard exceptions before your controller code ever executes: `HttpRequestMethodNotSupportedException` (405), `HttpMediaTypeNotSupportedException` (415), `MethodArgumentNotValidException` (400), `MissingServletRequestParameterException` (400), and `NoHandlerFoundException` (404).
-
-`ResponseEntityExceptionHandler` provides base implementations for all standard Spring MVC exceptions, setting the proper HTTP status codes, headers, and RFC 9457 `ProblemDetail` structures. If you don't extend it and only write custom handlers, any unhandled framework exception either falls back to a raw servlet 500 error or must be manually reimplemented by your team. Extending it gives you comprehensive framework error coverage while allowing you to override only the specific methods you want to customize.
-
-### Question 4: How does Spring MVC support content negotiation, and what happens if a client requests an unsupported media type?
-**Answer:**  
-Spring MVC uses a `ContentNegotiationManager` to determine the requested media type, primarily by inspecting the HTTP `Accept` header (or alternatively query parameters or file extensions if explicitly enabled). 
-
-When the controller returns an object, Spring inspects the available `HttpMessageConverter` beans registered in the context (such as `MappingJackson2HttpMessageConverter` for JSON, `Jaxb2RootElementHttpMessageConverter` for XML). It matches the converters against the negotiated media type. If a client sends `Accept: application/xml` but the server only has JSON converters configured, Spring throws an `HttpMediaTypeNotAcceptableException`, which translates into an `HTTP 406 Not Acceptable` response status.
+### How does content negotiation work in Spring MVC, and what happens when no converter matches?
+Spring's `ContentNegotiationManager` inspects the request's `Accept` header (and any `produces` constraint on `@RequestMapping`) to select a target media type. It then searches registered `HttpMessageConverter` beans (such as `MappingJackson2HttpMessageConverter` for JSON) for one that can write both the return type and the requested media type. If the client sends `Accept: application/xml` and no XML converter is configured, Spring throws `HttpMediaTypeNotAcceptableException`, producing an `HTTP 406 Not Acceptable` response.

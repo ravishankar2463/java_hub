@@ -1,265 +1,441 @@
 ---
 title: "Stateful Stream Processing with Kafka Streams"
-description: "Master real-time stream processing with Kafka Streams: KStreams, KTables, embedded RocksDB state stores, windowing topologies, and Exactly-Once Semantics."
+description: "Build stateful event pipelines with Kafka Streams using KStream, KTable, GlobalKTable, embedded RocksDB state stores, windowing, changelog compaction, and exactly-once semantics."
+category: "level-10"
+date: "2026-10-29T10:00:00Z"
 ---
 
-Stateless event-driven microservices are relatively straightforward to build. A consumer reads an event from a Kafka topic, validates its payload, performs a database write, and commits the consumer offset. If the consumer crashes, a rebalance assigns the partition to another instance, which resumes reading from the committed offset.
+Stateless Kafka consumers are straightforward: read a record, transform or write it, and commit the offset. Real-time streaming systems quickly outgrow stateless processing, though. Fraud detection, payment velocity checks, real-time inventory balances, and order enrichment all need to remember what happened previously:
 
-However, modern real-time systems—such as fraud detection platforms, financial ticker aggregators, and IoT telematics pipelines—require **state**. They must answer questions like:
-- *"Has this credit card been swiped in three different countries within the last 5 minutes?"*
-- *"What is the 10-minute moving average price of Bitcoin across all trades?"*
-- *"Join this unbounded clickstream event with the latest user profile snapshot."*
+- Has this card been used in three countries within the last five minutes?
+- What is the rolling 10-minute trade volume per ticker symbol?
+- What is the customer's current account tier at the moment this order arrived?
 
-If you attempt to maintain this state in an external relational database or Redis cache, your event pipeline collapses under network latency, socket pool exhaustion, and distributed locking contention. 
+Storing that intermediate state in an external relational database or Redis cluster works at moderate throughput, but network round trips, connection pool contention, and cross-system failure recovery turn stateful aggregations into a bottleneck. **Kafka Streams** takes a different approach: it embeds partitioned, fault-tolerant state directly inside your Java application using local **RocksDB** stores backed by compacted Kafka changelog topics.
 
-The **Kafka Streams API** solves this by embedding distributed, fault-tolerant state directly inside your Java application process. In this deep dive, we explore the duality of Streams and Tables (`KStream` vs `KTable`), how embedded **RocksDB** state stores achieve microsecond query latencies, how to execute windowed temporal aggregations, and how Kafka achieves **Exactly-Once Semantics (EOS)**.
+## Embedded Stream Processing Architecture
 
----
-
-### The Architecture of Kafka Streams: Embedded State
-
-Unlike distributed stream engines like Apache Flink or Apache Spark Streaming—which require dedicated cluster managers, master nodes, and complex deployment topologies—Kafka Streams is a **pure Java client library**. 
-
-You embed Kafka Streams directly into a standard Spring Boot application. It runs inside the standard JVM process, leveraging Kafka's consumer group protocol for partition assignment, elastic scaling, and automated fault tolerance:
+Unlike Apache Flink or Apache Spark Streaming, Kafka Streams is not a separate distributed cluster you have to deploy and operate. It is a Java library that runs inside your standard Spring Boot or containerized JVM microservices, relying on Kafka's native consumer group protocol for partition assignment, horizontal scaling, and failover.
 
 ```mermaid
-flowchart TD
-    subgraph KafkaCluster ["Apache Kafka Cluster"]
-        InTopic["Input Topic: 'trades'<br/>(Partitions 0, 1)"]
-        ChangeLog["Internal Changelog Topic<br/>'trades-store-changelog'"]
-        OutTopic["Output Topic: 'hourly-volume'"]
+flowchart LR
+    subgraph KafkaCluster["Apache Kafka Cluster"]
+        InTopic["Input Topic: crypto-trades (Partitions 0, 1)"]
+        Changelog["Compacted Changelog Topic (app-volume-store-changelog)"]
+        OutTopic["Output Topic: volume-alerts"]
     end
 
-    subgraph JVMInstance ["Java Application (Stream Task 0)"]
-        Consumer["Kafka Consumer Engine"]
-        Topology["Stream Processor Topology<br/>(Map -> Filter -> Window)"]
-        RocksDB["Embedded RocksDB State Store<br/>(Local SSD Disk / Off-Heap Memory)"]
-
+    subgraph JVM["Spring Boot Service (Stream Task 0)"]
+        Consumer["Kafka Consumer"]
+        Topology["Processor Topology (Group -> Window -> Aggregate)"]
+        RocksDB["Embedded RocksDB Store (Local SSD + Off-Heap RAM)"]
         Consumer --> Topology
-        Topology <-->|Microsecond Reads/Writes| RocksDB
+        Topology <-->|"Local read/write"| RocksDB
     end
 
-    InTopic -->|Stream Partition 0| Consumer
-    RocksDB -.->|Async Write-Behind Durability| ChangeLog
-    Topology -->|Emits Aggregates| OutTopic
+    InTopic -->|"Partition 0"| Consumer
+    RocksDB -->|"Durability mutations"| Changelog
+    Topology -->|"Final windowed alerts"| OutTopic
 ```
 
-Every stream processing instance maintains a local **RocksDB** embedded Key-Value store on local disk (or in off-heap memory). Because state is stored locally on the worker node, read and write operations complete in microseconds without crossing network boundaries.
+Kafka Streams divides work into **Stream Tasks**, one per input partition (or co-partitioned group of partitions). Each task owns its own isolated local state store. Because lookups hit local off-heap memory and local SSD instead of crossing the network, stateful operations stay fast and scale linearly as you add application instances up to the topic's partition count.
 
----
+## `KStream`, `KTable`, and `GlobalKTable` Duality
 
-### The Duality of Streams and Tables: KStream vs KTable
+Kafka Streams models event data around the **stream-table duality**: a stream is a changelog of mutations over time, and a table is the materialized snapshot obtained by replaying those mutations by key.
 
-The cornerstone of stream processing theory is the **Stream-Table Duality**:
-
-> **A Stream can be viewed as a Changelog of a Table, and a Table can be viewed as a Snapshot of a Stream.**
-
-```
-Event Stream (KStream):    Insert-only, unbounded facts over time.
-State Table (KTable):      Update-by-key, latest materialized state per key.
+```text
+KStream      -> Append-only sequence of independent events (INSERT semantics)
+KTable       -> Partitioned materialized state per key (UPSERT + tombstone DELETE semantics)
+GlobalKTable -> Unpartitioned materialized state replicated in full to every application instance
 ```
 
-#### KStream (The Event Log)
-A `KStream` represents an unbounded, append-only stream of independent events. Every new record is an immutable fact added to the stream. Two records with the identical key `UUID-101` represent two distinct events (e.g., two distinct deposits into the same bank account).
+### `KStream` (Event Log)
+
+Every record in a `KStream` is an independent fact. Two records with key `acct-42` and values `+50` and `+75` represent two separate deposits totaling `+125`.
 
 ```java
-// KStream: Every event is processed independently
-KStream<String, OrderEvent> orderStream = builder.stream("orders", 
-    Consumed.with(Serdes.String(), new JsonSerde<>(OrderEvent.class)));
+KStream<String, OrderEvent> orders = builder.stream(
+        "orders",
+        Consumed.with(Serdes.String(), orderEventSerde)
+);
 ```
 
-#### KTable (The Materialized View)
-A `KTable` represents the current state of the world. It interprets the event stream as an **upsert** (Update or Insert) log:
-- A new key-value pair inserts a row.
-- A record with an existing key updates the row.
-- A record with a `null` value acts as a **Tombstone**, deleting the row from the table.
+### `KTable` (Partitioned Materialized View)
+
+A `KTable` treats records with the same key as updates to the same entity:
+
+- A new key inserts a row in the local state store.
+- An existing key overwrites the previous value.
+- A record with a `null` value (a tombstone) deletes that key from the store.
 
 ```java
-// KTable: Maintains only the latest profile state per userId
-KTable<String, UserProfile> userProfiles = builder.table("user-profiles",
-    Consumed.with(Serdes.String(), new JsonSerde<>(UserProfile.class)),
-    Materialized.<String, UserProfile, KeyValueStore<Bytes, byte[]>>as("user-profile-store"));
+KTable<String, CustomerProfile> customers = builder.table(
+        "customer-profiles",
+        Consumed.with(Serdes.String(), customerProfileSerde),
+        Materialized.<String, CustomerProfile, KeyValueStore<Bytes, byte[]>>as("customer-profile-store")
+                .withKeySerde(Serdes.String())
+                .withValueSerde(customerProfileSerde)
+);
 ```
 
-#### GlobalKTable (Broadcast Cache)
-A standard `KTable` is partitioned across worker nodes: instance A holds only partitions 0 and 1, while instance B holds partitions 2 and 3. 
+By default, Kafka Streams places a record cache in front of state stores (`statestore.cache.max.bytes` in Kafka Streams 3.x, replacing the deprecated `cache.max.bytes.buffering`). When the same key updates 50 times before the next commit interval, the cache deduplicates those updates and forwards only the latest value downstream.
 
-A `GlobalKTable` populates an entire dataset across **all** worker instances by consuming all partitions. It is designed for small, slowly changing reference datasets (e.g., zip codes, currency exchange rates, tax tables) that must be joined with streams without requiring co-partitioning.
+### `GlobalKTable` (Replicated Reference Data)
 
----
-
-### Windowed Aggregations: Temporal State
-
-When computing metrics across streaming data, you must bound time into discrete **Windows**:
-
-```
-Windowing Types in Kafka Streams
-  |-- Tumbling Window: Fixed-size, non-overlapping (e.g., 00:00-00:05, 00:05-00:10)
-  |-- Hopping Window:  Fixed-size, overlapping (e.g., 5-min window advancing every 1 min)
-  |-- Sliding Window:  Time-difference between record timestamps (e.g., within 2 minutes of each other)
-  `-- Session Window:  Dynamic window bounded by periods of inactivity (e.g., user activity gap > 30 min)
-```
-
-#### Computing 5-Minute Tumbling Aggregations
-
-Here is a production topology that groups high-frequency cryptocurrency trades by symbol, computes the total trade volume across 5-minute tumbling windows, and emits alerts on unusual volume spikes:
+A standard `KTable` is partitioned: Instance A holds only partitions 0 and 1, while Instance B holds partitions 2 and 3. A `GlobalKTable` reads **all** partitions of its input topic on **every** application instance so every task has the complete dataset locally.
 
 ```java
-@Configuration
-public class CryptoAlertTopology {
+GlobalKTable<String, ExchangeRate> exchangeRates = builder.globalTable(
+        "fx-exchange-rates",
+        Consumed.with(Serdes.String(), exchangeRateSerde),
+        Materialized.as("fx-exchange-rate-store")
+);
+```
 
-    @Bean
-    public KStream<String, AlertEvent> buildPipeline(StreamsBuilder builder) {
-        
-        KStream<String, TradeEvent> trades = builder.stream(
-            "crypto-trades",
-            Consumed.with(Serdes.String(), new JsonSerde<>(TradeEvent.class))
-        );
+Use `GlobalKTable` for relatively small, slowly changing reference datasets (currency rates, country rules, product catalog metadata) that you want to join with streams by a foreign key without repartitioning the stream. Avoid loading multi-gigabyte high-churn datasets into a `GlobalKTable`: every pod stores a full copy, startup waits until the global store finishes bootstrapping, and `GlobalKTable` updates are not synchronized with stream event time.
 
-        // 1. Define a 5-minute Tumbling Window with a 1-minute Grace Period for late data
-        TimeWindows tumblingWindow = TimeWindows.ofSizeWithNoGrace(Duration.ofMinutes(5))
-            .grace(Duration.ofMinutes(1));
+## RocksDB Local Embedded State Stores
 
-        KTable<Windowed<String>, BigDecimal> windowedVolume = trades
-            // Key by currency symbol (e.g., "BTC-USD")
-            .groupBy((key, trade) -> trade.symbol(), Grouped.with(Serdes.String(), new JsonSerde<>(TradeEvent.class)))
-            
-            // Apply 5-minute temporal windowing
-            .windowedBy(tumblingWindow)
-            
-            // Aggregate trading volume inside RocksDB
-            .aggregate(
-                () -> BigDecimal.ZERO, // Initializer
-                (symbol, trade, currentTotal) -> currentTotal.add(trade.volume()), // Aggregator
-                Materialized.<String, BigDecimal, WindowStore<Bytes, byte[]>>as("crypto-volume-store")
-                    .withKeySerde(Serdes.String())
-                    .withValueSerde(new BigDecimalSerde())
-            );
+By default, persistent Kafka Streams state stores are backed by **RocksDB**, an embedded C++ LSM-tree key-value store accessed through JNI. RocksDB writes incoming updates to an in-memory **MemTable**, flushes them asynchronously to sorted immutable **SST files** on local disk (`state.dir`), and caches hot data blocks in an off-heap **Block Cache**.
 
-        // Filter and emit volume alerts
-        KStream<String, AlertEvent> alerts = windowedVolume
-            .toStream()
-            .filter((windowedKey, totalVolume) -> totalVolume.compareTo(new BigDecimal("10000000.00")) > 0)
-            .map((windowedKey, totalVolume) -> KeyValue.pair(
-                windowedKey.key(), 
-                new AlertEvent(windowedKey.key(), totalVolume, windowedKey.window().startTime())
-            ));
+### Sizing RocksDB Off-Heap Memory in Containers
 
-        alerts.to("volume-alerts", Produced.with(Serdes.String(), new JsonSerde<>(AlertEvent.class)));
+One of the most common production surprises with Kafka Streams in Kubernetes is a pod getting `OOMKilled` by the Linux kernel even though JVM heap usage is sitting comfortably at 50%.
 
-        return alerts;
+Because RocksDB allocates its Block Cache, MemTables (write buffers), and index/filter blocks **off-heap in native C++ memory**, the JVM's `-Xmx` flag does **not** bound RocksDB. Worse, by default every RocksDB store instance (one per state store per task/partition) creates its own separate Block Cache and write buffers. If a pod hosts 32 tasks across 2 state stores, 64 independent RocksDB instances can easily consume gigabytes of native memory.
+
+The fix is implementing a custom `RocksDBConfigSetter` that shares a single bounded `LRUCache` and `WriteBufferManager` across all RocksDB instances in the JVM:
+
+```java
+package com.javahub.streams.config;
+
+import org.apache.kafka.streams.state.RocksDBConfigSetter;
+import org.rocksdb.BlockBasedTableConfig;
+import org.rocksdb.Cache;
+import org.rocksdb.LRUCache;
+import org.rocksdb.Options;
+import org.rocksdb.WriteBufferManager;
+
+import java.util.Map;
+
+public class BoundedMemoryRocksDBConfigSetter implements RocksDBConfigSetter {
+
+    // Total off-heap budget shared by ALL RocksDB instances in this JVM (e.g., 512 MiB)
+    private static final long TOTAL_OFF_HEAP_BYTES = 512L * 1024 * 1024;
+    private static final double WRITE_BUFFER_RATIO = 0.5;
+    private static final double HIGH_PRIORITY_POOL_RATIO = 0.1;
+
+    private static final Cache SHARED_CACHE =
+            new LRUCache(TOTAL_OFF_HEAP_BYTES, -1, false, HIGH_PRIORITY_POOL_RATIO);
+
+    private static final WriteBufferManager SHARED_WRITE_BUFFER_MANAGER =
+            new WriteBufferManager((long) (TOTAL_OFF_HEAP_BYTES * WRITE_BUFFER_RATIO), SHARED_CACHE);
+
+    @Override
+    public void setConfig(String storeName, Options options, Map<String, Object> configs) {
+        BlockBasedTableConfig tableConfig = (BlockBasedTableConfig) options.tableFormatConfig();
+        tableConfig.setBlockCache(SHARED_CACHE);
+        // Charge index and filter blocks against the shared cache budget too
+        tableConfig.setCacheIndexAndFilterBlocks(true);
+        tableConfig.setPinL0FilterAndIndexBlocksInCache(true);
+        tableConfig.setBlockSize(16 * 1024L);
+
+        options.setTableFormatConfig(tableConfig);
+        options.setWriteBufferManager(SHARED_WRITE_BUFFER_MANAGER);
+        options.setMaxWriteBufferNumber(3);
+        options.setWriteBufferSize(16 * 1024 * 1024L);
+    }
+
+    @Override
+    public void close(String storeName, Options options) {
+        // Shared static cache and write buffer manager live for the lifetime of the JVM
     }
 }
 ```
 
-> [!NOTE]
-> The `.grace(Duration.ofMinutes(1))` clause guarantees that if network jitter or mobile connectivity issues cause an event with an older timestamp to arrive up to 60 seconds late, Kafka Streams will reopen the window, update the aggregation, and emit the correction. Events arriving after the grace period are discarded as late records.
+Register it with `streamsProps.put(StreamsConfig.ROCKSDB_CONFIG_SETTER_CLASS_CONFIG, BoundedMemoryRocksDBConfigSetter.class)` and leave adequate container memory headroom above `-Xmx` for JVM metaspace, thread stacks, page cache, and your RocksDB off-heap budget.
 
----
+### Standby Replicas and Persistent Local Volumes
 
-### Stream-Table Joins and the Co-Partitioning Constraint
+When a stateful pod restarts or crashes, another pod takes over its tasks and must rebuild RocksDB by replaying the changelog topic. For multi-gigabyte stores, cold restoration can take several minutes. Two settings cut recovery time dramatically:
 
-One of the most powerful capabilities of Kafka Streams is joining a dynamic event stream with a state table in real time (e.g., enriching a raw `OrderPlaced` event with customer profile details):
+- **`num.standby.replicas = 1`** (or `2`): Keeps warm shadow copies of each task's RocksDB store continuously tailing the changelog on another instance. On failover, Kafka Streams assigns the active task to the warm standby, cutting recovery from minutes to seconds.
+- **Persistent volumes for `state.dir`** (such as Kubernetes `StatefulSet` PVCs): During rolling deployments, pods reattach to their existing local RocksDB files and only catch up the small delta since shutdown rather than replaying the full changelog from offset `0`.
+
+### Interactive Queries
+
+Because state already lives inside your Spring Boot service, you can expose read-only HTTP or gRPC queries directly against local RocksDB stores without copying results into a separate cache database:
 
 ```java
-KStream<String, OrderPlacedEvent> orders = builder.stream("orders");
-KTable<String, CustomerProfile> customers = builder.table("customers");
+@RestController
+@RequestMapping("/api/customers")
+public class CustomerStateController {
 
-KStream<String, EnrichedOrder> enriched = orders.join(
-    customers,
-    (order, customer) -> new EnrichedOrder(order, customer),
-    Joined.with(Serdes.String(), new JsonSerde<>(OrderPlacedEvent.class), new JsonSerde<>(CustomerProfile.class))
+    private final StreamsBuilderFactoryBean factoryBean;
+
+    public CustomerStateController(StreamsBuilderFactoryBean factoryBean) {
+        this.factoryBean = factoryBean;
+    }
+
+    @GetMapping("/{customerId}")
+    public ResponseEntity<CustomerProfile> getCustomer(@PathVariable String customerId) {
+        KafkaStreams streams = factoryBean.getKafkaStreams();
+        if (streams == null || !streams.state().isRunningOrRebalancing()) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        }
+
+        // Check whether this instance owns the partition for customerId, or forward to the owner host
+        KeyQueryMetadata metadata = streams.queryMetadataForKey(
+                "customer-profile-store", customerId, Serdes.String().serializer()
+        );
+        // In a multi-instance deployment, if metadata.activeHost() != local host, proxy the request there.
+
+        ReadOnlyKeyValueStore<String, CustomerProfile> store = streams.store(
+                StoreQueryParameters.fromNameAndType(
+                        "customer-profile-store",
+                        QueryableStoreTypes.keyValueStore()
+                )
+        );
+
+        CustomerProfile profile = store.get(customerId);
+        return profile != null ? ResponseEntity.ok(profile) : ResponseEntity.notFound().build();
+    }
+}
+```
+
+Configure `application.server = <pod-host>:<port>` so `queryMetadataForKey` returns the exact host and port of the instance holding any key.
+
+## Windowing Operations: Tumbling, Hopping, and Sliding Windows
+
+Unbounded streams never end, so aggregations like counts, sums, and averages are usually computed over bounded time slices called **windows**. Kafka Streams supports four window types, driven by **event time** (record timestamps) rather than wall-clock processing time:
+
+- **Tumbling windows:** Fixed-size, non-overlapping intervals aligned to epoch boundaries (for example, `10:00-10:05`, `10:05-10:10`). Every event belongs to exactly one window.
+- **Hopping windows:** Fixed-size, overlapping intervals that advance by a hop size smaller than the window size (for example, a 5-minute window advancing every 1 minute: `10:00-10:05`, `10:01-10:06`, `10:02-10:07`). One event falls into multiple windows.
+- **Sliding windows:** Fixed time-difference windows whose boundaries are driven by **actual record timestamps** rather than fixed clock ticks. A 2-minute sliding window captures every pair or cluster of events for the same key whose timestamps are within 2 minutes of each other, creating new windows only when records enter or leave that difference.
+- **Session windows:** Variable-length windows grouped by activity and closed after a configurable inactivity gap (useful for clickstream user sessions).
+
+```java
+// 1. Tumbling: 5-minute non-overlapping windows with 1-minute grace period (Kafka Streams 3.x factory)
+TimeWindows tumbling = TimeWindows.ofSizeAndGrace(Duration.ofMinutes(5), Duration.ofMinutes(1));
+
+// 2. Hopping: 5-minute windows advancing every 1 minute, 1-minute grace period
+TimeWindows hopping = TimeWindows.ofSizeAndGrace(Duration.ofMinutes(5), Duration.ofMinutes(1))
+        .advanceBy(Duration.ofMinutes(1));
+
+// 3. Sliding: records within 2 minutes of each other, 30-second grace period
+SlidingWindows sliding = SlidingWindows.ofTimeDifferenceAndGrace(
+        Duration.ofMinutes(2), Duration.ofSeconds(30)
 );
 ```
 
-#### The Strict Co-Partitioning Rule
-For a Stream-Table or Stream-Stream join to execute, both input topics **must be co-partitioned**:
-1. Both topics must have the **exact same number of partitions**.
-2. Both topics must use the **same partitioning strategy** (same serializer and hashing function).
+### Grace Periods and `Suppressed.untilWindowCloses`
 
-Why? Kafka Streams assigns partitions to local task instances. Task 0 processes Partition 0 of `orders` and Partition 0 of `customers`. If `customerId-99` was mapped to Partition 0 in `orders` but Partition 2 in `customers`, Task 0 would never find the customer's record in its local RocksDB store, and the join would silently produce null results!
+In distributed systems, events arrive out of order due to mobile offline queues, retries, or network jitter. The **grace period** specifies how long after a window's end timestamp Kafka Streams will still accept late records for that window (measured against the highest event timestamp observed in that task, called *stream time*). Records arriving after `windowEnd + grace` are dropped and counted in the `dropped-records-total` metric.
 
-If your topics are not co-partitioned, you must re-partition the stream using `.selectKey()` and `.repartition()`, or load the table as a `GlobalKTable`.
+By default, a windowed `KTable` emits intermediate updates on every commit or cache flush. If you only want **one final result per window** (for example, to avoid sending ten duplicate Slack or webhook alerts for the same 5-minute window), add `.suppress(Suppressed.untilWindowCloses(...))`:
 
----
+```java
+package com.javahub.streams.topology;
 
-### Fault Tolerance & RocksDB Durability: The Changelog Topic
+import org.apache.kafka.common.serialization.Serdes;
+import org.apache.kafka.common.utils.Bytes;
+import org.apache.kafka.streams.KeyValue;
+import org.apache.kafka.streams.StreamsBuilder;
+import org.apache.kafka.streams.kstream.Consumed;
+import org.apache.kafka.streams.kstream.Grouped;
+import org.apache.kafka.streams.kstream.KStream;
+import org.apache.kafka.streams.kstream.KTable;
+import org.apache.kafka.streams.kstream.Materialized;
+import org.apache.kafka.streams.kstream.Produced;
+import org.apache.kafka.streams.kstream.Suppressed;
+import org.apache.kafka.streams.kstream.TimeWindows;
+import org.apache.kafka.streams.kstream.Windowed;
+import org.apache.kafka.streams.state.WindowStore;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.support.serializer.JsonSerde;
 
-What happens when a node running Kafka Streams suffers a catastrophic hardware failure? Does the local RocksDB state vanish into the void?
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 
-No. Every state store in Kafka Streams is backed by an internal **Kafka Changelog Topic** running on the Kafka broker cluster:
+@Configuration
+public class CryptoVolumeTopology {
 
-1. **Write-Behind Changelog:** Whenever your application writes an entry to its local RocksDB store, Kafka Streams asynchronously writes that mutation to a compacted changelog topic (e.g., `applicationId-crypto-volume-store-changelog`).
-2. **Crash Recovery:** When a worker crashes, the Kafka consumer coordinator detects the failure via heartbeat timeouts and triggers a rebalance.
-3. **State Rehydration:** A standby node is assigned the orphaned partition. It spins up a fresh RocksDB instance and **replays the compacted changelog topic from offset 0** to fully reconstruct the exact local state table in memory.
-4. **Standby Replicas for Instant Failover:** In mission-critical environments, you can configure `num.standby.replicas=1`. Kafka Streams will maintain a warm standby replica of RocksDB on an alternate node, tailing the changelog in real-time. If the primary node crashes, the standby takes over with **zero seconds of rehydration lag**.
+    @Bean
+    public KStream<String, VolumeAlert> cryptoVolumeStream(StreamsBuilder builder) {
+        JsonSerde<TradeEvent> tradeSerde = new JsonSerde<>(TradeEvent.class);
+        JsonSerde<BigDecimal> decimalSerde = new JsonSerde<>(BigDecimal.class);
+        JsonSerde<VolumeAlert> alertSerde = new JsonSerde<>(VolumeAlert.class);
 
----
+        KStream<String, TradeEvent> trades = builder.stream(
+                "crypto-trades",
+                Consumed.with(Serdes.String(), tradeSerde)
+        );
 
-### Exactly-Once Semantics (EOS) in Kafka Streams
+        TimeWindows fiveMinTumbling = TimeWindows.ofSizeAndGrace(
+                Duration.ofMinutes(5),
+                Duration.ofMinutes(1)
+        );
 
-In financial ledgers and billing systems, processing an event twice (due to network retries) or dropping an event causes catastrophic financial discrepancies.
+        KTable<Windowed<String>, BigDecimal> finalWindowedVolume = trades
+                .groupBy(
+                        (key, trade) -> trade.symbol(),
+                        Grouped.with(Serdes.String(), tradeSerde)
+                )
+                .windowedBy(fiveMinTumbling)
+                .aggregate(
+                        () -> BigDecimal.ZERO,
+                        (symbol, trade, runningTotal) -> runningTotal.add(trade.notionalUsd()),
+                        Materialized.<String, BigDecimal, WindowStore<Bytes, byte[]>>as("crypto-volume-store")
+                                .withKeySerde(Serdes.String())
+                                .withValueSerde(decimalSerde)
+                )
+                // Buffer updates until stream time passes windowEnd + 1 minute grace period
+                .suppress(Suppressed.untilWindowCloses(
+                        Suppressed.BufferConfig.unbounded()
+                ));
 
-Kafka Streams provides the world's premier implementation of **Exactly-Once Processing**:
+        KStream<String, VolumeAlert> alerts = finalWindowedVolume
+                .toStream()
+                .filter((windowedKey, total) -> total.compareTo(new BigDecimal("10000000.00")) > 0)
+                .map((windowedKey, total) -> KeyValue.pair(
+                        windowedKey.key(),
+                        new VolumeAlert(
+                                windowedKey.key(),
+                                total,
+                                windowedKey.window().startTime(),
+                                windowedKey.window().endTime()
+                        )
+                ));
 
-```properties
-# Enable modern Exactly-Once Semantics (JEP / KIP-447)
-processing.guarantee=exactly_once_v2
+        alerts.to("volume-alerts", Produced.with(Serdes.String(), alertSerde));
+        return alerts;
+    }
+
+    public record TradeEvent(String tradeId, String symbol, BigDecimal notionalUsd) {}
+    public record VolumeAlert(String symbol, BigDecimal totalVolumeUsd, Instant windowStart, Instant windowEnd) {}
+}
 ```
 
-Under `exactly_once_v2`, Kafka Streams coordinates consumer offsets, RocksDB state changelog commits, and output topic message writes into a single, atomic **Two-Phase Commit (2PC) Transaction** managed by Kafka's Transaction Coordinator:
+> [!NOTE]
+> `Suppressed.untilWindowCloses` only advances when new records arrive on the partition to push *stream time* forward. On very quiet topics where a partition stops receiving events, a closed window can sit buffered until the next record arrives and advances stream time past `windowEnd + grace`. Also, in high-cardinality topologies, consider bounding the suppression buffer (`BufferConfig.maxBytes(...)`) so a traffic spike does not exhaust JVM heap.
+
+## Stream-Table Joins and Changelog Topic Compaction
+
+Joining a high-volume event stream with a materialized table is one of the most common patterns in Kafka Streams, such as enriching incoming `OrderPlaced` events with customer profiles and currency conversion rates:
+
+```java
+KStream<String, OrderPlaced> ordersByCustomer = builder
+        .stream("orders", Consumed.with(Serdes.String(), orderSerde))
+        // Re-key by customerId and explicitly repartition so it aligns with customer-profiles
+        .selectKey((orderId, order) -> order.customerId())
+        .repartition(Repartitioned.with(Serdes.String(), orderSerde)
+                .withName("orders-by-customer")
+                .withNumberOfPartitions(12));
+
+KTable<String, CustomerProfile> customers = builder.table(
+        "customer-profiles", // Also 12 partitions, keyed by customerId with StringSerializer
+        Consumed.with(Serdes.String(), customerSerde)
+);
+
+GlobalKTable<String, ExchangeRate> fxRates = builder.globalTable(
+        "fx-exchange-rates", // Partition count does not need to match
+        Consumed.with(Serdes.String(), fxSerde)
+);
+
+// Stream-KTable join (requires co-partitioning on customerId)
+KStream<String, EnrichedOrder> withCustomer = ordersByCustomer.join(
+        customers,
+        (order, customer) -> EnrichedOrder.from(order, customer),
+        Joined.with(Serdes.String(), orderSerde, customerSerde)
+);
+
+// Stream-GlobalKTable join (no co-partitioning required; foreign-key lookup via lambda)
+KStream<String, PricedOrder> pricedOrders = withCustomer.join(
+        fxRates,
+        (customerId, enriched) -> enriched.currency(), // KeyValueMapper selects lookup key
+        (enriched, rate) -> enriched.convertToUsd(rate)
+);
+```
+
+### Co-Partitioning Constraints
+
+A `KStream`-`KTable` join runs locally inside each task: Task `N` joins Partition `N` of the stream against Partition `N` of the table. That only works when both topics are **co-partitioned**:
+
+1. **Identical partition count** (if `orders` has 12 partitions and `customer-profiles` has 6, Kafka Streams refuses to start and throws a `TopologyException`).
+2. **Identical key schema and partitioner** (for example, both producers serialize `customerId` as UTF-8 `String` using Kafka's default partitioner).
+
+If keys were serialized differently (for example, one producer used raw `StringSerializer` and another used JSON-quoted `"cust-42"`), Kafka Streams cannot detect that mismatch at startup, and the join will silently miss matches because the two byte arrays hash to different partitions!
+
+### Changelog Topic Compaction
+
+Every RocksDB state store (for `KTable`s, aggregations, and windowed stores) is backed by an internal **changelog topic** named `<application.id>-<store-name>-changelog`, configured with `cleanup.policy=compact` (and for windowed stores, `cleanup.policy=compact,delete` with retention matching window retention).
+
+As your topology updates RocksDB, Kafka Streams writes each key-value mutation to the changelog topic. Kafka's background log cleaner periodically compacts older log segments, keeping only the latest value per key and dropping keys whose latest record is a tombstone. That prevents changelog topics from growing without bound and keeps state restoration fast after a node failure.
+
+## Exactly-Once Processing Semantics (EOS) in Kafka Streams
+
+Under the default `at_least_once` setting, if a stream task writes an aggregated result to the output topic and crashes before committing its input consumer offset, the restarted task re-reads the input record and emits a duplicate (and increments local state twice).
+
+Enabling **Exactly-Once Semantics** coordinates input offset commits, changelog updates, and output writes into a single atomic Kafka transaction:
+
+```properties
+# Kafka Streams 3.x (and required in 4.x; KIP-447)
+processing.guarantee=exactly_once_v2
+# Optional: tune commit interval (EOS defaults to 100ms for low latency)
+commit.interval.ms=100
+```
+
+Under `exactly_once_v2` (introduced in KIP-447 and the sole EOS implementation going forward after the legacy `exactly_once` mode was deprecated in 3.0), Kafka Streams uses a single transactional producer per `StreamThread` rather than one producer per task, greatly reducing broker memory and connection overhead.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant App as Kafka Streams Task
+    participant Task as Kafka Streams Thread
     participant Coord as Kafka Transaction Coordinator
-    participant InTopic as Input Topic (Consumer Offset)
-    participant ChangeLog as Changelog Topic (RocksDB State)
-    participant OutTopic as Output Topic
+    participant In as Input Topic Offsets
+    participant CL as Changelog Topic
+    participant Out as Output Topic
 
-    App->>Coord: Begin Transaction
-    App->>InTopic: Read Event (Offset 42)
-    App->>ChangeLog: Write State Mutation
-    App->>OutTopic: Produce Result Event
-    App->>Coord: Commit Transaction
-    Coord->>OutTopic: Write Commit Marker
-    Coord->>ChangeLog: Write Commit Marker
-    Coord->>InTopic: Commit Consumer Offset 42
-    Note over App,OutTopic: Atomic: Everything commits or everything rolls back!
+    Task->>Coord: Begin transaction
+    Task->>In: Poll record (offset 42)
+    Task->>CL: Produce state store mutation (transactional)
+    Task->>Out: Produce output record (transactional)
+    Task->>Coord: Send offsets to transaction + Commit
+    Coord->>Out: Write COMMIT marker
+    Coord->>CL: Write COMMIT marker
+    Coord->>In: Commit offset 43
+    Note over Task,Out: Atomic commit: downstream read_committed consumers see everything or nothing
 ```
 
-If an error or network partition occurs midway through processing, the transaction coordinator aborts the transaction. The uncommitted output messages are never exposed to `read_committed` downstream consumers, the changelog mutations are ignored, and the consumer offset is not advanced. The event is retried cleanly with zero duplicates and zero loss.
+### How EOS Protects Local RocksDB State on Crash
 
----
+RocksDB lives on local disk outside Kafka's transaction coordinator, so you might wonder what happens if a task updates RocksDB locally and crashes *before* the Kafka transaction commits.
 
-## Senior Engineer Interview Crucible
+Kafka Streams tracks the committed state of local disk through a `.checkpoint` file inside `state.dir`. While a task is running under `exactly_once_v2`, Kafka Streams deletes or withholds updating the checkpoint file until transactions commit cleanly (and writes checkpoints on clean shutdown or commit boundaries). If the JVM crashes mid-transaction:
 
-### How does Kafka Streams differ from Apache Flink, and when would you choose one over the other?
-**Answer:** The fundamental difference is the deployment and operational model:
-- **Kafka Streams** is an embedded Java client library. There is no cluster to install, configure, or monitor. It runs directly inside standard Spring Boot or containerized microservices, using Kafka itself for coordination and fault tolerance. It is ideal for microservice architectures where event processing logic lives alongside business domain services, and where operational simplicity is paramount.
-- **Apache Flink** is a heavyweight, standalone distributed computing framework with its own dedicated Master (JobManager) and Worker (TaskManager) clusters. Flink supports complex complex event processing (CEP), advanced out-of-order event watermarking, cross-cluster resource scheduling, and multi-source stateful joins across heterogeneous systems (Kafka, S3, HDFS, Cassandra). 
+1. The Kafka transaction coordinator aborts the uncommitted transaction, marking any uncommitted changelog and output records as aborted.
+2. Downstream consumers configured with `isolation.level=read_committed` never see the aborted output records.
+3. On restart, Kafka Streams detects the dirty local RocksDB state (missing or stale checkpoint), wipes the dirty local store, and restores cleanly from **only committed records** in the changelog topic.
 
-Choose **Kafka Streams** when your data originates in and outputs to Kafka, and you want zero infrastructure overhead. Choose **Flink** when you require massive petabyte-scale stream joins across multiple non-Kafka backends or need advanced dynamic watermarking beyond Kafka's native partition model.
+Keep the boundary of EOS clear: `exactly_once_v2` guarantees atomic read-process-write **within Kafka** (input topics, state stores/changelogs, and output topics). If a processor calls an external REST API or writes directly to PostgreSQL inside `.mapValues()`, those external side effects fall outside Kafka's transaction coordinator and still require idempotency or an outbox/sink connector.
 
-### What is the "Changelog Topic" in Kafka Streams, and how does topic compaction prevent it from running out of disk space?
-**Answer:** A Changelog Topic is an internal, system-managed Kafka topic automatically created by the Kafka Streams library to guarantee the durability and recoverability of local embedded RocksDB state stores. Every time an aggregation, join, or table mutation modifies a record in RocksDB, the update is emitted to the corresponding changelog topic.
+## Interview Questions
 
-Because an event stream might process billions of updates over months, an uncompacted changelog topic would grow indefinitely and exhaust broker disk space. To prevent this, Kafka Streams configures all internal changelog topics with `cleanup.policy=compact`. In a compacted topic, Kafka's background cleaner threads periodically scan log segments and retain only the **latest value for each message key**, discarding obsolete historic updates. When a new node boots up and needs to restore a 10GB RocksDB state store, it only needs to replay the compacted snapshots, allowing state reconstruction to finish in seconds rather than days.
+### Why can a Kafka Streams pod get OOMKilled in Kubernetes even when JVM heap usage stays well below `-Xmx`?
 
-### Why does a Stream-Table join require co-partitioning, and what happens if the input topics have different partition counts?
-**Answer:** A Stream-Table join in Kafka Streams is executed locally on each worker task. Task 0 receives Partition 0 of the stream topic and Partition 0 of the table topic. The join algorithm looks up the incoming stream record's key in Task 0's local RocksDB instance (which stores Partition 0 of the table).
+RocksDB is a native C++ library loaded via JNI, so its Block Cache, MemTables (write buffers), and index/filter blocks live **off-heap** outside `-Xmx`. By default, every state store on every Stream Task allocates its own RocksDB cache and write buffers independently. When a pod owns dozens of partitions across multiple state stores, native off-heap memory can easily exceed the container's cgroup memory limit. Implementing a custom `RocksDBConfigSetter` that shares a single bounded `LRUCache` and `WriteBufferManager` across all stores caps native memory predictably.
 
-If the input topics have different partition counts (e.g., `orders` has 12 partitions and `customers` has 6 partitions), Kafka's default `MurmurHash2` partitioner will hash the identical key to different partition IDs across the two topics. As a result, Task 0 may receive an order for `user-123`, but the corresponding customer profile for `user-123` was routed to Partition 3 (assigned to Task 3). Task 0 searches its local RocksDB store, finds nothing, and the join produces a null or missing record. 
+### What is the difference between a Hopping Window and a Sliding Window in Kafka Streams?
 
-If Kafka Streams detects at startup that joined topics have different partition counts, it throws a fatal `TopologyException` preventing the application from booting until the topics are aligned or a re-partitioning step is introduced.
+A **Hopping Window** has fixed size and fixed advance intervals aligned to epoch time (for example, 5-minute windows starting every 1 minute: `10:00-10:05`, `10:01-10:06`), regardless of when events actually arrive. A **Sliding Window** is defined by a maximum time difference between record timestamps for the same key. Window boundaries are anchored to actual event timestamps, and a new window is created only when a record enters or drops out of the time difference, making sliding windows better suited for continuous rolling metrics and anomaly detection without arbitrary clock-boundary effects.
 
-### How does `processing.guarantee=exactly_once_v2` prevent duplicate state updates in RocksDB if a crash occurs before consumer offsets are committed?
-**Answer:** Under `exactly_once_v2`, Kafka Streams utilizes transactional producers and transactional consumer offset commits. 
+### Why do `KStream`-`KTable` joins require co-partitioning, and how do you work around topics that are not co-partitioned?
 
-However, RocksDB is a local, embedded C++ database running outside the Kafka broker. If a worker updates RocksDB on local disk, writes to the output topic, and then crashes before committing consumer offsets, a naive recovery would re-read the input event, incrementing the local RocksDB counter a second time!
+Each Stream Task joins Partition `N` of the stream with Partition `N` of the table using its local RocksDB store. If the two topics have different partition counts, the same key hashes to different partition numbers across the topics, so the task would miss matching rows (and Kafka Streams throws a `TopologyException` at startup). You resolve this either by re-keying and explicitly repartitioning the stream with `.selectKey(...).repartition(...)` to match the table's partition count and key serializer, or by loading the table as a `GlobalKTable` if the dataset is small enough to replicate across every instance.
 
-Kafka Streams prevents this by decoupling state updates from local durability:
-1. When running under EOS, state mutations are buffered in memory and in the transactional changelog topic.
-2. If a task crashes or a rebalance occurs before the transaction commits, **the local RocksDB state store is discarded or rolled back** to the last successfully committed checkpoint offset.
-3. During recovery, the new task restores its state strictly from the **committed** records in the changelog topic. Uncommitted changelog writes (marked by an abort marker) are skipped by the recovery reader, ensuring that RocksDB never reflects phantom or duplicated mutations.
+### How does `processing.guarantee=exactly_once_v2` guarantee consistency across input offsets, output topics, and local RocksDB stores?
+
+Under `exactly_once_v2`, each `StreamThread` runs a Kafka transactional producer that bundles output records, state-store changelog mutations, and input consumer offsets into a single atomic transaction coordinated by Kafka's Transaction Coordinator. Downstream consumers set `isolation.level=read_committed` so aborted output records are invisible. Because RocksDB is local and outside Kafka's coordinator, if a crash occurs before commit, Kafka Streams detects the uncommitted local state via its checkpoint file, discards the dirty local store, and restores exclusively from committed changelog records before reprocessing the uncommitted input offset.

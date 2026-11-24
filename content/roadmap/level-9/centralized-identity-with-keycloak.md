@@ -1,194 +1,184 @@
-# Centralized Identity with Keycloak
-
-In early microservice projects, developers often build custom user management: an `users` table, BCrypt password hashing, custom password reset endpoints, and email verification scripts.
-
-As an organization grows from two services to twenty, this DIY approach becomes a security liability:
-- Every microservice duplicates authentication logic and password storage.
-- Implementing Single Sign-On (SSO) across web applications, mobile apps, and third-party portals becomes an expensive, fragile engineering effort.
-- Adding enterprise requirements—Multi-Factor Authentication (MFA), WebAuthn/Passkeys, Corporate LDAP/Active Directory synchronization, and SOC2/HIPAA compliance audits—can consume quarters of development time.
-
-The industry-standard solution is **Centralized Identity and Access Management (IAM)**. In the open-source and Java ecosystem, the undisputed leader is **Keycloak**. Maintained by Red Hat and widely deployed across Fortune 500 enterprises, Keycloak provides turnkey SSO, social login, identity brokering, user federation, and comprehensive OpenID Connect (OIDC) / SAML 2.0 support.
-
-In this guide, we will explore Keycloak's core domain architecture, production deployment considerations, and modern integration with Spring Boot 3 using standard OIDC protocols and the Keycloak Admin Client.
-
+---
+title: "Centralized Identity with Keycloak"
+description: "How Keycloak structures realms, clients, roles, and groups, integrates SSO with Spring Boot 3, supports OAuth2 Token Exchange and custom protocol mappers, and secures internal service traffic with mTLS."
+category: "level-9"
+date: "2026-10-29T10:00:00Z"
 ---
 
-## The Keycloak Domain Architecture
+When a team builds its first microservice, adding a `users` table, a BCrypt encoder, and a `/login` endpoint feels fast. By the time the system grows to a dozen services, a web portal, a mobile app, and enterprise B2B customers asking for SAML SSO, MFA, and Active Directory sync, maintaining custom identity code becomes a constant drag and a security risk.
 
-Before writing code, you must understand Keycloak's organizational hierarchy:
+**Keycloak** is the most widely used open-source Identity and Access Management (IAM) server in the Java ecosystem. Built on Quarkus, it implements OpenID Connect (OIDC), OAuth 2.0, and SAML 2.0 out of the box, letting your Spring Boot services stay focused on business logic while delegating authentication, SSO, federation, and token issuance to a central server.
+
+## Keycloak Architecture: Realms, Clients, Roles, and Groups
+
+Keycloak organizes identity metadata into a clear hierarchy. Getting these boundaries right early prevents messy migrations later.
 
 ```mermaid
 flowchart TD
-    Server["Keycloak Server Instance"] --> RealmMaster["Master Realm (Admin Console & Cluster Management)"]
-    Server --> RealmApp["Production Realm: 'fintech-corp' (Isolated Tenant)"]
+    Server["Keycloak Server (Quarkus + PostgreSQL)"] --> Master["master Realm (Keycloak Admin Only)"]
+    Server --> AppRealm["Application Realm: fintech-corp"]
 
-    subgraph RealmDetails["Inside Realm: 'fintech-corp'"]
+    subgraph InsideRealm["Inside Realm: fintech-corp"]
         direction TB
-        Users["Users & Groups (Alice, Bob, BillingTeam)"]
-        Roles["Realm Roles: ADMIN, USER, AUDITOR"]
-        
+        Groups["Groups (Hierarchical)<br/>/Engineering/Backend<br/>/Finance/Auditors"]
+        Users["Users (Alice, Bob)"]
+        RealmRoles["Realm Roles<br/>ADMIN, AUDITOR"]
+
         subgraph Clients["Registered Clients"]
-            SPA["Public Client: Web Portal (React/Vite + PKCE)"]
-            Mobile["Public Client: Mobile App (iOS/Android + PKCE)"]
-            Service["Confidential Client: Payment Service (Client Credentials)"]
+            SPA["Public Client: web-portal (Auth Code + PKCE)"]
+            BFF["Confidential Client: admin-webapp (SSO Login)"]
+            Svc["Confidential Client: order-service (Client Credentials & Client Roles)"]
         end
 
-        Federation["User Federation: Corporate Active Directory / LDAP"]
-        IdP["Identity Providers: Google, GitHub, SAML 2.0"]
+        Federation["User Federation (LDAP / Active Directory)"]
+        Broker["Identity Brokering (Google, GitHub, Okta SAML)"]
     end
 
-    RealmApp --> RealmDetails
+    AppRealm --> InsideRealm
+    Users --> Groups
+    Groups --> RealmRoles
 ```
 
-### Core Concepts
+### Realms
 
-- **Realms:** A realm is an isolated tenant. It contains its own users, roles, credentials, and client applications. The `master` realm is reserved strictly for Keycloak system administrators. You should always create a custom realm (e.g., `enterprise` or `saas-tenant-a`) for your application workload.
-- **Clients:** A client is an application or service requesting identity tokens from Keycloak:
-  - **Public Clients:** Applications that run on untrusted end-user devices where client secrets cannot be securely stored (e.g., React Single Page Applications, mobile applications). These must authenticate using the **Authorization Code Flow with PKCE**.
-  - **Confidential Clients:** Backend applications running on private servers that can securely hold a client secret (e.g., Spring Boot microservices calling other microservices via the **Client Credentials Grant**).
-- **Client Scopes:** Common sets of claims (e.g., `email`, `profile`, `roles`) that clients can request to be included in issued ID and Access tokens.
-- **User Federation:** Instead of migrating your company's 50,000 employees into Keycloak's database, Keycloak can proxy and authenticate users directly against an existing corporate **LDAP** or **Microsoft Active Directory** server.
-- **Identity Brokering:** Allows users to log in using external social providers (Google, GitHub) or enterprise SAML/OIDC federations (Okta, Azure AD).
+A **Realm** is a fully isolated security domain with its own users, credentials, roles, groups, clients, themes, and signing keys.
+- The built-in `master` realm is reserved strictly for administering Keycloak itself. Never create application users or register business apps in `master`.
+- Create a dedicated realm for your application (for example `fintech-corp`), or separate realms per isolated B2B tenant if your SaaS product needs hard tenant separation (note that Keycloak works well with dozens to a few hundred realms; if you have tens of thousands of tenants, model tenants inside a single realm using Keycloak Organizations or attributes rather than creating 10,000 realms).
 
----
+### Clients
 
-## Production Deployment Topology
+A **Client** represents an application or service that requests tokens or relies on Keycloak to authenticate users:
+- **Public Clients** (React/Angular SPAs, mobile apps): Client authentication is disabled because no secret can be kept safe on an end-user device. Always require **Authorization Code Flow with PKCE**.
+- **Confidential Clients** (Spring Boot web apps, BFFs, backend microservices): Client authentication is enabled using a client secret, signed JWT (`private_key_jwt`), or X.509 certificate. Enabling **Service accounts roles** lets the client obtain tokens via the Client Credentials grant for machine-to-machine calls.
+- **Client Scopes**: Reusable bundles of protocol mappers and role mappings (such as `email`, `profile`, or a custom `tenant-context` scope) that can be attached to multiple clients.
 
-Keycloak is built on **Quarkus** and uses **Infinispan** for high-performance distributed caching and cluster session replication:
+### Roles (Realm, Client, and Composite)
 
-```mermaid
-flowchart TD
-    Internet["Public Traffic / API Clients"] --> Ingress["Kubernetes Ingress / Cloud Load Balancer (Edge TLS Termination)"]
+Keycloak supports three role types:
+- **Realm Roles**: Global roles shared across the entire realm (for example `PLATFORM_ADMIN` or `AUDITOR`). They appear in the JWT under `realm_access.roles`.
+- **Client Roles**: Roles scoped to a specific client/service (for example `invoice:approve` on `billing-service`). They appear under `resource_access.<client-id>.roles`. Client roles scale better in microservices because teams can define permissions for their own API without polluting a global namespace.
+- **Composite Roles**: A role that bundles several other realm or client roles together (for example, granting `FINANCE_MANAGER` automatically grants `billing-service/invoice:read` and `billing-service/invoice:approve`).
 
-    subgraph K8sCluster["Kubernetes Pod Cluster"]
-        direction TB
-        KC1["Keycloak Pod 1 (Quarkus Engine)"]
-        KC2["Keycloak Pod 2 (Quarkus Engine)"]
-        Infinispan{{"Infinispan Distributed Cache: Session & Brute-Force Replication"}}
-        
-        KC1 <--> Infinispan
-        KC2 <--> Infinispan
-    end
+### Groups
 
-    Ingress -->|"HTTP + Forwarded Headers (X-Forwarded-Proto)"| KC1
-    Ingress -->|"HTTP + Forwarded Headers (X-Forwarded-Proto)"| KC2
+**Groups** organize users into a hierarchy (such as `/Finance/NorthAmerica` or `/Engineering/SRE`). Instead of assigning ten roles manually to every new employee, attach roles and shared attributes (like `cost_center` or `department`) to a Group, and add users to the Group. Users inherit the roles and attributes of their group and all parent groups automatically.
 
-    subgraph DataStorage["Persistent Database Tier"]
-        DB[(PostgreSQL 16 Primary)]
-        Replica[(PostgreSQL Read Replica)]
-        DB -.-> Replica
-    end
+### Production Deployment Basics
 
-    KC1 --> DB
-    KC2 --> DB
-```
-
-### Key Production Configuration Directives
-
-When deploying Keycloak in Docker or Kubernetes behind an Nginx, Envoy, or AWS ALB reverse proxy:
-
-1. **Proxy Headers (`KC_PROXY_HEADERS=xforwarded`):** Keycloak must know it is operating behind a TLS-terminating reverse proxy. Without this, Keycloak will generate internal redirect URIs starting with `http://` instead of `https://`, triggering browser mixed-content and redirect errors.
-2. **Database Persistence (`KC_DB=postgres`):** Never run Keycloak in production with an in-memory or embedded H2 database. Connect it to a managed, highly available PostgreSQL or MySQL cluster.
-3. **Optimized Build (`KC_RUN_MODE=production`):** Pre-build the container using `kc.sh build` to freeze extensions, database drivers, and features for sub-second startup times.
-
-### Docker Compose Reference Architecture
+In production, run Keycloak against PostgreSQL (never the default embedded H2 database), pre-build the image with `kc.sh build`, and configure proxy headers when sitting behind Kubernetes Ingress, Nginx, or an AWS ALB:
 
 ```yaml
-version: '3.8'
-
 services:
   keycloak-db:
     image: postgres:16-alpine
-    container_name: keycloak-postgres
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak_user
-      POSTGRES_PASSWORD: SecretDatabasePassword123!
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keycloak_user -d keycloak"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   keycloak:
-    image: quay.io/keycloak/keycloak:24.0.5
-    container_name: keycloak-server
+    image: quay.io/keycloak/keycloak:26.0
     command: start --optimized
     environment:
       KC_DB: postgres
       KC_DB_URL_HOST: keycloak-db
       KC_DB_URL_DATABASE: keycloak
       KC_DB_USERNAME: keycloak_user
-      KC_DB_PASSWORD: SecretDatabasePassword123!
-      KC_HOSTNAME: auth.company.com
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      KC_HOSTNAME: https://auth.company.com
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: ProductionAdminPassword999!
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
     ports:
       - "8080:8080"
     depends_on:
-      keycloak-db:
-        condition: service_healthy
+      - keycloak-db
 
 volumes:
   postgres_data:
 ```
 
----
+In a multi-pod Kubernetes deployment, Keycloak uses embedded **Infinispan** (typically with `DNS_PING` or `JDBC_PING`) to replicate user sessions, offline sessions, and brute-force counters across nodes so losing a pod does not log users out.
 
-## Spring Boot 3 Integration: The Modern Standard
+## Single Sign-On (SSO) Integration with Spring Boot
 
-### Why the Legacy `keycloak-spring-boot-starter` is Dead
+Years ago, developers integrated Keycloak using Red Hat's proprietary `keycloak-spring-boot-starter`. That adapter was officially deprecated and archived. Today, the standard approach is to use Spring Security's native OAuth2/OIDC starters:
+- `spring-boot-starter-oauth2-client` for server-side web apps and BFFs that orchestrate browser SSO login and logout.
+- `spring-boot-starter-oauth2-resource-server` for stateless REST APIs that validate incoming bearer tokens.
 
-Years ago, Red Hat provided a proprietary library named `keycloak-spring-boot-starter`. 
+Because both rely strictly on standard OIDC discovery, your Java code has zero vendor lock-in to Keycloak.
 
-**Red Hat officially deprecated and archived this starter.** 
+### Configuring Spring Boot 3 for Keycloak SSO and Single Logout
 
-Maintaining a custom security adapter that duplicated Spring Security's rapid evolution proved redundant. Today, the official and recommended architectural pattern is to use **standard, framework-native Spring Security OAuth2 modules**:
-- `spring-boot-starter-oauth2-resource-server` (for REST APIs verifying bearer tokens).
-- `spring-boot-starter-oauth2-client` (for web applications orchestrating the authorization code redirect flow).
-
-By sticking to standard OIDC specifications, your application remains completely decoupled from Keycloak. If your organization migrates to Okta or Entra ID in five years, you won't need to rewrite a single line of security code.
-
----
-
-## Managing Keycloak Programmatically: The Admin Client
-
-While administrators configure Keycloak via the web console, enterprise Java backends often need to automate identity operations:
-- Creating user accounts programmatically upon SaaS tenant registration.
-- Assigning business roles dynamically based on corporate tier.
-- Triggering password reset or email verification flows via API.
-
-This is accomplished using the official **`keycloak-admin-client`**.
-
-### Maven Dependency
-
-```xml
-<dependency>
-    <groupId>org.keycloak</groupId>
-    <artifactId>keycloak-admin-client</artifactId>
-    <version>24.0.5</version>
-</dependency>
-```
-
-### Step 1: Secure Service Account Configuration
-
-In Keycloak, create a confidential client (e.g., `admin-service-client`) in the target realm and enable **Service Accounts Roles**. Grant this client the `manage-users` role.
-
-In `application.yml`:
+Add `spring-boot-starter-oauth2-client` and configure your Keycloak client in `application.yml`:
 
 ```yaml
-keycloak:
-  server-url: https://auth.company.com
-  realm: fintech-corp
-  client-id: admin-service-client
-  client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET}
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: admin-webapp
+            client-secret: ${KEYCLOAK_WEBAPP_SECRET}
+            scope: openid,profile,email
+            authorization-grant-type: authorization_code
+        provider:
+          keycloak:
+            issuer-uri: https://auth.company.com/realms/fintech-corp
+            user-name-attribute: preferred_username
 ```
 
-### Step 2: The Keycloak Client Spring Bean
+Then enable `.oauth2Login(...)` and wire `OidcClientInitiatedLogoutSuccessHandler`. That logout handler is an easy detail to miss: without it, clicking "Log out" destroys the local Spring session cookie (`JSESSIONID`) while leaving the user's Keycloak SSO session alive, so the next page visit silently logs them straight back in!
+
+```java
+package com.javahub.sso.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.oauth2.client.oidc.web.logout.OidcClientInitiatedLogoutSuccessHandler;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
+
+@Configuration
+public class SsoSecurityConfig {
+
+    @Bean
+    public SecurityFilterChain ssoFilterChain(
+            HttpSecurity http,
+            ClientRegistrationRepository clientRegistrationRepository
+    ) throws Exception {
+        return http
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/actuator/health", "/public/**").permitAll()
+                .anyRequest().authenticated()
+            )
+            .oauth2Login(Customizer.withDefaults())
+            .logout(logout -> logout
+                .logoutSuccessHandler(oidcLogoutSuccessHandler(clientRegistrationRepository))
+            )
+            .build();
+    }
+
+    private LogoutSuccessHandler oidcLogoutSuccessHandler(ClientRegistrationRepository repo) {
+        // Redirects the browser to Keycloak's end_session_endpoint to terminate the central SSO session
+        OidcClientInitiatedLogoutSuccessHandler handler =
+                new OidcClientInitiatedLogoutSuccessHandler(repo);
+        handler.setPostLogoutRedirectUri("{baseUrl}/public/signed-out");
+        return handler;
+    }
+}
+```
+
+### Automating User Provisioning with `keycloak-admin-client`
+
+For SaaS onboarding workflows where your backend creates users or assigns roles programmatically, create a confidential client with **Service accounts roles** enabled, grant it only the `manage-users` role from `realm-management`, and authenticate via Client Credentials:
 
 ```java
 package com.javahub.keycloak.config;
@@ -203,20 +193,13 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class KeycloakAdminConfig {
 
-    @Value("${keycloak.server-url}")
-    private String serverUrl;
-
-    @Value("${keycloak.realm}")
-    private String realm;
-
-    @Value("${keycloak.client-id}")
-    private String clientId;
-
-    @Value("${keycloak.client-secret}")
-    private String clientSecret;
-
-    @Bean
-    public Keycloak keycloakAdminClient() {
+    @Bean(destroyMethod = "close")
+    public Keycloak keycloakAdminClient(
+            @Value("${keycloak.server-url}") String serverUrl,
+            @Value("${keycloak.realm}") String realm,
+            @Value("${keycloak.client-id}") String clientId,
+            @Value("${keycloak.client-secret}") String clientSecret
+    ) {
         return KeycloakBuilder.builder()
                 .serverUrl(serverUrl)
                 .realm(realm)
@@ -228,217 +211,241 @@ public class KeycloakAdminConfig {
 }
 ```
 
-### Step 3: Enterprise User Provisioning Service
+## Token Exchange and Custom Protocol Mappers
 
-Here is a complete, production-ready service demonstrating atomic user registration, credential provisioning, and role assignment:
+### Custom Protocol Mappers
+
+By default, Keycloak includes standard OIDC claims (`sub`, `preferred_username`, `email`, `realm_access`). Most enterprise APIs also need domain claims such as `tenant_id`, `department`, group memberships, or a specific `aud` value so downstream services do not have to query a user database on every request.
+
+You add these in Keycloak using **Protocol Mappers** attached to a Client or Client Scope:
+- **User Attribute Mapper**: Reads a user or group attribute (e.g., `tenantId`) and writes it to `tenant_id` in the Access Token and/or ID Token.
+- **Group Membership Mapper**: Emits the user's group paths into a `groups` claim (for example `["/Finance/NorthAmerica"]`).
+- **Audience Mapper**: Adds a target resource server's client ID (such as `billing-service`) into the token's `aud` array so that the downstream service's audience check succeeds.
+
+In your Spring Boot resource server, read mapped claims straight off the verified `Jwt`:
 
 ```java
-package com.javahub.keycloak.service;
-
-import jakarta.ws.rs.core.Response;
-import org.keycloak.admin.client.CreatedResponseUtil;
-import org.keycloak.admin.client.Keycloak;
-import org.keycloak.admin.client.resource.RealmResource;
-import org.keycloak.admin.client.resource.UserResource;
-import org.keycloak.admin.client.resource.UsersResource;
-import org.keycloak.representations.idm.CredentialRepresentation;
-import org.keycloak.representations.idm.RoleRepresentation;
-import org.keycloak.representations.idm.UserRepresentation;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-
-import java.util.Collections;
-import java.util.List;
-
-@Service
-public class KeycloakUserProvisioningService {
-
-    private static final Logger log = LoggerFactory.getLogger(KeycloakUserProvisioningService.class);
-
-    private final Keycloak keycloak;
-    private final String targetRealm;
-
-    public KeycloakUserProvisioningService(Keycloak keycloak,
-                                           @Value("${keycloak.realm}") String targetRealm) {
-        this.keycloak = keycloak;
-        this.targetRealm = targetRealm;
-    }
-
-    public String provisionNewEnterpriseUser(String username, String email, String temporaryPassword, String roleName) {
-        RealmResource realmResource = keycloak.realm(targetRealm);
-        UsersResource usersResource = realmResource.users();
-
-        // 1. Construct User Representation
-        UserRepresentation user = new UserRepresentation();
-        user.setUsername(username);
-        user.setEmail(email);
-        user.setEnabled(true);
-        user.setEmailVerified(false);
-        // Force user to change their temporary password on first login
-        user.setRequiredActions(List.of("UPDATE_PASSWORD", "VERIFY_EMAIL"));
-
-        // 2. Execute User Creation API Call
-        try (Response response = usersResource.create(user)) {
-            if (response.getStatus() == Response.Status.CONFLICT.getStatusCode()) {
-                throw new IllegalStateException("User already exists with username: " + username);
-            }
-            if (response.getStatus() != Response.Status.CREATED.getStatusCode()) {
-                throw new RuntimeException("Failed to create user in Keycloak. HTTP Status: " + response.getStatus());
-            }
-
-            // Extract the Keycloak internal UUID generated for the user
-            String userId = CreatedResponseUtil.getCreatedId(response);
-            log.info("Successfully registered user in Keycloak with ID: {}", userId);
-
-            UserResource userResource = usersResource.get(userId);
-
-            // 3. Set Temporary Password
-            CredentialRepresentation passwordCred = new CredentialRepresentation();
-            passwordCred.setType(CredentialRepresentation.PASSWORD);
-            passwordCred.setValue(temporaryPassword);
-            passwordCred.setTemporary(true);
-            userResource.resetPassword(passwordCred);
-
-            // 4. Assign Target Realm Role
-            RoleRepresentation realmRole = realmResource.roles().get(roleName).toRepresentation();
-            userResource.roles().realmLevel().add(Collections.singletonList(realmRole));
-            log.info("Assigned role '{}' to user ID: {}", roleName, userId);
-
-            return userId;
-        }
-    }
-
-    public void triggerPasswordResetEmail(String userId) {
-        RealmResource realmResource = keycloak.realm(targetRealm);
-        realmResource.users().get(userId).executeActionsEmail(List.of("UPDATE_PASSWORD"));
-        log.info("Dispatched password reset email for user ID: {}", userId);
-    }
+@GetMapping("/api/v1/tenant-dashboard")
+public ResponseEntity<DashboardData> getDashboard(@AuthenticationPrincipal Jwt jwt) {
+    String tenantId = jwt.getClaimAsString("tenant_id");
+    List<String> groups = jwt.getClaimAsStringList("groups");
+    return ResponseEntity.ok(dashboardService.loadForTenant(tenantId, groups));
 }
 ```
 
----
+Keep custom claims lean. Dumping dozens of nested attributes or hundreds of group names into every JWT bloats HTTP headers and can break reverse proxies with 8 KB header limits.
 
-## Securing Machine-to-Machine (M2M) Calls with Client Credentials
+### OAuth 2.0 Token Exchange (RFC 8693)
 
-When Service A (Order Service) needs to call Service B (Payment Service) in a Kubernetes cluster without a human user in the loop, how do they authenticate?
+Consider a realistic call chain: a user calls `Order Service` with an access token whose audience is `order-service`. To finalize checkout, `Order Service` needs to call `Billing Service` on behalf of that same user.
 
-They use the **OAuth 2.0 Client Credentials Grant**:
+Blindly forwarding the original access token to `Billing Service` has two serious drawbacks:
+1. If `Billing Service` enforces strict `aud` validation (as it should), it rejects a token minted for `order-service`.
+2. If you loosen `aud` so every token works everywhere, any single compromised service can replay a user's token across your entire backend (the classic confused deputy problem).
+
+**OAuth 2.0 Token Exchange (RFC 8693)** solves this cleanly. `Order Service` authenticates to Keycloak with its own client credentials, presents the incoming user token as `subject_token`, and requests a new, down-scoped, short-lived access token whose `aud` is specifically `billing-service`. The new token preserves the original user's `sub` (and optionally records the acting service) without giving `Order Service` a blanket pass to unrelated APIs.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant OrderSvc as Order Service (Confidential Client)
-    participant Keycloak as Keycloak Authorization Server
-    participant PaymentSvc as Payment Service (Resource Server)
+    participant User as End User (Web App)
+    participant OrderSvc as Order Service
+    participant KC as Keycloak Token Endpoint
+    participant BillingSvc as Billing Service
 
-    OrderSvc->>Keycloak: POST /realms/fintech-corp/protocol/openid-connect/token<br/>(grant_type=client_credentials, client_id, client_secret)
-    Keycloak-->>OrderSvc: 200 OK: {"access_token": "eyJhbG...", "expires_in": 300}
-    
-    OrderSvc->>PaymentSvc: POST /api/v1/payments (Authorization: Bearer eyJhbG...)
-    Note over PaymentSvc: Verifies signature against Keycloak JWKS endpoint
-    PaymentSvc-->>OrderSvc: 200 OK: Payment Processed
+    User->>OrderSvc: POST /api/v1/orders (Bearer Token A: aud=order-service)
+    OrderSvc->>KC: POST /token (grant_type=token-exchange, subject_token=Token A, audience=billing-service)
+    KC->>KC: Verify Order Service exchange policy & Token A
+    KC-->>OrderSvc: Returns Token B (sub=user, aud=billing-service, limited scope)
+    OrderSvc->>BillingSvc: POST /api/v1/charges (Bearer Token B)
+    BillingSvc->>BillingSvc: Validate signature & aud=billing-service
+    BillingSvc-->>OrderSvc: 201 Created
 ```
 
-In Spring Boot 3, configure an `OAuth2AuthorizedClientManager` to automatically fetch, cache, and refresh the M2M access token before invoking downstream REST APIs via `RestClient` or `WebClient`.
-
----
-
-## Customizing Tokens with Keycloak Protocol Mappers
-
-By default, Keycloak issues JWTs containing standard claims (`sub`, `iss`, `exp`, `preferred_username`). However, enterprise microservices frequently require business-specific metadata in the token to enforce authorization without querying a database:
-- `tenant_id`
-- `cost_center`
-- `department`
-- `tier` (FREE vs ENTERPRISE)
-
-### Adding Claims via the Admin Console
-
-1. In Keycloak Admin, navigate to **Client Scopes** or your specific **Client**.
-2. Select **Mappers** -> **Add Mapper** -> **By Configuration**.
-3. Choose **User Attribute** mapper.
-4. Set:
-   - **Name:** `Tenant ID Mapper`
-   - **User Attribute:** `tenantId`
-   - **Token Claim Name:** `tenant_id`
-   - **Claim JSON Type:** `String`
-   - **Add to ID token:** `true`
-   - **Add to access token:** `true`
-   - **Add to userinfo:** `true`
-
-Now, whenever a user authenticates, their issued JWT automatically contains:
-
-```json
-{
-  "sub": "usr-12345",
-  "preferred_username": "rshankar",
-  "tenant_id": "tenant-enterprise-omega",
-  "department": "InfrastructureEngineering"
-}
-```
-
-Your Spring Boot Resource Server can read this claim directly from the `Jwt` object in zero milliseconds:
+Here is how `Order Service` performs that exchange with Spring Boot's `RestClient`:
 
 ```java
-@GetMapping("/tenant-dashboard")
-public ResponseEntity<DashboardData> getDashboard(@AuthenticationPrincipal Jwt jwt) {
-    String tenantId = jwt.getClaimAsString("tenant_id");
-    return ResponseEntity.ok(dashboardService.getForTenant(tenantId));
+package com.javahub.orders.security;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestClient;
+
+import java.util.Map;
+
+@Service
+public class KeycloakTokenExchangeClient {
+
+    private static final String TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange";
+    private static final String ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
+
+    private final RestClient restClient;
+    private final String tokenUri;
+    private final String clientId;
+    private final String clientSecret;
+
+    public KeycloakTokenExchangeClient(
+            RestClient.Builder restClientBuilder,
+            @Value("${keycloak.token-uri}") String tokenUri,
+            @Value("${keycloak.client-id}") String clientId,
+            @Value("${keycloak.client-secret}") String clientSecret
+    ) {
+        this.restClient = restClientBuilder.build();
+        this.tokenUri = tokenUri;
+        this.clientId = clientId;
+        this.clientSecret = clientSecret;
+    }
+
+    public String exchangeForAudience(String incomingUserToken, String targetAudience, String scope) {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type", TOKEN_EXCHANGE_GRANT);
+        form.add("client_id", clientId);
+        form.add("client_secret", clientSecret);
+        form.add("subject_token", incomingUserToken);
+        form.add("subject_token_type", ACCESS_TOKEN_TYPE);
+        form.add("requested_token_type", ACCESS_TOKEN_TYPE);
+        form.add("audience", targetAudience);
+        form.add("scope", scope);
+
+        Map<?, ?> response = restClient.post()
+                .uri(tokenUri)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .body(form)
+                .retrieve()
+                .body(Map.class);
+
+        if (response == null || response.get("access_token") == null) {
+            throw new IllegalStateException("Keycloak token exchange returned no access_token");
+        }
+        return response.get("access_token").toString();
+    }
 }
 ```
 
----
+> [!NOTE]
+> Keycloak supports Standard Token Exchange (v2, stabilized in Keycloak 26.2+) as well as its earlier preview token-exchange feature. Check your Keycloak version's documentation for the exact feature flag and client permission toggle required to enable standard token exchange on your realm.
 
-## Senior Engineer Interview Crucible
+## mTLS Zero-Trust Internal Service Communication
 
-### Why did Red Hat deprecate the proprietary `keycloak-spring-boot-starter`, and what is the recommended architecture for Spring Boot 3 applications today?
+In a zero-trust architecture, running inside a private VPC or Kubernetes cluster does not make a network trustworthy. If an attacker gains code execution on one compromised pod, plain HTTP internal traffic lets them sniff payloads or replay stolen bearer tokens from another workload.
 
-Red Hat deprecated the proprietary Keycloak Spring Boot starter because maintaining a vendor-specific adapter that tightly coupled Keycloak's release cycle with Spring Boot's internal security architecture was inefficient and brittle. As the Spring team released major breaking changes across Spring Security 5 and 6, the Keycloak starter constantly lagged behind.
+**Mutual TLS (mTLS)** establishes strong cryptographic identity for **both** sides of a connection at the transport layer. In standard one-way TLS (like regular HTTPS), only the server presents an X.509 certificate so the client knows who it is talking to. In mTLS, the server also requires the client to present an X.509 certificate signed by a trusted internal Certificate Authority (CA) and prove possession of the matching private key during the TLS handshake.
 
-The modern standard is to use **framework-native, specification-compliant Spring Security**:
-- `spring-boot-starter-oauth2-resource-server` for REST APIs.
-- `spring-boot-starter-oauth2-client` for interactive web applications.
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client as Order Service (mTLS Client)
+    participant Server as Billing Service (mTLS Server)
 
-Because Keycloak strictly adheres to OpenID Connect (OIDC) and OAuth 2.1 specifications, Spring Security can auto-configure its entire token verification pipeline simply by setting the `issuer-uri` property. This decouples the application from Keycloak, allowing seamless migration to any OIDC-compliant Identity Provider (such as Okta, Auth0, or Ping Identity) without changing application code.
+    Client->>Server: TLS ClientHello
+    Server-->>Client: ServerHello + Server X.509 Cert + CertificateRequest
+    Client->>Client: Verify Server Cert against Internal CA Truststore
+    Client-->>Server: Client X.509 Cert + CertificateVerify (signed with Client Private Key)
+    Server->>Server: Verify Client Cert against Internal CA Truststore
+    Note over Client,Server: Mutual identity verified and encrypted TLS 1.3 channel established
+    Client->>Server: POST /api/v1/charges (with Bearer JWT)
+```
 
----
+If a rogue pod without a valid certificate signed by your internal CA tries to connect, the TLS handshake fails before a single HTTP byte reaches Spring Security or your controller.
 
-### Explain the purpose of PKCE (Proof Key for Code Exchange) in Authorization Code flows. Why is it essential for Public Clients like Single Page Apps?
+### Configuring Application-Level mTLS with Spring Boot 3.1+ SSL Bundles
 
-In the standard OAuth 2.0 Authorization Code flow, the client exchanges an authorization code for an access token by sending the code along with a confidential `client_secret`. 
+Spring Boot 3.1 introduced **SSL Bundles** (`spring.ssl.bundle`), which unify PEM and JKS keystore/truststore configuration across embedded servers (Tomcat/Netty) and HTTP clients (`RestClient`, `WebClient`), including hot-reloading certificates from disk when Kubernetes cert-manager or Vault rotates them.
 
-However, **Public Clients** (Single Page Applications like React, or native mobile apps) run on end-user hardware where code and network traffic can be inspected. Storing a `client_secret` in frontend JavaScript or a mobile APK is fundamentally insecure because any user or attacker can extract it.
+On the **server side** (`Billing Service`), configure a PEM bundle and set `server.ssl.client-auth=need` so Tomcat rejects any client that fails to present a valid certificate:
 
-Without a secret, an attacker who intercepts the authorization code (via custom URI schemes or browser history sniffing) could exchange it directly for an access token. **PKCE (RFC 7636)** eliminates this vulnerability:
-1. The client generates a random secret cryptographic string called the **Code Verifier** and computes its SHA-256 hash, called the **Code Challenge**.
-2. The client sends the Code Challenge with the initial login request. Keycloak remembers this challenge.
-3. When the user logs in and the authorization code is returned, the client exchanges the code by sending the original unhashed Code Verifier.
-4. Keycloak hashes the verifier and ensures it matches the challenge recorded in step 2.
+```yaml
+server:
+  port: 8443
+  ssl:
+    bundle: internal-mtls
+    client-auth: need
 
-Because an eavesdropper intercepting the authorization code does not possess the unique Code Verifier held in the client's volatile memory, they cannot exchange the code for a token.
+spring:
+  ssl:
+    bundle:
+      pem:
+        internal-mtls:
+          reload-on-update: true
+          keystore:
+            certificate: file:/etc/certs/billing-service.crt
+            private-key: file:/etc/certs/billing-service.key
+          truststore:
+            certificate: file:/etc/certs/internal-ca.crt
+```
 
----
+On the **client side** (`Order Service`), configure its own `internal-mtls` bundle (with `order-service.crt` and `order-service.key`) and attach it directly to `RestClient` using `RestClientSsl` (available in Spring Boot 3.2+):
 
-### How do you handle high availability and session replication across a multi-node Keycloak cluster in Kubernetes?
+```java
+package com.javahub.orders.config;
 
-Keycloak achieves high availability and session replication by embedding **Apache Infinispan** as its distributed in-memory data grid.
+import org.springframework.boot.autoconfigure.web.client.RestClientSsl;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestClient;
 
-In a Kubernetes deployment:
-1. When multiple Keycloak pods spin up, Infinispan automatically discovers neighboring pods using the **DNS_PING** or **KUBE_PING** discovery protocol by querying the Kubernetes headless service.
-2. Infinispan forms a distributed cluster and partitions active user sessions, client sessions, and brute-force detection counters across the nodes using consistent hashing with a configurable replication factor (typically 2).
-3. If Keycloak Pod 1 crashes or is killed by Kubernetes during a node drain, Keycloak Pod 2 already holds the replicated session data in memory. The user's active session is uninterrupted, avoiding forced re-authentications.
-4. Read-heavy, static metadata (realms, clients, roles) is cached aggressively in Infinispan to shield the underlying PostgreSQL database from load.
+@Configuration
+public class MtlsClientConfig {
 
----
+    @Bean
+    public RestClient billingRestClient(RestClient.Builder builder, RestClientSsl ssl) {
+        return builder
+                .baseUrl("https://billing-service.internal:8443")
+                .apply(ssl.fromBundle("internal-mtls"))
+                .build();
+    }
+}
+```
 
-### Walk through using the `keycloak-admin-client` in a Java service. How do you securely authenticate as a service account without exposing human credentials?
+With `reload-on-update: true`, Spring watches the mounted certificate files and reloads the SSL context automatically when short-lived certificates rotate, avoiding pod restarts.
 
-To interact with the Keycloak Admin REST API securely from a background Java service, you must use the **OAuth 2.0 Client Credentials Grant** rather than passing administrative username/password credentials.
+### Sender-Constrained Tokens with Keycloak mTLS (RFC 8705)
 
-1. Within the target Keycloak realm, register a **Confidential Client** (e.g., `user-management-service`).
-2. Under the client settings, enable **Service Accounts Roles**. This creates a dedicated non-human service account identity tied directly to that client.
-3. In the client's **Service Account Roles** tab, assign the minimum required administrative permissions (e.g., `manage-users` or `view-users` scoped to the realm).
-4. In the Java application, construct the `Keycloak` client using `KeycloakBuilder.builder()`, supplying the `grantType(OAuth2Constants.CLIENT_CREDENTIALS)`, `clientId`, and `clientSecret`.
-5. Under the hood, the admin client requests an M2M bearer token using the client credentials grant, automatically handles token refresh when the access token nears expiration, and attaches the bearer token to all outgoing Keycloak administrative REST calls.
+Even with mTLS between services, a plain bearer JWT can still be stolen from logs or memory and replayed over a different TLS connection. Keycloak implements **OAuth 2.0 Mutual-TLS Client Authentication and Certificate-Bound Access Tokens (RFC 8705)** to bind the JWT directly to the client's TLS certificate:
 
+1. The client authenticates to Keycloak's token endpoint over mTLS using its X.509 certificate.
+2. Keycloak computes the SHA-256 thumbprint of that client certificate and embeds it inside the issued JWT's `cnf` (confirmation) claim:
+   ```json
+   {
+     "sub": "service-account-order-service",
+     "aud": "billing-service",
+     "cnf": {
+       "x5t#S256": "bwcK0esc3ACC3DB2Y5_lESsXE8o9ltc05O89jdN-dg2"
+     }
+   }
+   ```
+3. When `Billing Service` receives the request over mTLS, a custom `OAuth2TokenValidator<Jwt>` (or filter) extracts the `X509Certificate` from `request.getAttribute("jakarta.servlet.request.X509Certificate")`, computes its Base64URL SHA-256 thumbprint, and verifies it matches `cnf.x5t#S256` in the JWT.
+
+An attacker who steals the JWT string cannot reuse it because they do not possess the private key for the bound client certificate.
+
+### Application-Level mTLS vs Service Mesh mTLS
+
+In real deployments, you have two ways to roll out mTLS:
+
+| Approach | How It Works | Best Fit |
+|---|---|---|
+| **Application-level mTLS (Spring SSL Bundles)** | Spring Boot terminates mTLS directly using certs mounted via cert-manager, Vault Agent, or SPIRE. | Small-to-medium service fleets, environments without Kubernetes/mesh, or when you need RFC 8705 certificate-bound JWT verification inside Java. |
+| **Service Mesh mTLS (Istio / Linkerd / Cilium)** | Sidecar proxies (or node agents) intercept pod traffic, issue short-lived SPIFFE identities automatically, and enforce mTLS transparently outside the JVM. | Large Kubernetes clusters where managing keystores across polyglot services (Java, Go, Python) inside app code creates too much operational overhead. |
+
+Even when a service mesh handles transport encryption and workload-to-workload mTLS transparently, you still use Keycloak OAuth2 tokens at Layer 7 to carry end-user identity, scopes, and business roles.
+
+## Interview Questions
+
+### Why did Red Hat archive `keycloak-spring-boot-starter`, and what should Spring Boot 3 apps use instead?
+
+The legacy Keycloak starter tightly coupled Keycloak's release cycle to Spring Security internals, so every major Spring Boot upgrade caused compatibility lag. Because Keycloak follows standard OIDC and OAuth 2.0 specifications, Spring Boot 3 applications should use `spring-boot-starter-oauth2-client` (for browser SSO) and `spring-boot-starter-oauth2-resource-server` (for REST APIs). Pointing them at Keycloak's `issuer-uri` keeps your codebase portable across any OIDC-compliant IdP.
+
+### Why is OAuth 2.0 Token Exchange safer than forwarding the caller's original JWT to every downstream service?
+
+Forwarding the original token forces downstream APIs to accept tokens minted for another audience, breaking least privilege. If any middle-tier service is compromised, an attacker can reuse user tokens against unrelated internal services. Token Exchange (RFC 8693) asks Keycloak to mint a new, tightly scoped token targeted solely at the specific downstream audience while still preserving the user's identity for auditing and authorization.
+
+### What is the difference between standard TLS, mTLS, and RFC 8705 certificate-bound tokens?
+
+Standard TLS only proves the server's identity to the client and encrypts traffic. Mutual TLS (mTLS) adds client certificate verification so both services cryptographically prove their workload identity during the TLS handshake. RFC 8705 goes one step further by embedding the client certificate's SHA-256 thumbprint (`cnf.x5t#S256`) inside the OAuth2 JWT, ensuring the token itself cannot be replayed over a different TLS session if leaked.
+
+### How do Keycloak realms, groups, and client roles work together in a multi-service enterprise setup?
+
+A realm isolates the entire security tenant. Groups reflect organizational structure (such as teams or departments) so administrators manage membership in one place instead of editing individual users. Client roles define service-specific permissions scoped to each microservice (avoiding global naming collisions), and those client roles are assigned to groups or composite roles so users inherit the exact permissions their job function requires.

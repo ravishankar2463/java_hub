@@ -1,44 +1,47 @@
 ---
 title: "JPA and Hibernate Basics"
-description: "Master Jakarta Persistence and Hibernate ORM: First-Level Cache internals, dirty checking mechanics, the four entity lifecycle states, and sequence allocation strategies."
+description: "How Jakarta Persistence and Hibernate map Java classes to relational tables, track entity states inside the Persistence Context, flush changes via dirty checking, and manage schema generation."
 category: "level-7"
 date: "2026-10-29T10:00:00Z"
 ---
 
-In the early days of enterprise Java, developers wrote thousands of lines of boilerplate JDBC code: opening connections, binding parameters into `PreparedStatement` instances by index number, iterating through `ResultSet` cursors, and manually constructing domain objects column by column.
+Writing raw JDBC works well for small utilities or specialized reporting queries, but in a typical business application it quickly turns into repetitive plumbing. You open connections, bind positional parameters into `PreparedStatement` objects, walk `ResultSet` cursors column by column, and reconstruct object graphs by hand. Worse, any schema change forces you to hunt down every SQL string and row mapper that touches the altered column.
 
-The **Object-Relational Mapping (ORM)** paradigm was born to bridge the fundamental divide known as the **Object-Relational Impedance Mismatch**:
-- **Object-Oriented Java** thinks in networks of interconnected heap objects, references, inheritance, polymorphism, and encapsulation.
-- **Relational Databases** think in tabular sets, foreign key constraints, primary keys, and relational algebra.
+Object-Relational Mapping (ORM) exists to bridge the gap between two different models of data. Java applications represent state as networks of heap objects with references, inheritance, and encapsulation. Relational databases store state as tables, foreign keys, primary keys, and sets of rows.
 
-To standardize ORM across the Java ecosystem, Sun Microsystems and the Java Community Process created the **Java Persistence API (JPA)**, now governed by the Eclipse Foundation as **Jakarta Persistence**.
-
-JPA is purely a **specification** (a collection of interfaces, annotations, and contracts in `jakarta.persistence.*`). **Hibernate ORM** is the battle-tested, high-performance engine that implements that specification.
+In Java, **Jakarta Persistence** (formerly the Java Persistence API, or JPA) defines the standard specification for ORM: annotations, interfaces, lifecycle rules, and the JPQL query language under `jakarta.persistence.*`. **Hibernate ORM** is the most widely used implementation of that specification. Your application code generally talks to Jakarta Persistence interfaces (or Spring Data JPA on top of them), while Hibernate handles SQL generation, caching, dirty checking, and dialect translation behind the scenes.
 
 ```mermaid
 flowchart TD
-    subgraph "JPA vs Hibernate Architecture"
-        App["Your Application Code"] --> JPA["Jakarta Persistence API (jakarta.persistence.*)<br/>[EntityManager, @Entity, @Table, @Id]"]
-        JPA -.->|Implemented by| Hib["Hibernate ORM Engine (org.hibernate.*)"]
-        Hib --> L1["Persistence Context (First-Level Cache & Dirty Checking)"]
+    subgraph "JPA and Hibernate Stack"
+        App["Application Code"] --> JPA["Jakarta Persistence API (jakarta.persistence.*)<br/>EntityManager, @Entity, @Table, @Id"]
+        JPA -.->|"Implemented by"| Hib["Hibernate ORM (org.hibernate.*)"]
+        Hib --> L1["Persistence Context (First-Level Cache and Dirty Checking)"]
         L1 --> Dialect["Database Dialect (PostgreSQL, MySQL, Oracle)"]
-        Dialect --> JDBC["JDBC Driver (Socket Communication)"]
+        Dialect --> JDBC["JDBC Driver"]
         JDBC --> DB[("Relational Database")]
     end
 ```
 
----
+## Mapping an Entity: @Entity, @Table, @Id, and @Column
 
-## Anatomy of a Jakarta Persistence Entity
+An entity is a regular Java class whose instances correspond to rows in a relational table. Jakarta Persistence expects a few structural rules so Hibernate can instantiate and proxy entities at runtime:
 
-An entity is an ordinary Java class whose state is persisted to a database table. In Jakarta Persistence, an entity must satisfy specific structural rules:
-1. It must be annotated with `@Entity`.
-2. It must have a **no-argument constructor** (public or protected) so the Hibernate reflection engine can instantiate it.
-3. It must have a dedicated identifier field annotated with `@Id`.
-4. It must not be `final`, and its persistent methods/fields must not be `final` (so Hibernate can generate dynamic CGLIB/ByteBuddy runtime proxies for lazy loading).
+- Annotate the class with `@Entity`.
+- Provide a `public` or `protected` no-argument constructor. Hibernate uses reflection to instantiate entities when reading rows from a `ResultSet`. Making it `protected` lets Hibernate call it while discouraging application code from creating half-initialized objects.
+- Define a primary key field annotated with `@Id`.
+- Do not mark the entity class or its persistent methods `final`. Hibernate generates dynamic subclasses via ByteBuddy to support lazy-loading proxies, which fails if a class cannot be subclassed.
+
+By default, Hibernate maps the class name to the table name and field names to column names (Spring Boot's default naming strategy converts camelCase to snake_case automatically). Explicit `@Table` and `@Column` annotations keep the mapping readable and decouple Java refactoring from database column names.
 
 ```java
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.SequenceGenerator;
+import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
@@ -49,7 +52,11 @@ public class Product {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "product_seq_gen")
-    @SequenceGenerator(name = "product_seq_gen", sequenceName = "products_id_seq", allocationSize = 50)
+    @SequenceGenerator(
+        name = "product_seq_gen",
+        sequenceName = "products_id_seq",
+        allocationSize = 50
+    )
     @Column(name = "product_id")
     private Long id;
 
@@ -65,26 +72,27 @@ public class Product {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    // Mandatory No-Arg Constructor for Hibernate Proxy Instantiation
-    protected Product() {}
+    protected Product() {
+        // Required by Jakarta Persistence for reflection and proxy generation
+    }
 
     public Product(String sku, String name, BigDecimal price) {
         this.sku = Objects.requireNonNull(sku, "SKU cannot be null");
         this.name = Objects.requireNonNull(name, "Name cannot be null");
-        this.price = Objects.requireNonNull(price, "Price cannot be null");
-        if (price.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Price cannot be negative");
-        }
+        this.price = requireNonNegative(price);
         this.createdAt = Instant.now();
     }
 
-    // Business Methods
     public void updatePrice(BigDecimal newPrice) {
-        Objects.requireNonNull(newPrice);
-        if (newPrice.compareTo(BigDecimal.ZERO) < 0) {
+        this.price = requireNonNegative(newPrice);
+    }
+
+    private static BigDecimal requireNonNegative(BigDecimal value) {
+        Objects.requireNonNull(value, "Price cannot be null");
+        if (value.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Price cannot be negative");
         }
-        this.price = newPrice;
+        return value;
     }
 
     public Long getId() { return id; }
@@ -95,113 +103,13 @@ public class Product {
 }
 ```
 
----
-
-## The Four Entity Lifecycle States
-
-Every Java object in a JPA application exists in one of four strictly defined lifecycle states relative to the **Persistence Context**:
-
-```mermaid
-stateDiagram-v2
-    [*] --> Transient: new Product()
-    Transient --> Managed: em.persist(entity)
-    
-    Managed --> Detached: em.detach() / em.clear() / em.close()
-    Detached --> Managed: em.merge(detachedEntity)
-    
-    Managed --> Removed: em.remove(entity)
-    Removed --> [*]: Transaction Commit (SQL DELETE)
-    Managed --> [*]: Transaction Commit (SQL INSERT/UPDATE)
-```
-
-### Transient (New)
-The object was instantiated in memory via `new Product("SKU-1", "Laptop", 999.0)`. 
-- It has no persistent identity (`id == null`).
-- It is not associated with an active `EntityManager` or Persistence Context.
-- If the application drops the reference, it is garbage collected like any ordinary Java object.
-
-### Managed (Persistent)
-The entity is actively tracked by the **Persistence Context**.
-- It has a database identifier.
-- It represents a row in the database (or one that will exist upon commit).
-- **Automatic Dirty Checking**: Any modification to its fields via business methods or setters is automatically detected by Hibernate and written to the database during flush/commit.
-
-### Detached
-The entity has a database identifier, but is **no longer tracked** by an active Persistence Context.
-- An entity becomes detached when the `EntityManager` closes, or when `em.clear()` or `em.detach(entity)` is called.
-- Changes made to a detached entity are **NOT** tracked by Hibernate and will not be saved automatically.
-- Calling `em.merge(detachedEntity)` copies the detached state into a fresh *managed* instance.
-
-### Removed
-The entity was passed to `em.remove(managedEntity)`.
-- It remains in memory until the transaction finishes.
-- At transaction commit or flush, Hibernate generates a SQL `DELETE` statement to remove the row from the database.
-
----
-
-## The First-Level Cache and Automatic Dirty Checking
-
-One of the most frequent questions from junior engineers is: **"Where is the `em.update()` method in JPA?"**
-
-There is no `update()` method in JPA. You never explicitly tell Hibernate to update a record. Instead, Hibernate uses the **First-Level Cache (Persistence Context)** and **Automatic Dirty Checking**.
-
-### How Dirty Checking Works Under the Hood
-
-When an entity is loaded from the database (via `em.find()` or JPQL), Hibernate does two things inside the Persistence Context:
-1. It loads the entity into memory and returns a reference to your application.
-2. It takes an internal, deep-copy **Snapshot** of the entity's exact state and stores it in the First-Level Cache.
-
-```mermaid
-flowchart TD
-    subgraph "The Dirty Checking Mechanism"
-        Load["1. em.find(Product.class, 42L)"] --> Read["Reads SQL: SELECT ... WHERE id = 42"]
-        Read --> Cache["Store in First-Level Cache"]
-        Cache --> Entity["Managed Entity (product.price = $100)"]
-        Cache --> Snapshot["Hidden Internal Snapshot (price = $100)"]
-        
-        Entity --> Mutate["2. product.updatePrice($120)"]
-        
-        Mutate --> Commit["3. Transaction Commit / em.flush()"]
-        Commit --> Compare{"Hibernate Compares Entity vs Snapshot"}
-        
-        Compare -->|"Snapshot (100) != Current (120)"| GenSQL["Generate: UPDATE products SET unit_price = 120 WHERE product_id = 42"]
-        GenSQL --> DB[("Execute via JDBC on Database")]
-    end
-```
-
-When the transaction is about to commit, `em.flush()` is triggered. Hibernate iterates through every managed entity in the Persistence Context and compares its current field values against its original internal snapshot:
-- If all fields match the snapshot, Hibernate does nothing.
-- If any field has changed, Hibernate automatically constructs and executes an optimized SQL `UPDATE` statement.
-
-### The Repeatable Read Advantage of the L1 Cache
-
-The Persistence Context also acts as a performance cache for identical lookups within the same transaction:
-
-```java
-Product p1 = em.find(Product.class, 42L); // Executes SQL SELECT over JDBC network
-Product p2 = em.find(Product.class, 42L); // ZERO SQL! Returned instantly from L1 Cache!
-
-System.out.println(p1 == p2); // TRUE! Both point to the exact same Java heap memory address!
-```
-
-> [!CAUTION]
-> **The L1 Cache Heap Bloat Hazard**:
-> The First-Level Cache lives for the duration of the `EntityManager` transaction. If you process a batch job that loads 100,000 entities in a single transaction, the Persistence Context retains all 100,000 entities and their 100,000 internal snapshots in JVM memory! 
-> This will rapidly trigger `OutOfMemoryError: Java heap space`. For batch operations, you must periodically flush and clear the context:
-> ```java
-> if (i % 50 == 0) {
->     em.flush(); // Synchronize pending SQL to database
->     em.clear(); // Evict all managed entities to reclaim heap RAM
-> }
-> ```
-
----
+Notice the `@Column` attributes in that example. Setting `nullable = false`, `length = 64`, or `precision = 12, scale = 2` serves two purposes: it documents the schema contract right on the entity, and Hibernate uses those attributes when validating or generating DDL. Attributes like `updatable = false` also affect runtime SQL generation, ensuring Hibernate omits `created_at` from `UPDATE` statements.
 
 ## Primary Key Generation: IDENTITY vs SEQUENCE
 
-How an entity generates its primary key determines whether Hibernate can batch inserts over the network.
+Choosing a primary key generation strategy has a direct impact on write throughput because of how Hibernate manages its internal cache.
 
-### GenerationType.IDENTITY (The Batching Killer)
+### GenerationType.IDENTITY
 
 ```java
 @Id
@@ -209,13 +117,11 @@ How an entity generates its primary key determines whether Hibernate can batch i
 private Long id;
 ```
 
-`IDENTITY` delegates ID generation to the database's `AUTO_INCREMENT` (MySQL) or `GENERATED ALWAYS AS IDENTITY` (PostgreSQL) column.
+With `IDENTITY`, the database assigns the primary key using an `AUTO_INCREMENT` column (MySQL) or `GENERATED BY DEFAULT AS IDENTITY` (PostgreSQL). The catch is that the database only knows the new ID after executing the physical `INSERT` statement. Hibernate, however, needs an identifier immediately when you call `em.persist(entity)` so it can register the entity in the Persistence Context.
 
-**The Fatal Flaw**: The database only generates the ID when the physical SQL `INSERT` statement is executed on the table. But Hibernate requires an entity to have an ID *immediately* upon calling `em.persist(entity)` so it can register it in the First-Level Cache map.
+Because Hibernate cannot wait until flush time to obtain the ID, `IDENTITY` forces an immediate SQL `INSERT` on every `persist()` call and disables JDBC insert batching in Hibernate. If you insert 500 rows in a transaction, Hibernate sends 500 separate `INSERT` round-trips instead of batching them together.
 
-As a result, **`IDENTITY` forces Hibernate to execute an immediate SQL `INSERT` on every single `persist()` call, completely disabling JDBC batching!** Inserting 1,000 records requires 1,000 separate network round-trips to the database.
-
-### GenerationType.SEQUENCE (The High-Performance Gold Standard)
+### GenerationType.SEQUENCE
 
 ```java
 @Id
@@ -224,62 +130,217 @@ As a result, **`IDENTITY` forces Hibernate to execute an immediate SQL `INSERT` 
 private Long id;
 ```
 
-`SEQUENCE` uses a standalone database sequence object (supported by PostgreSQL, Oracle, and modern MariaDB).
+`SEQUENCE` uses a standalone database sequence (supported by PostgreSQL, Oracle, SQL Server, and MariaDB). Because querying a sequence is independent of inserting a table row, Hibernate can fetch IDs ahead of time using its pooled optimizer:
 
-**How Hibernate Optimizes with `allocationSize`**:
-1. When your application starts, Hibernate calls `nextval('orders_id_seq')` once over the network.
-2. The sequence advances by 50 in the database (e.g., from 1 to 51).
-3. Hibernate now knows it owns the next 50 IDs (1 through 50) locally in JVM memory!
-4. For the next 50 `em.persist()` calls, **zero database network round-trips occur**. Hibernate assigns IDs in-memory instantly.
-5. Because IDs are assigned in-memory, Hibernate defers all `INSERT` statements until the end of the transaction and executes them as a single, ultra-fast **JDBC batch insert**.
+1. Hibernate calls `nextval('orders_id_seq')` once over JDBC.
+2. The database sequence increments by 50 (the `INCREMENT BY` on the database sequence must match `allocationSize = 50`).
+3. Hibernate keeps that block of 50 IDs in memory and assigns them to the next 50 `persist()` calls with zero database round-trips.
+4. Because every entity receives its ID in memory right away, Hibernate can defer the actual `INSERT` statements until flush time and send them as a JDBC batch (when `hibernate.jdbc.batch_size` is configured).
 
----
+> [!NOTE]
+> If your database sequence has `INCREMENT BY 1` while `@SequenceGenerator` leaves `allocationSize` at its default of `50`, Hibernate's pooled optimizer can generate duplicate or negative IDs. Always make sure the sequence increment in your migration script matches `allocationSize`.
 
-## The Danger of hbm2ddl.auto in Production
+## The EntityManager and the Persistence Context
 
-Hibernate provides a configuration property called `hibernate.hbm2ddl.auto` (in Spring Boot: `spring.jpa.hibernate.ddl-auto`):
-- `create-drop`: Creates tables on startup, drops them on shutdown (great for unit tests).
-- `create`: Drops existing tables and creates fresh ones.
-- `update`: Inspects Java `@Entity` classes and attempts to alter existing database tables to match.
-- `validate`: Verifies that database tables and columns match the Java entities, failing application startup if any mismatch exists.
+The `EntityManager` is the primary API you use to interact with JPA. Behind every active `EntityManager` sits a **Persistence Context**: an in-memory map of all entity instances currently managed within a unit of work, typically scoped to a single database transaction.
 
-### Why `update` in Production Is Fatal
+The Persistence Context does three jobs at once:
 
-1. **`update` never drops columns or constraints**: If you rename a field from `email` to `emailAddress`, Hibernate adds an `emailAddress` column and leaves the old `email` column abandoned in the table.
-2. **Accidental Exclusive Table Locks**: On tables with millions of rows, Hibernate's automatic DDL can trigger `AccessExclusiveLock` table rewrites during application startup, freezing production.
-3. **No Rollback or Audit History**: No record of what changed or who ran it exists.
+1. **First-Level (L1) Cache**: Every entity loaded by primary key is stored in the context, keyed by its class and ID. Calling `em.find(Product.class, 42L)` twice inside the same transaction hits the database only once and returns the exact same Java object reference (`p1 == p2` is `true`).
+2. **Automatic Dirty Checking**: When Hibernate loads an entity, it records an internal snapshot of its initial property values. You do not call an `em.update()` method because none exists in JPA. Instead, you mutate the entity through normal Java methods and let Hibernate detect what changed.
+3. **Write-Behind Buffering**: Hibernate holds pending `INSERT`, `UPDATE`, and `DELETE` operations in memory and sends them together when the Persistence Context flushes, reducing round-trips and ordering statements to satisfy foreign key constraints.
 
-> [!IMPORTANT]
-> **Production Rule**: In staging and production environments, **always set `hibernate.hbm2ddl.auto = validate`** (or `none`). All database schema migrations must be strictly managed via Flyway or Liquibase!
+```mermaid
+flowchart TD
+    subgraph "Dirty Checking Inside the Persistence Context"
+        Load["1. em.find(Product.class, 42L)"] --> Read["SQL: SELECT ... WHERE product_id = 42"]
+        Read --> Cache["Store in First-Level Cache"]
+        Cache --> Entity["Managed Entity (price = 100.00)"]
+        Cache --> Snapshot["Loaded Snapshot (price = 100.00)"]
 
----
+        Entity --> Mutate["2. product.updatePrice(120.00)"]
+        Mutate --> Flush["3. em.flush() or Transaction Commit"]
+        Flush --> Compare{"Compare Entity vs Snapshot"}
 
-## Senior Engineer Interview Crucible
-
-### Why is there no em.update() method in the standard JPA EntityManager API, and how does Dirty Checking work?
-JPA treats entities as stateful domain models managed within a Unit of Work (the Persistence Context). When an entity is loaded into the context, Hibernate stores a hidden snapshot of its property values in its First-Level Cache. 
-
-Application code mutates the entity using standard Java domain methods or setters. During transaction commit or `em.flush()`, Hibernate compares the current state of every managed entity against its original snapshot. If any property differs, Hibernate automatically generates and executes an optimized SQL `UPDATE` statement containing only the modified columns. Because mutation tracking is automatic, an explicit `update()` method is unnecessary.
-
-### Why does GenerationType.IDENTITY disable Hibernate's JDBC batch insert optimization, whereas GenerationType.SEQUENCE preserves it?
-Hibernate requires every managed entity to possess a valid primary key identifier before registering it in the First-Level Cache. 
-
-With `GenerationType.IDENTITY`, the ID is generated by the database table engine upon row insertion. To learn the generated ID, Hibernate cannot buffer or batch the operation; it must execute an immediate SQL `INSERT` statement over JDBC during `em.persist()` to fetch the ID.
-
-With `GenerationType.SEQUENCE`, Hibernate queries a database sequence independently of table insertion. Using the `allocationSize` parameter (e.g., 50), Hibernate fetches a pool of IDs in a single round-trip and allocates them to entities in JVM memory. Because entities receive their IDs immediately in memory, Hibernate buffers all insert operations and flushes them as a single JDBC batch write upon transaction commit.
-
-### What is the First-Level Cache, what is its scope, and why can loading 100,000 entities in a single transaction cause an OutOfMemoryError?
-The First-Level Cache is the in-memory cache intrinsically bound to a single `EntityManager` instance (and therefore scoped to a single transaction). It guarantees repeatable reads and reference equality (`a == b`) for identical IDs within that transaction.
-
-Loading 100,000 entities in a single transaction causes `OutOfMemoryError` because the Persistence Context never evicts managed entities on its own until the `EntityManager` closes. Furthermore, for every entity loaded, Hibernate stores an additional snapshot copy for dirty checking. 100,000 entities create 200,000 object graphs in the JVM heap, rapidly exhausting memory. To process bulk records safely, you must periodically call `em.flush()` to send changes to the database and `em.clear()` to evict entities from the cache.
-
-### What is the exact difference between em.persist() and em.merge(), and why does calling em.merge(detachedEntity) not make detachedEntity managed?
-- **`em.persist(entity)`**: Takes a transient entity with no ID, assigns an ID, and directly attaches that specific object reference to the Persistence Context as a managed entity. The passed instance is now managed.
-- **`em.merge(detachedEntity)`**: Accepts a detached entity and looks up its ID in the Persistence Context or database. It copies the field values from the detached entity onto a **new or existing managed entity instance** and returns that managed reference. 
-
-Crucially, **`em.merge()` does NOT make the passed `detachedEntity` managed**. The original object remains detached in memory. If subsequent changes made to the entity need to be saved, the developer must discard the original reference and work exclusively with the object returned by `em.merge()`:
-```java
-Product managedProduct = em.merge(detachedProduct);
-managedProduct.updatePrice(newPrice); // TRACKED AND SAVED
-detachedProduct.updatePrice(newPrice); // IGNORED AND LOST!
+        Compare -->|"Changed"| GenSQL["Execute SQL UPDATE on products"]
+        Compare -->|"Unchanged"| Skip["No SQL Executed"]
+    end
 ```
+
+One detail that often surprises developers: by default, when a single field changes on a managed entity, Hibernate still generates an `UPDATE` statement listing all updatable columns of that table. It does this intentionally so the SQL string remains constant and can be cached and reused with JDBC prepared statements. If you have a very wide table where updating unchanged columns causes overhead (or triggers unwanted database triggers), you can annotate the entity with Hibernate's `@DynamicUpdate`, which builds an `UPDATE` statement containing only modified columns at the cost of extra SQL string generation.
+
+### Flush vs Commit
+
+`flush()` and `commit()` are frequently conflated, but they happen at different layers:
+
+- **`em.flush()`** synchronizes the in-memory Persistence Context with the database by sending all queued `INSERT`, `UPDATE`, and `DELETE` SQL statements over the active JDBC connection. The database transaction is still open. Other transactions cannot see those changes (assuming `READ COMMITTED` or stricter isolation), and if an exception rolls the transaction back afterward, the flushed writes are discarded.
+- **Transaction `commit()`** tells the database to make all changes durable and visible to other transactions. Under JPA's default `FlushModeType.AUTO`, Hibernate automatically flushes the Persistence Context right before a transaction commits, and also before executing a JPQL query that might read rows affected by pending changes in memory.
+
+### L1 Cache Memory Growth in Batch Jobs
+
+Because the Persistence Context retains every managed entity and its snapshot until the transaction ends, processing large volumes of records in one transaction will steadily consume heap memory. Loading 100,000 entities means keeping 100,000 entity instances plus 100,000 snapshots alive in the JVM heap, which slows down dirty checking and can trigger `OutOfMemoryError`.
+
+For batch imports or bulk updates, flush and clear the context periodically:
+
+```java
+public void importProducts(List<Product> products) {
+    int batchSize = 50;
+    for (int i = 0; i < products.size(); i++) {
+        em.persist(products.get(i));
+
+        if (i > 0 && i % batchSize == 0) {
+            em.flush(); // Send pending INSERTs to the database
+            em.clear(); // Detach all entities so the GC can reclaim memory
+        }
+    }
+    em.flush();
+    em.clear();
+}
+```
+
+## Entity Lifecycle States
+
+Every entity object moves through four well-defined states relative to the Persistence Context: **Transient**, **Persistent (Managed)**, **Detached**, and **Removed**.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Transient: new Product()
+    Transient --> Persistent: em.persist(entity)
+
+    Persistent --> Detached: em.detach() / em.clear() / em.close()
+    Detached --> Persistent: em.merge(detachedEntity)
+
+    Persistent --> Removed: em.remove(entity)
+    Removed --> [*]: Flush / Commit (SQL DELETE)
+    Persistent --> [*]: Flush / Commit (SQL INSERT / UPDATE)
+```
+
+### Transient (New)
+
+A transient entity is an ordinary Java object created with `new Product(...)`. It has no database row yet, its generated `@Id` is `null`, and the `EntityManager` knows nothing about it. If nothing holds a reference to it, the garbage collector reclaims it normally.
+
+### Persistent (Managed)
+
+An entity becomes persistent when you pass a transient instance to `em.persist()`, load it via `em.find()` or a JPQL query, or re-attach a detached copy via `em.merge()`. While persistent, it has a database identity (or will receive one on flush), lives in the First-Level Cache, and participates in automatic dirty checking.
+
+### Detached
+
+When the transaction ends and the `EntityManager` closes, or when you explicitly call `em.detach(entity)` or `em.clear()`, managed entities become detached. A detached entity still holds its `@Id` and field values in memory, so you can safely serialize it to a DTO or pass it across layers, but Hibernate no longer tracks mutations to it. Accessing an uninitialized lazy association on a detached entity throws `LazyInitializationException`.
+
+### Removed
+
+Calling `em.remove(managedEntity)` transitions a persistent entity to the removed state. Hibernate schedules a SQL `DELETE` statement for the next flush or transaction commit. Passing a detached entity directly to `em.remove()` throws `IllegalArgumentException`; it must be managed first.
+
+### persist() vs merge()
+
+Understanding the difference between `em.persist()` and `em.merge()` prevents subtle bugs where changes silently vanish:
+
+- **`em.persist(entity)`** takes a transient entity and transitions *that exact object reference* into the persistent state. Any further changes to `entity` within the transaction are tracked and flushed. Calling `persist()` on an already detached entity throws `EntityExistsException`.
+- **`em.merge(detachedEntity)`** copies the state of a detached entity onto a managed instance (loading it from the L1 cache or database if needed) and **returns the managed instance**. The original `detachedEntity` argument stays detached.
+
+```java
+// Correct usage of persist() and merge()
+@Transactional
+public void updateAndCreate(Product detachedProduct) {
+    // New entity: 'fresh' itself becomes managed
+    Product fresh = new Product("SKU-900", "Mechanical Keyboard", new BigDecimal("149.00"));
+    em.persist(fresh);
+    fresh.updatePrice(new BigDecimal("139.00")); // Tracked and flushed
+
+    // Detached entity: capture the returned managed reference
+    Product managed = em.merge(detachedProduct);
+    managed.updatePrice(new BigDecimal("89.00"));         // Tracked and flushed
+    detachedProduct.updatePrice(new BigDecimal("79.00")); // Ignored! Still detached
+}
+```
+
+## Implementing equals() and hashCode() for JPA Entities
+
+Writing `equals()` and `hashCode()` for entities requires care because an entity's `@Id` is typically `null` while transient and populated only after persistence.
+
+If you compute `hashCode()` from `id`, adding a transient entity to a `HashSet` places it in a bucket computed from `null`. After `em.persist()`, `id` changes to `42L`, so `hashCode()` now returns a different value. Calling `set.contains(entity)` then looks in the wrong bucket and returns `false` even though the object is still inside the set.
+
+There are two reliable patterns in JPA:
+
+1. **Natural Business Key**: If the entity has an immutable, unique business identifier (such as `sku` or an application-generated UUID assigned in the constructor), base `equals()` and `hashCode()` on that field. Its value never changes across lifecycle transitions.
+2. **Generated ID with a Constant `hashCode()`**: When no natural key exists, compare non-null IDs in `equals()` (accounting for Hibernate lazy proxies) and return a fixed value such as `getClass().hashCode()` from `hashCode()`. Returning a constant is valid under the Java `Object.hashCode()` contract and guarantees an entity stays in the same bucket before and after persistence.
+
+```java
+import org.hibernate.proxy.HibernateProxy;
+import java.util.Objects;
+
+@Override
+public final boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null) return false;
+
+    Class<?> otherClass = o instanceof HibernateProxy proxy
+        ? proxy.getHibernateLazyInitializer().getPersistentClass()
+        : o.getClass();
+    Class<?> thisClass = this instanceof HibernateProxy proxy
+        ? proxy.getHibernateLazyInitializer().getPersistentClass()
+        : this.getClass();
+
+    if (thisClass != otherClass) return false;
+
+    Product other = (Product) o;
+    return id != null && Objects.equals(id, other.getId());
+}
+
+@Override
+public final int hashCode() {
+    return this instanceof HibernateProxy proxy
+        ? proxy.getHibernateLazyInitializer().getPersistentClass().hashCode()
+        : getClass().hashCode();
+}
+```
+
+Using `HibernateProxy` checks ensures equality works even when one reference is a real `Product` instance and the other is an uninitialized Hibernate proxy subclass.
+
+## Generating Schemas Automatically
+
+Hibernate can inspect your `@Entity` metadata at startup and generate or verify database DDL automatically. In Spring Boot, you control this with `spring.jpa.hibernate.ddl-auto` (which maps directly to Hibernate's `hibernate.hbm2ddl.auto` property):
+
+| Setting | Behavior at Startup / Shutdown | Typical Use |
+| :--- | :--- | :--- |
+| `none` | Hibernate does not touch or inspect the database schema. | Production (when migrations run externally). |
+| `validate` | Compares entity mappings against existing tables and columns, failing startup if anything is missing or incompatible. Makes no schema changes. | Staging and production alongside Flyway or Liquibase. |
+| `update` | Compares entities against the schema and runs `ALTER TABLE` / `CREATE TABLE` statements to add missing tables or columns. | Quick local prototyping only. |
+| `create` | Drops existing mapped tables and recreates them from scratch on startup. | Ephemeral local dev databases. |
+| `create-drop` | Same as `create`, and drops all tables when the `SessionFactory` closes cleanly. | Isolated unit/integration tests with H2 or Testcontainers. |
+
+```yaml
+# application-prod.yml
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+```
+
+### Why ddl-auto: update Does Not Belong in Production
+
+Using `update` in a shared or production environment causes operational problems that are hard to unwind:
+
+- **It only guesses additive changes**: If you rename a Java field from `email` to `emailAddress`, Hibernate cannot tell whether you renamed a column or added a new one. It creates a new `email_address` column and leaves the old `email` column orphaned with existing user data.
+- **Uncontrolled table locks**: Adding a column with a constraint or changing a column type on a multi-million-row table can acquire an exclusive lock (`AccessExclusiveLock` in PostgreSQL) during application boot, blocking live traffic and stalling rolling deployments.
+- **No version history or rollback path**: Schema changes are applied implicitly by whichever application pod starts first, with no audit trail, no code review of the actual SQL DDL, and no deterministic way to migrate existing data alongside the schema change.
+- **Incomplete DDL modeling**: Hibernate's schema generator does not express partial indexes, PostgreSQL `CONCURRENTLY` index creation, partitioning, check constraints, or multi-step zero-downtime migrations.
+
+In production and staging, pair **Flyway** or **Liquibase** with `spring.jpa.hibernate.ddl-auto: validate` (or `none`). Flyway executes reviewed, versioned SQL migrations first, and then Hibernate's `validate` step acts as a safety net at startup to verify that your Java entity annotations still match the migrated tables.
+
+## Practical Questions
+
+### Why does JPA have no em.update() method, and what happens during dirty checking?
+JPA models persistence around a unit of work (the Persistence Context). Whenever you load an entity, Hibernate keeps a snapshot of its loaded state in the First-Level Cache. You mutate the entity using regular Java methods, and when the Persistence Context flushes (before a dependent query or transaction commit), Hibernate compares each managed entity's current fields against its snapshot. For any entity that changed, Hibernate issues an `UPDATE` statement automatically.
+
+### Why does GenerationType.IDENTITY prevent JDBC insert batching while GenerationType.SEQUENCE allows it?
+Hibernate requires every managed entity to have a primary key as soon as it enters the Persistence Context. With `IDENTITY`, the database only generates the key when the `INSERT` row is written, so Hibernate must execute each `INSERT` immediately during `em.persist()` rather than buffering statements into a batch. With `SEQUENCE` and an `allocationSize` (for example, 50), Hibernate fetches a block of IDs from the database sequence up front, assigns IDs in memory, and sends the queued `INSERT` statements together as a JDBC batch at flush time.
+
+### What is the difference between em.flush() and committing a transaction?
+`em.flush()` pushes pending SQL changes from the Persistence Context to the database over the current JDBC connection, but the transaction stays open and can still be rolled back. Committing a transaction triggers a flush (under default `FlushModeType.AUTO`) and makes the database changes permanent and visible to other transactions.
+
+### Why does calling em.merge(detachedEntity) not make the passed object managed?
+`em.merge()` looks up the entity's ID in the Persistence Context (or loads it from the database), copies the field values from `detachedEntity` onto that managed instance, and returns the managed instance. The original `detachedEntity` remains detached, so any further modifications must be made on the object returned by `em.merge()`, not on the argument you passed in.

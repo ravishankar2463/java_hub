@@ -1,403 +1,465 @@
 ---
 title: "Classes and Objects"
-description: "Transition from procedural thinking to masterclass Object-Oriented design: Metaspace vs. Heap, ClassLoader mechanics, constructor execution ordering, the 'this' escape hazard, and method overloading rules."
+description: "Learn how Java models state and behavior through classes and instances, including constructors, the this keyword, initialization order, and JVM memory layout."
 category: "level-1"
 date: "2026-06-20T13:00:00Z"
 ---
 
-When you write small programs or university assignments, procedural code feels natural: you declare a handful of global variables, write five functions, and pass data back and forth. 
+When a program is only a hundred lines long, a few top-level variables and static helper functions can get the job done. Once a codebase grows to track thousands of active users, orders, or network connections at the same time, keeping all that data in loose variables quickly falls apart. You need a way to group related data with the operations that are allowed to read and modify it.
 
-Then you land in an enterprise codebase with four hundred engineers, five million lines of code, and thousands of concurrent database requests per second. Suddenly, procedural thinking collapses. If anyone can mutate data from anywhere, bugs become ghosts—impossible to reproduce and lethal to debug.
+In Java, that unit of organization is a **class**, and each live copy created from it is an **object** (also called an **instance**). Understanding how classes and objects behave in code and in JVM memory is the foundation for everything else in object-oriented Java.
 
-**Classes and Objects are Java's answer to chaos.** 
+## The Blueprint vs. the Instance
 
-They are not just syntax for grouping data; they are self-governing capsules designed to protect state, enforce business invariants, and construct scalable software architectures.
+A common way to picture the difference between a class and an object is an architectural blueprint versus the houses built from it.
 
-In this deep dive, we will step beyond beginner definitions and unpack how the JVM actually brings classes and objects to life: from the native memory of Metaspace to the Heap, through the precise millisecond sequence of constructor execution, and into the subtle traps that trip up mid-level engineers.
+- A **class** is the definition you write in a `.java` file. It describes what data each object will hold (its **fields**) and what actions it can perform (its **methods**). On its own, a class does not represent a specific user or bank account.
+- An **object** (instance) is a concrete allocation created at runtime using the `new` keyword. You can create ten, a thousand, or a million instances from the same class, and each one keeps its own independent field values.
 
----
+Consider a `BankAccount` class:
 
-## The Machine Behind the Curtain: ClassLoader & Metaspace
+```java
+public class BankAccount {
+    // Instance variables (state owned by each object)
+    private final String accountNumber;
+    private long balanceCents;
 
-Before you can create even a single object using `new Car()`, the JVM must understand what a `Car` actually is. 
+    // Constructor
+    public BankAccount(String accountNumber, long initialBalanceCents) {
+        this.accountNumber = accountNumber;
+        this.balanceCents = initialBalanceCents;
+    }
 
-How does the JVM acquire this knowledge? Through the **ClassLoader Subsystem**.
+    // Instance methods (behavior operating on this object's state)
+    public void deposit(long amountCents) {
+        if (amountCents <= 0) {
+            throw new IllegalArgumentException("Deposit must be positive.");
+        }
+        this.balanceCents += amountCents;
+    }
+
+    public long getBalanceCents() {
+        return this.balanceCents;
+    }
+
+    public String getAccountNumber() {
+        return this.accountNumber;
+    }
+}
+```
+
+When you run the code below, one class definition produces two separate objects on the Heap:
+
+```java
+BankAccount aliceAccount = new BankAccount("ACC-101", 50_000);
+BankAccount bobAccount = new BankAccount("ACC-202", 12_000);
+
+aliceAccount.deposit(5_000);
+
+System.out.println(aliceAccount.getBalanceCents()); // 55000
+System.out.println(bobAccount.getBalanceCents());   // 12000
+```
+
+Depositing into `aliceAccount` never touches `bobAccount`. Both objects share the same method bytecode defined in `BankAccount`, but each object has its own memory block holding its own `accountNumber` and `balanceCents`.
+
+### How the JVM Loads a Class and Creates Instances
+
+Before `new BankAccount(...)` can run for the first time, the JVM has to load the compiled `BankAccount.class` file through its **ClassLoader subsystem** (typically the Application ClassLoader for your project code, delegating upward to the Platform and Bootstrap ClassLoaders for JDK classes).
+
+In modern **HotSpot JVM (Java 8 and later)**, memory is split cleanly between class structure and live instances:
 
 ```mermaid
 flowchart TD
-    Src["Source Code: Car.java"] -->|"javac compiler"| BC["Car.class Bytecode"]
-    
-    subgraph ClassLoaderHierarchy ["1. ClassLoader Pipeline"]
-        direction TB
-        L1["Bootstrap ClassLoader<br/>(Core JDK classes: java.lang.*)"]
-        L2["Platform / Extension ClassLoader<br/>(JDK modules & extensions)"]
-        L3["Application ClassLoader<br/>(Your application classpath & JARs)"]
-        L1 --> L2 --> L3
-    end
-
-    BC --> L3
-
-    subgraph MemoryRegions ["2. JVM Memory Allocation"]
-        direction LR
-        subgraph Metaspace ["Metaspace (Native RAM)"]
-            Meta["Class Metadata:<br/>• Method Bytecode<br/>• Method VTable<br/>• Constant Pool"]
-        end
-        subgraph Heap ["JVM Heap Space"]
-            Mirror["java.lang.Class&lt;Car&gt; Mirror<br/>• Holds Static Fields"]
-            Inst1["Car Instance A<br/>• vin: '1A9'<br/>• speed: 65"]
-            Inst2["Car Instance B<br/>• vin: '2B8'<br/>• speed: 0"]
-        end
-    end
-
-    L3 -->|"stores metadata"| Meta
-    L3 -->|"creates mirror object"| Mirror
-    Mirror -.->|"new Car() instantiates"| Inst1
-    Mirror -.->|"new Car() instantiates"| Inst2
-
-    style ClassLoaderHierarchy fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#f8fafc
-    style MemoryRegions fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#f8fafc
-    style Metaspace fill:#1e293b,stroke:#64748b,color:#f8fafc
-    style Heap fill:#022c22,stroke:#34d399,color:#f8fafc
+    src["Source: BankAccount.java"] -->|"javac"| bc["Bytecode: BankAccount.class"]
+    bc -->|"Application ClassLoader"| meta["Metaspace (Native Memory)<br/>Method bytecode, constant pool, vtable"]
+    bc -->|"Creates mirror"| mirror["Heap: Class Mirror for BankAccount<br/>Holds static fields"]
+    mirror -.->|"new BankAccount(...)"| inst1["Heap Instance 1<br/>accountNumber = 'ACC-101'<br/>balanceCents = 55000"]
+    mirror -.->|"new BankAccount(...)"| inst2["Heap Instance 2<br/>accountNumber = 'ACC-202'<br/>balanceCents = 12000"]
 ```
 
-### Metaspace vs. Java 7's PermGen
-Historically, class metadata was stored in the JVM's "PermGen" (Permanent Generation) space on the Heap. Because PermGen had a fixed maximum size, deploying large enterprise apps frequently crashed servers with `java.lang.OutOfMemoryError: PermGen space`.
+Notice how HotSpot separates these pieces:
 
-In **Java 8**, Oracle eliminated PermGen entirely and replaced it with **Metaspace**.
-- Metaspace lives in **native host memory** outside the JVM Garbage-Collected Heap.
-- It grows dynamically based on available system RAM.
-- **Where do static fields live?** In modern Java, class metadata (bytecodes, method tables) lives in native Metaspace, while static variables and the class mirror (`Car.class`) live directly in the standard Heap!
+- **Metaspace (native host memory):** Stores class metadata such as method bytecode, symbol tables, and virtual method tables. Java 8 replaced the older fixed-size PermGen region with Metaspace so class metadata could grow in native memory instead of hitting fixed heap limits (unless explicitly capped with `-XX:MaxMetaspaceSize`).
+- **Heap (garbage-collected memory):** Holds every object instance you allocate with `new`, as well as the `java.lang.Class` mirror object that holds the class's static fields.
 
----
+This layout is specific to HotSpot rather than mandated down to the byte by the Java Language Specification, which only defines observable semantics. Still, knowing that class definitions live once while object state is allocated per `new` makes object memory costs much easier to reason about.
 
-## State Architecture: Instance vs. Class (Static) Fields
+## Instance Variables and Methods
 
-When you define fields in a class, you make a profound architectural choice between **individual object state** and **shared global state**:
+Inside a class, non-static fields are **instance variables** and non-static methods are **instance methods**.
+
+### Default Values vs. Local Variables
+
+Java treats instance variables differently from local variables declared inside a method:
+
+- **Instance variables** are automatically zero-initialized when the JVM allocates the object: `0` for numeric primitives (`byte`, `short`, `int`, `long`), `0.0` for `float` and `double`, `false` for `boolean`, `'\u0000'` for `char`, and `null` for any reference type.
+- **Local variables** inside methods receive **no** default value. Reading an uninitialized local variable is a compile-time error.
 
 ```java
-public class UserSession {
-    // 1. Instance Field: Unique to EVERY user (lives on Heap inside each instance)
-    private final String sessionId;
-    private long lastHeartbeatTimestamp;
+public class ConnectionConfig {
+    private String host;     // Defaults to null
+    private int port;        // Defaults to 0
+    private boolean useTls;  // Defaults to false
 
-    // 2. Static Field: ONE single copy shared across the entire JVM
-    private static int activeSessionCount = 0;
-
-    public UserSession(String sessionId) {
-        this.sessionId = sessionId;
-        this.lastHeartbeatTimestamp = System.currentTimeMillis();
-        activeSessionCount++; // Increments the shared JVM counter
+    public void printSummary() {
+        int retries;
+        // System.out.println(retries); // Compile error: variable retries might not have been initialized
+        retries = 3;
+        System.out.println(host + ":" + port + " tls=" + useTls + " retries=" + retries);
     }
 }
 ```
 
-```mermaid
-flowchart LR
-    subgraph Heap ["JVM Heap Space"]
-        subgraph Shared ["Shared Class Mirror"]
-            StaticCount["activeSessionCount = 2"]
-        end
-        subgraph InstA ["Instance: UserSession A"]
-            S_A["sessionId = 'sess-101'<br/>lastHeartbeat = 1718884000"]
-        end
-        subgraph InstB ["Instance: UserSession B"]
-            S_B["sessionId = 'sess-102'<br/>lastHeartbeat = 1718884005"]
-        end
-    end
+Even though instance variables get default values automatically, relying on `null` or `0` often leaves objects in a half-valid state. Constructors exist to make sure an object starts life with meaningful values.
 
-    InstA -.->|"reads/writes"| StaticCount
-    InstB -.->|"reads/writes"| StaticCount
+### Instance Methods vs. Shared Class State
 
-    style Heap fill:#0f172a,stroke:#3b82f6,color:#f8fafc
-    style Shared fill:#312e81,stroke:#818cf8,color:#f8fafc
-    style InstA fill:#047857,stroke:#34d399,color:#f8fafc
-    style InstB fill:#047857,stroke:#34d399,color:#f8fafc
-```
+Every instance method is called on a specific object reference (`aliceAccount.deposit(5_000)`). Behind the scenes, the JVM passes that object reference as a hidden first argument to the method, which is what `this` refers to.
 
-### The Senior Warning: Shared Mutable State
-Static variables are accessible by any thread running anywhere in your application. If two threads create or invalidate sessions simultaneously, `activeSessionCount++` will suffer from **race conditions** and produce corrupt totals unless synchronized. 
+By contrast, a `static` field belongs to the class itself rather than any individual instance. A static counter shared across all instances works for tracking totals, though mutable static fields create concurrency hazards if multiple threads update them without synchronization. We will examine `static` in detail in the next lesson.
 
-**Rule of Thumb:** Use `static` for immutable constants (`public static final double TAX_RATE = 0.08;`) or stateless utility functions (`Math.max()`). Avoid shared mutable static variables.
+## Constructors: Default, No-Args, and Parameterized
 
----
+A **constructor** is a special block of code that initializes a newly allocated object. It has the exact same name as the class and **no return type** (not even `void`). If you accidentally write `public void BankAccount(...)`, Java treats it as an ordinary method, not a constructor.
 
-## The Exact Sequence of Object Initialization
+Java developers generally distinguish three kinds of constructors.
 
-When an object is created, in what exact order does Java initialize fields, run blocks, and invoke constructors? 
+### Default Constructor
 
-Understanding this sequence prevents elusive bugs where fields appear `null` or uninitialized:
-
-```mermaid
-flowchart TD
-    Step1["1. Static Initialization (Runs once when Class is first loaded)<br/>• Static variable initializers<br/>• static { ... } blocks in textual order"] --> Step2["2. Instance Field Initializers<br/>• Instance variable defaults and inline assignments"]
-    Step2 --> Step3["3. Instance Initializer Blocks<br/>• Anonymous { ... } blocks in textual order"]
-    Step3 --> Step4["4. Constructor Body Execution (&lt;init&gt;)<br/>• super() runs first<br/>• Custom constructor logic executes"]
-
-    style Step1 fill:#1e293b,stroke:#64748b,stroke-width:2px,color:#f8fafc
-    style Step2 fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#f8fafc
-    style Step3 fill:#312e81,stroke:#818cf8,stroke-width:2px,color:#f8fafc
-    style Step4 fill:#047857,stroke:#34d399,stroke-width:2px,color:#f8fafc
-```
-
-### Let's Prove the Lifecycle in Code:
+If you write a class and declare **no constructors at all**, the Java compiler automatically generates a public (matching the class's visibility) parameterless constructor with an empty body:
 
 ```java
-public class InitializationOrderDemo {
+public class Task {
+    private String title;
+    private boolean completed;
+    // Compiler generates: public Task() { super(); }
+}
+```
 
-    // 1. Static Initializer Block (Runs once when class is loaded)
-    static {
-        System.out.println("1. Static initializer block executed.");
-    }
+You can then call `new Task()`, and every field keeps its default value (`null`, `false`).
 
-    // 2. Instance Field Initializer
-    private String name = initName();
+> [!IMPORTANT]
+> The compiler **only** generates a default constructor when your class defines zero constructors. The moment you write any constructor of your own, the automatic default constructor disappears.
 
-    // 3. Instance Initializer Block
-    {
-        System.out.println("3. Instance initializer block executed.");
-    }
+### No-Args Constructor
 
-    // Helper method to demonstrate field assignment timing
-    private String initName() {
-        System.out.println("2. Instance field initialized.");
-        return "JavaMaster";
-    }
+A **no-args constructor** is a parameterless constructor that *you* write explicitly. Unlike the compiler-generated default constructor, an explicit no-args constructor lets you assign sensible defaults, initialize collections, or log creation:
 
-    // 4. Constructor
-    public InitializationOrderDemo() {
-        System.out.println("4. Constructor body executed.");
-    }
+```java
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
-    public static void main(String[] args) {
-        System.out.println("--- Creating Instance 1 ---");
-        new InitializationOrderDemo();
+public class ShoppingCart {
+    private final Instant createdAt;
+    private final List<String> itemIds;
 
-        System.out.println("--- Creating Instance 2 ---");
-        new InitializationOrderDemo();
+    // Explicit no-args constructor
+    public ShoppingCart() {
+        this.createdAt = Instant.now();
+        this.itemIds = new ArrayList<>();
     }
 }
 ```
 
-**Console Output:**
-```text
-1. Static initializer block executed.
---- Creating Instance 1 ---
-2. Instance field initialized.
-3. Instance initializer block executed.
-4. Constructor body executed.
---- Creating Instance 2 ---
-2. Instance field initialized.
-3. Instance initializer block executed.
-4. Constructor body executed.
-```
+You will also see explicit no-args constructors required by certain frameworks (such as JPA/Hibernate or Jackson when not configured for creator constructors) that instantiate objects via reflection.
 
-Notice: The `static` block executed only **once** upon class loading. Each subsequent `new` instantiation ran the instance field, instance block, and constructor in strict sequence.
+### Parameterized Constructors
 
----
-
-## The Subtle Senior Trap: The "this" Escape Hazard
-
-One of the most dangerous concurrency bugs in Java is allowing the `this` reference to escape from a constructor before the object is fully formed.
-
-Look at this innocent-looking code:
+A **parameterized constructor** accepts arguments so callers must supply required data up front. This is the primary way to enforce class invariants from the moment an object is created:
 
 ```java
-public class EventListenerRegistration {
-    private final String listenerId;
+public class Product {
+    private final String sku;
+    private final String name;
+    private final long priceCents;
 
-    public EventListenerRegistration(EventBus bus) {
-        // ❌ DANGEROUS: Registering 'this' before initialization finishes!
-        bus.register(this); 
-        
-        // Simulating heavy setup work
-        this.listenerId = "LISTENER-42";
-    }
-
-    public void onEvent() {
-        // If an event fires while the constructor is still running,
-        // this will print 'null' or throw a NullPointerException!
-        System.out.println("Handled by: " + listenerId.toLowerCase());
+    public Product(String sku, String name, long priceCents) {
+        if (sku == null || sku.isBlank()) {
+            throw new IllegalArgumentException("SKU is required.");
+        }
+        if (priceCents < 0) {
+            throw new IllegalArgumentException("Price cannot be negative.");
+        }
+        this.sku = sku;
+        this.name = name;
+        this.priceCents = priceCents;
     }
 }
 ```
 
-What went wrong?
-`bus.register(this)` handed a reference to `this` to another thread before the constructor finished assigning `listenerId`! If the event bus receives an incoming message immediately, it calls `onEvent()` on a **partially initialized object**, crashing with a `NullPointerException`.
+Because `Product` defines a parameterized constructor, calling `new Product()` will no longer compile unless you also write a no-args constructor explicitly. For domain objects like `Product`, that is usually a good thing: an empty product with a `null` SKU makes no sense in the domain.
 
-> [!CAUTION]
-> **The Constructor Safety Invariant:**
-> Never pass `this` to another thread, register `this` with a listener, or start a new thread inside a constructor. Complete all field initialization first, and register listeners in a separate `start()` or `init()` lifecycle method.
+### Constructor Overloading and the Telescoping Problem
 
----
+A class can define multiple constructors as long as their parameter lists differ in number, type, or order. This is **constructor overloading**.
 
-## Overloading Constructors & The Telescoping Anti-Pattern
-
-In real applications, objects have many optional configuration parameters (timeout, retries, host, SSL enabled). 
-
-Beginners often write a chain of overloaded constructors, known as the **Telescoping Constructor Anti-Pattern**:
+When a class has many optional settings, chaining overloaded constructors together often turns into the **telescoping constructor** pattern:
 
 ```java
-public class DatabaseClient {
-    private final String host;
-    private final int port;
-    private final int timeoutMs;
-    private final boolean ssl;
+public class HttpClientConfig {
+    private final String baseUrl;
+    private final int connectTimeoutMs;
+    private final int readTimeoutMs;
+    private final int maxRetries;
 
-    public DatabaseClient(String host) {
-        this(host, 5432);
+    public HttpClientConfig(String baseUrl) {
+        this(baseUrl, 3_000);
     }
 
-    public DatabaseClient(String host, int port) {
-        this(host, port, 5000);
+    public HttpClientConfig(String baseUrl, int connectTimeoutMs) {
+        this(baseUrl, connectTimeoutMs, 10_000);
     }
 
-    public DatabaseClient(String host, int port, int timeoutMs) {
-        this(host, port, timeoutMs, true);
+    public HttpClientConfig(String baseUrl, int connectTimeoutMs, int readTimeoutMs) {
+        this(baseUrl, connectTimeoutMs, readTimeoutMs, 2);
     }
 
-    public DatabaseClient(String host, int port, int timeoutMs, boolean ssl) {
-        this.host = host;
-        this.port = port;
-        this.timeoutMs = timeoutMs;
-        this.ssl = ssl;
+    public HttpClientConfig(String baseUrl, int connectTimeoutMs, int readTimeoutMs, int maxRetries) {
+        this.baseUrl = baseUrl;
+        this.connectTimeoutMs = connectTimeoutMs;
+        this.readTimeoutMs = readTimeoutMs;
+        this.maxRetries = maxRetries;
     }
 }
 ```
 
-### Why Telescoping Sucks:
-1. **Parameter Confusion:** If two consecutive parameters are `int`, swapping them accidentally compiles with zero warnings: `new DatabaseClient("localhost", 5000, 5432)`.
-2. **Readability:** Calling `new DatabaseClient("db.prod", 5432, 10000, false)` forces readers to check the source code to figure out what `10000` and `false` represent.
+For two or three parameters, overloaded constructors are fine. Once you have three consecutive `int` arguments, it becomes very easy to swap `connectTimeoutMs` and `readTimeoutMs` at the call site without any compiler warning, and callers have to look up the signature to read what `new HttpClientConfig("https://api.example.com", 3000, 10000, 2)` means.
 
-### The Professional Solution: The Builder Pattern
-By returning `this` from setter-like methods, we create a fluent, type-safe API:
+For objects with many optional configuration parameters, a **Builder** keeps call sites readable and preserves immutability:
 
 ```java
-public class DatabaseClient {
-    private final String host;
-    private final int port;
-    private final int timeoutMs;
-    private final boolean ssl;
+public class HttpClientConfig {
+    private final String baseUrl;
+    private final int connectTimeoutMs;
+    private final int readTimeoutMs;
+    private final int maxRetries;
 
-    private DatabaseClient(Builder builder) {
-        this.host = builder.host;
-        this.port = builder.port;
-        this.timeoutMs = builder.timeoutMs;
-        this.ssl = builder.ssl;
+    private HttpClientConfig(Builder builder) {
+        this.baseUrl = builder.baseUrl;
+        this.connectTimeoutMs = builder.connectTimeoutMs;
+        this.readTimeoutMs = builder.readTimeoutMs;
+        this.maxRetries = builder.maxRetries;
     }
 
     public static class Builder {
-        private final String host; // Mandatory
-        private int port = 5432;   // Optional default
-        private int timeoutMs = 5000;
-        private boolean ssl = true;
+        private final String baseUrl;
+        private int connectTimeoutMs = 3_000;
+        private int readTimeoutMs = 10_000;
+        private int maxRetries = 2;
 
-        public Builder(String host) {
-            this.host = host;
+        public Builder(String baseUrl) {
+            this.baseUrl = baseUrl;
         }
 
-        public Builder port(int port) {
-            this.port = port;
-            return this; // Method chaining!
-        }
-
-        public Builder timeoutMs(int timeoutMs) {
-            this.timeoutMs = timeoutMs;
+        public Builder connectTimeoutMs(int connectTimeoutMs) {
+            this.connectTimeoutMs = connectTimeoutMs;
             return this;
         }
 
-        public Builder ssl(boolean ssl) {
-            this.ssl = ssl;
+        public Builder readTimeoutMs(int readTimeoutMs) {
+            this.readTimeoutMs = readTimeoutMs;
             return this;
         }
 
-        public DatabaseClient build() {
-            return new DatabaseClient(this);
+        public Builder maxRetries(int maxRetries) {
+            this.maxRetries = maxRetries;
+            return this;
+        }
+
+        public HttpClientConfig build() {
+            return new HttpClientConfig(this);
         }
     }
 }
 ```
 
-Now, calling code reads like clean English:
+At the call site, every parameter is self-documenting:
+
 ```java
-DatabaseClient client = new DatabaseClient.Builder("db.internal.net")
-        .port(5433)
-        .timeoutMs(2500)
-        .ssl(true)
+HttpClientConfig config = new HttpClientConfig.Builder("https://api.example.com")
+        .connectTimeoutMs(2_000)
+        .readTimeoutMs(8_000)
+        .maxRetries(3)
         .build();
 ```
 
----
+## The `this` Keyword
 
-## Method Overloading Rules & Resolution Priority
+Inside any instance method or constructor, `this` is a reference to the current object whose method or constructor is running. It has four practical uses in Java.
 
-Method overloading allows multiple methods to share the same name within a class. 
+### Disambiguating Shadowed Fields
 
-However, Java follows strict compile-time rules to determine which method to invoke:
+When a constructor or method parameter has the same name as an instance field, the parameter **shadows** the field inside that block. Writing `balance = balance;` assigns the parameter to itself and leaves the field untouched, which is a classic bug. Prefixing the field with `this.` makes the target unambiguous:
 
 ```java
-public class OverloadResolver {
-    public void print(int x)         { System.out.println("Primitive int: " + x); }
-    public void print(long x)        { System.out.println("Widened long: " + x); }
-    public void print(Integer x)     { System.out.println("Boxed Integer: " + x); }
-    public void print(Number x)      { System.out.println("Polymorphic Number: " + x); }
-    public void print(int... x)      { System.out.println("Varargs int...: " + x.length); }
+public class ServerEndpoint {
+    private final String host;
+    private final int port;
+
+    public ServerEndpoint(String host, int port) {
+        this.host = host; // Assigns parameter 'host' to instance field 'this.host'
+        this.port = port;
+    }
 }
 ```
 
-If you call `print(5)`, which method wins?
+### Constructor Chaining with `this(...)`
 
-Java resolves overloaded method calls in **four distinct phases**:
+One constructor can delegate to another constructor in the same class using `this(...)`, as shown in the `HttpClientConfig` overloading example above. Centralizing validation and field assignment in a single "canonical" constructor avoids duplicating logic across overloads.
+
+Two compiler rules apply to `this(...)`:
+1. In standard Java (prior to JEP 447 / JEP 482 flexible constructor bodies in Java 22-24 preview and JEP 513 in Java 25), `this(...)` must be the **very first statement** in the constructor.
+2. A constructor cannot call both `this(...)` and `super(...)`, because the chained constructor will eventually call `super(...)`.
+
+### Returning `this` for Fluent APIs
+
+Methods like `Builder.connectTimeoutMs(...)` return `this` so callers can chain calls one after another on the same object without repeating the variable name.
+
+### Passing the Current Object to Another Method
+
+An object can hand a reference to itself to a collaborator: `auditLog.record(this)`. That is safe once the object is fully constructed, which brings up an important constructor hazard.
+
+### The `this` Escape Pitfall
+
+Never let `this` escape from a constructor before the constructor finishes executing. Common ways `this` escapes include registering the object with an event listener, storing it in a static collection, or starting a thread that accesses the object from inside the constructor.
+
+```java
+public class OrderEventHandler {
+    private final String handlerName;
+
+    public OrderEventHandler(EventBus bus) {
+        // Dangerous: another thread on the EventBus can invoke onOrder()
+        // before handlerName has been assigned.
+        bus.register(this);
+
+        this.handlerName = "order-processor";
+    }
+
+    public void onOrder(String orderId) {
+        // Can throw NullPointerException if called during construction
+        System.out.println(handlerName.toUpperCase() + " handled " + orderId);
+    }
+}
+```
+
+Because `bus.register(this)` runs before `this.handlerName` is assigned, another thread listening on `EventBus` can observe a **partially constructed object** where even a `final` field still appears `null`. Java's memory model only guarantees safe publication of `final` fields *after* the constructor returns without `this` escaping.
+
+> [!CAUTION]
+> Keep constructors focused on validating inputs and initializing fields. If an object needs to register listeners, open background threads, or subscribe to queues, do that in a separate `start()` method or a static factory method after `new` completes.
+
+```java
+public static OrderEventHandler createAndRegister(EventBus bus) {
+    OrderEventHandler handler = new OrderEventHandler();
+    bus.register(handler);
+    return handler;
+}
+```
+
+## Object Initialization Order
+
+When you create an object, Java executes initialization steps in a deterministic order defined by the Java Language Specification:
 
 ```mermaid
 flowchart TD
-    Call["Call: print(5)"] --> P1{"1. Exact Match?<br/>(Exact primitive type)"}
-    P1 -->|"Yes"| Win1["Invoke print(int)"]
-    P1 -->|"No"| P2{"2. Widening Primitive?<br/>(int -> long -> float -> double)"}
-    P2 -->|"Yes"| Win2["Invoke print(long)"]
-    P2 -->|"No"| P3{"3. Autoboxing?<br/>(int -> Integer -> Number -> Object)"}
-    P3 -->|"Yes"| Win3["Invoke print(Integer)"]
-    P3 -->|"No"| P4{"4. Varargs?<br/>(Lowest priority fallback)"}
-    P4 -->|"Yes"| Win4["Invoke print(int...)"]
-    P4 -->|"No"| Fail["Compile Error: No matching method found"]
-
-    style Call fill:#1e293b,stroke:#64748b,color:#f8fafc
-    style Win1 fill:#047857,stroke:#34d399,color:#f8fafc
-    style Win2 fill:#0f172a,stroke:#3b82f6,color:#f8fafc
-    style Win3 fill:#312e81,stroke:#818cf8,color:#f8fafc
-    style Win4 fill:#701a75,stroke:#f472b6,color:#f8fafc
-    style Fail fill:#7f1d1d,stroke:#f87171,color:#f8fafc
+    s1["1. Static field initializers and static blocks<br/>Runs once when the class is first initialized"] --> s2["2. Superclass constructor completes<br/>via implicit or explicit super(...)"]
+    s2 --> s3["3. Instance field initializers and instance blocks<br/>Runs in top-to-bottom source order"]
+    s3 --> s4["4. Constructor body executes<br/>Custom validation and field assignment"]
 ```
 
-> [!IMPORTANT]
-> **Widening Beats Autoboxing!**
-> If you comment out `print(int x)`, calling `print(5)` will invoke `print(long x)`, **NOT** `print(Integer x)`. Java prioritized legacy C-style primitive widening before Java 5's autoboxing was introduced.
+You can observe this directly with a small program:
 
----
+```java
+public class InitOrderExample {
 
-## Summary & Mental Model Checkpoint
+    static {
+        System.out.println("1. Static initializer block");
+    }
 
-1. **ClassLoader & Metaspace**: Class metadata and method bytecode live in native Metaspace. Static fields and class mirror objects live in the Heap.
-2. **Instance vs. Static**: Instance variables duplicate on the Heap per object; static variables exist once per class loader.
-3. **Initialization Order**: 
-   - Static initializers (once on load).
-   - Instance field initializers & anonymous instance blocks (textual order).
-   - Constructor body (`<init>`).
-4. **Never Escape `this`**: Do not pass `this` to outside listeners or start threads inside constructors.
-5. **Builder over Telescoping**: Replace multi-argument constructor confusion with fluent Builders.
-6. **Overload Priority**: Exact match -> Primitive widening -> Autoboxing -> Varargs.
+    private String label = initLabel();
 
----
+    {
+        System.out.println("3. Instance initializer block");
+    }
 
-## 🎯 Senior Engineer Interview Questions
+    private String initLabel() {
+        System.out.println("2. Instance field initializer");
+        return "ready";
+    }
 
-### What was the architectural motivation for replacing PermGen with Metaspace in Java 8?
-> **Answer:** PermGen was an area of fixed contiguous memory allocated inside the JVM heap. Tuning its size (`-XX:MaxPermSize`) was notoriously difficult: if an application dynamically generated classes (e.g. via Spring CGLIB, Hibernate proxies, or OSGi bundle redeployment), PermGen would inevitably exhaust its capacity and throw `java.lang.OutOfMemoryError: PermGen space`, taking down the entire JVM. Metaspace solves this by allocating class metadata in native host memory, bounded only by the physical RAM and swap space of the machine (unless capped via `-XX:MaxMetaspaceSize`).
+    public InitOrderExample() {
+        System.out.println("4. Constructor body (label=" + label + ")");
+    }
 
-### What is the "this escape" problem in Java constructors, and how can it cause multithreading defects?
-> **Answer:** "This escape" occurs when the `this` reference to an object becomes visible outside the constructor before constructor execution finishes. Examples include passing `this` to an event listener, storing `this` in a public static variable, or launching a thread inside the constructor. In concurrent environments, another thread can observe the object in a partially initialized state where non-final fields hold default zeros or nulls, violating invariants and causing unpredictable `NullPointerException`s or data corruption.
+    public static void main(String[] args) {
+        System.out.println("--- First instance ---");
+        new InitOrderExample();
 
-### Does the return type participate in a method's signature for overloading resolution? Why or why not?
-> **Answer:** No. In Java, a method signature consists strictly of the **method name** and the **number, types, and order of its parameters**. The return type is not part of the signature. Allowing overloading by return type would introduce fatal syntactic ambiguity: for a method call `calculate()`, the compiler could not determine whether to invoke a version returning `void`, `int`, or `double` if the caller ignores the return value.
+        System.out.println("--- Second instance ---");
+        new InitOrderExample();
+    }
+}
+```
 
-### Can an anonymous instance initializer block `{ ... }` throw a checked exception?
-> **Answer:** An instance initializer block can only throw a checked exception if **every single constructor** in the class explicitly declares that checked exception in its `throws` clause. Because instance blocks are copied into the beginning of every constructor by the compiler, an unhandled checked exception in an instance block would otherwise violate Java's compile-time exception checking.
+Output:
+
+```text
+1. Static initializer block
+--- First instance ---
+2. Instance field initializer
+3. Instance initializer block
+4. Constructor body (label=ready)
+--- Second instance ---
+2. Instance field initializer
+3. Instance initializer block
+4. Constructor body (label=ready)
+```
+
+Notice two practical details here. First, the `static` block runs once when the class is initialized, not per instance. Second, instance field initializers and anonymous `{ ... }` instance blocks run in the exact textual order they appear in the file, *before* the constructor body runs. Because anonymous instance initializer blocks can easily surprise readers, most teams prefer putting initialization logic directly inside a constructor (and chaining via `this(...)`) instead of using `{ ... }` blocks.
+
+## Method Overloading Resolution
+
+Just like constructors, regular methods can be overloaded within a class as long as their parameter lists differ. The return type is **not** part of a method's overload signature: you cannot have both `int parse(String s)` and `double parse(String s)` in the same class, because a caller writing `parse("42");` would be ambiguous.
+
+When multiple overloaded methods could accept a call like `log(5)`, the Java compiler resolves the match at compile time in strict order:
+
+```mermaid
+flowchart TD
+    call["Call: log(5)"] --> exact{"Exact type match?<br/>log(int)"}
+    exact -->|"Yes"| m1["Select log(int)"]
+    exact -->|"No"| widen{"Primitive widening?<br/>log(long), log(double)"}
+    widen -->|"Yes"| m2["Select closest widened primitive"]
+    widen -->|"No"| box{"Autoboxing?<br/>log(Integer), log(Number)"}
+    box -->|"Yes"| m3["Select boxed or supertype overload"]
+    box -->|"No"| varargs{"Varargs fallback?<br/>log(int...)"}
+    varargs -->|"Yes"| m4["Select log(int...)"]
+    varargs -->|"No"| err["Compile error: no matching overload"]
+```
+
+```java
+public class OverloadDemo {
+    static void log(long value)    { System.out.println("long: " + value); }
+    static void log(Integer value) { System.out.println("Integer: " + value); }
+    static void log(int... values) { System.out.println("varargs count: " + values.length); }
+
+    public static void main(String[] args) {
+        log(5); // Prints: long: 5
+    }
+}
+```
+
+Primitive widening beats autoboxing because Java 5 introduced autoboxing without wanting to change the meaning of existing code written for Java 1.0-1.4. Note also that Java will not combine widening and boxing in a single step: passing an `int` to a method expecting `Long` fails to compile.
+
+## Practical Questions
+
+### Why does adding a parameterized constructor sometimes break existing code that calls `new MyClass()`?
+Java only synthesizes a default parameterless constructor when a class declares no constructors at all. Adding even a single parameterized constructor tells the compiler you are taking control of how the class is instantiated, so it stops generating the default constructor. If callers or frameworks still need a zero-argument constructor, you have to declare an explicit no-args constructor yourself.
+
+### What happens if you accidentally put a return type like `void` on a constructor?
+The code still compiles, because Java allows a method to have the same name as its class (though IDEs and linters warn loudly against it). However, Java treats it as a normal instance method rather than a constructor, which means it never runs during `new` and the compiler may still generate a default constructor behind your back.
+
+### Why is escaping `this` from a constructor dangerous even when all fields are `final`?
+Java's memory model guarantees that once a constructor completes normally, any thread that obtains a reference to the object will see the initialized values of its `final` fields without extra synchronization. If `this` escapes *during* construction (for example, by registering with another thread's event bus or starting a background thread), that guarantee is void: another thread can observe default zero or `null` values before the constructor finishes assigning them.
+
+### What is the difference between where a class definition lives and where its objects live in HotSpot Java 8+?
+HotSpot stores class metadata (method bytecode, constant pool, method dispatch tables) in native memory called Metaspace. Individual object instances created with `new`, along with the `java.lang.Class` mirror object that holds static fields, live on the garbage-collected Java Heap.

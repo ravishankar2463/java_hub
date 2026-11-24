@@ -1,443 +1,476 @@
-# Distributed Rate Limiting and Throttling
+---
+title: "Distributed Rate Limiting and Throttling"
+description: "How to enforce traffic limits across clustered Java services using Token Bucket, Leaky Bucket, and Sliding Window algorithms, atomic Redis Lua scripts, Spring Cloud Gateway RequestRateLimiter, and HTTP 429 throttling responses."
+category: "level-11"
+date: "2026-10-29T10:00:00Z"
+---
 
-Every backend service has finite computational capacity:
-- Relational databases have bounded connection pools (e.g., 50 HikariCP connections).
-- Microservice thread pools can only process a finite number of concurrent HTTP requests before latency explodes.
-- Third-party SaaS dependencies (Stripe, Twilio, OpenAI) enforce strict API rate limits and bill excessive penalties for overages.
+Every backend service runs against hard capacity ceilings. A PostgreSQL primary handles only so many active connections in its HikariCP pool, an application container can hold only so many concurrent requests before tail latency spikes, and third-party APIs like Stripe or OpenAI enforce strict request quotas.
 
-Without proactive traffic governance, an unexpected marketing surge, a rogue automated script, or a distributed denial-of-service (DDoS) attack will overwhelm your services. A single unconstrained tenant can exhaust database resources, bringing down the entire platform for all other customers—a classic **Noisy Neighbor** failure.
-
-To build defensible distributed systems, backend architects enforce **Rate Limiting and Throttling**.
-
-In this deep dive, we will unpack the mathematics of core rate-limiting algorithms, examine why JVM-local limiters fail in clustered environments, implement a production-grade distributed rate limiter using Redis and Bucket4j, and configure standard IETF throttling headers.
+Without traffic limits, a buggy retry loop in a client app, a sudden traffic surge, or a single abusive tenant can exhaust shared pools and degrade the service for everyone else (the classic **noisy neighbor** problem). Rate limiting caps how many requests a caller can make over time, while throttling shapes or rejects excess traffic cleanly before downstream components collapse.
 
 ---
 
-## Why JVM-Local Rate Limiters Fail in Cloud Environments
+## Why In-Memory Rate Limiters Break in Clustered Deployments
 
-When developers first encounter rate limiting, they often reach for in-memory Java libraries like Google Guava's `RateLimiter` or Resilience4j's `RateLimiter`:
+When teams first add rate limiting in Java, they often start with a local in-memory limiter such as Guava's `RateLimiter` or Resilience4j's `RateLimiter`. That works on a single JVM, but breaks down as soon as you run multiple replicas behind a load balancer:
 
 ```mermaid
 flowchart TD
-    subgraph MultiPodCluster["Kubernetes Pod Cluster (3 Pods)"]
-        Pod1["Pod 1: Local Limiter (Max 100 req/min)"]
-        Pod2["Pod 2: Local Limiter (Max 100 req/min)"]
-        Pod3["Pod 3: Local Limiter (Max 100 req/min)"]
+    Client["Client sending 300 req/min"] --> LB["Load Balancer"]
+
+    subgraph Cluster["Kubernetes Deployment (3 Pods)"]
+        Pod1["Pod 1: Local limit 100 req/min"]
+        Pod2["Pod 2: Local limit 100 req/min"]
+        Pod3["Pod 3: Local limit 100 req/min"]
     end
 
-    LB["Cloud Load Balancer"] --> Pod1
+    LB --> Pod1
     LB --> Pod2
     LB --> Pod3
-
-    Client["Malicious Client: 300 requests/minute"] --> LB
 ```
 
-### The Inherent Flaws of JVM-Local Limiting
+Three issues appear immediately:
 
-1. **Capacity Multiplied by Node Count:** If your business requirement is *"Allow customer X at most 100 requests per minute,"* and you configure a local 100 req/min limiter on each pod:
-   - When running 1 pod, the client can make 100 req/min.
-   - When Kubernetes scales your service to 10 pods, the client can make **1,000 req/min** simply because the load balancer spreads requests across pods. The limit dynamically drifts based on auto-scaling!
-2. **Uneven Load Balancing:** If round-robin DNS sends 80% of traffic to Pod 1, the client will be throttled prematurely on Pod 1 while Pods 2 and 3 sit idle with unused capacity.
-3. **Pod Evictions and Restarts:** Every time a pod restarts or scales down, all local rate-limiting memory is erased.
+- **Effective limits scale with replica count:** If your policy is 100 requests per minute per tenant and each pod enforces 100 locally, scaling from 3 pods to 12 pods silently raises the tenant's real quota to 1,200 requests per minute.
+- **Uneven routing causes premature throttling:** Sticky sessions or uneven load distribution can push most of a tenant's traffic onto Pod 1, triggering HTTP 429 errors while Pods 2 and 3 still have unused allowance.
+- **State disappears on restart:** Rolling deployments and pod evictions wipe local counters back to zero.
 
-**The Architectural Remedy:** Rate limit state must be externalized into a high-speed, shared distributed consensus cache—**Redis**.
+To enforce a consistent cluster-wide quota, rate-limit state must live in a shared, low-latency data store. In most Java architectures, that store is **Redis**.
 
 ---
 
-## The Four Core Rate Limiting Algorithms
+## Core Rate Limiting Algorithms
 
-Choosing the right algorithm depends on whether your workload requires burst tolerance, perfectly smoothed output traffic, or minimal memory overhead.
+Choosing an algorithm comes down to three trade-offs: how you want to handle short bursts, how strictly you need to enforce window boundaries, and how much memory you are willing to spend per key.
 
 ```mermaid
-flowchart TD
-    subgraph Alg1["1. Token Bucket"]
-        TB["Tokens refill continuously at rate R.<br/>Bucket holds max capacity B.<br/>Allows bursts up to B.<br/>Smooth long-term rate."]
-    end
-
-    subgraph Alg2["2. Leaky Bucket"]
-        LB["Requests enter buffer queue.<br/>Leak out at constant, steady rate.<br/>Zero burst tolerance.<br/>Smooths traffic for downstream systems."]
-    end
-
-    subgraph Alg3["3. Fixed Window Counter"]
-        FWC["Counter resets every fixed interval (e.g., 00:01:00).<br/>Vulnerable to 2x boundary burst!"]
-    end
-
-    subgraph Alg4["4. Sliding Window Counter"]
-        SWC["Blends count from previous window with current window.<br/>Low memory, prevents boundary burst."]
+flowchart LR
+    subgraph Algorithms["Rate Limiting Algorithms"]
+        TB["Token Bucket: Controlled bursts, steady average"]
+        LB["Leaky Bucket: Constant outflow, no bursts"]
+        FWC["Fixed Window: Simple counter, 2x boundary spike"]
+        SWL["Sliding Window Log: Exact timestamps, O(N) memory"]
+        SWC["Sliding Window Counter: Weighted estimate, O(1) memory"]
     end
 ```
 
 ### Token Bucket
-- Tokens are added to a bucket at a constant rate `R` (e.g., 10 tokens per second).
-- The bucket has a maximum capacity `B` (e.g., 50 tokens).
-- When a request arrives, it attempts to consume 1 token. If tokens are available, the request proceeds immediately. If the bucket is empty, the request is rejected with HTTP `429 Too Many Requests`.
-- **Strengths:** Supports **controlled bursts** (up to capacity `B`) while strictly enforcing a sustainable average rate over time. The industry standard for public web APIs.
+
+A bucket holds up to `B` tokens (the burst capacity) and refills continuously at a steady rate `R` (for example, 10 tokens per second). Each incoming request removes one or more tokens; if the bucket does not have enough tokens, the request is rejected.
+
+Because an idle caller builds up tokens up to `B`, Token Bucket absorbs normal interactive bursts (such as a browser loading a dashboard with 15 parallel API calls) without artificial delay, while capping sustained traffic at `R`. It stores only two numbers per key (current token count and last refill timestamp), which is why it is the default choice for most public APIs and Spring Cloud Gateway.
 
 ### Leaky Bucket
-- Requests enter a First-In, First-Out (FIFO) queue of fixed capacity.
-- The queue drains ("leaks") at a strictly constant rate, regardless of how fast requests arrive.
-- If the queue overflows, incoming requests are dropped.
-- **Strengths:** Eliminates all bursts. Ideal for protecting downstream legacy services that crash when hit with sudden traffic spikes.
 
-### Fixed Window Counter
-- Divides time into fixed intervals (e.g., 1 minute from 12:00 to 12:01).
-- Increments a counter for each request. When the counter exceeds the threshold, requests are rejected until the window resets.
-- **The Fatal Flaw (The Boundary Burst):**
-  - If a user sends 100 requests at 12:00:59, and sends another 100 requests at 12:01:01, the system processes **200 requests within a 2-second window**, potentially crashing the database while remaining compliant with the naive 100 req/minute rule.
+Requests enter a FIFO queue of fixed capacity and drain ("leak") to the downstream service at a fixed, uniform rate. If the queue is full, new requests are rejected immediately.
 
-### Sliding Window Counter (Weighted Interpolation)
-- Solves the boundary burst problem without the high memory cost of storing individual request timestamps.
-- It approximates the rolling count using a weighted formula:
+Unlike Token Bucket, Leaky Bucket smooths traffic into a completely flat outflow with no bursts. That makes it useful in front of fragile legacy systems or payment gateways that reject short spikes even when the 1-minute average looks fine. The trade-off is added queuing latency when traffic arrives in bursts.
+
+### Fixed Window Counter and the Boundary Spike
+
+Fixed Window splits time into discrete buckets (such as `12:00:00` to `12:01:00`) and increments a single counter per window. It is trivial to implement with Redis `INCR` and `EXPIRE`, but it has a well-known boundary flaw: if a client sends 100 requests at `12:00:59` and another 100 requests at `12:01:01`, both windows stay at 100, yet your backend absorbs **200 requests in 2 seconds**.
+
+### Sliding Window Log
+
+Sliding Window Log fixes the boundary spike completely by recording the exact timestamp of every accepted request for a key (in Redis, using a Sorted Set `ZSET`). On each request, you remove entries older than `now - windowSize` (`ZREMRANGEBYSCORE`), count the remaining entries (`ZCARD`), and if below the limit, add the current timestamp (`ZADD`).
+
+The enforcement is exact across any rolling interval, with no boundary spikes. The downside is memory: if a tenant is allowed 10,000 requests per hour, Redis must store up to 10,000 sorted-set members for that single tenant (`O(N)` memory per key).
+
+### Sliding Window Counter
+
+Sliding Window Counter offers a practical middle ground. It keeps just two fixed-window counters per key (the previous window and the current window) and estimates the rolling count with a weighted sum:
 
 ```text
-Requests in Window = (Previous Window Count * (1 - Elapsed Ratio)) + Current Window Count
+estimated_count = (previous_window_count * (1 - elapsed_ratio_in_current_window)) + current_window_count
 ```
 
-If 70% of the current minute has elapsed, the algorithm weights 30% of the previous minute's requests plus 100% of the current minute's requests. It prevents boundary spikes with negligible memory consumption.
+If 70% of the current minute has elapsed, it takes 30% of the previous minute's count plus 100% of the current minute's count. Memory stays `O(1)` per key while smoothing out boundary bursts well enough for most APIs.
+
+| Algorithm | Burst Handling | Boundary Accuracy | Memory per Key | Typical Use Case |
+| :--- | :--- | :--- | :--- | :--- |
+| **Token Bucket** | Allows bursts up to capacity | Smooth long-term rate | `O(1)` (2 fields) | General-purpose REST APIs, API gateways |
+| **Leaky Bucket** | Eliminates bursts (queues) | Strict constant outflow | `O(queue size)` | Protecting brittle downstream services |
+| **Fixed Window** | Up to 2x at window edges | Low at boundaries | `O(1)` (1 counter) | Coarse daily quotas, simple internal limits |
+| **Sliding Window Log** | No boundary spikes | Exact | `O(limit)` | Strict low-volume limits (e.g., OTP/SMS, login attempts) |
+| **Sliding Window Counter** | Minimal boundary spill | High approximation | `O(1)` (2 counters) | High-scale API throttling with tight RAM budgets |
 
 ---
 
-## Distributed Token Bucket with Redis and Lua Scripts
+## Distributed Rate Limiting with Redis and Lua Scripts
 
-To implement distributed rate limiting in Redis, naive multi-step commands are hazardous:
+Implementing a Redis rate limiter with separate client commands fails under concurrency:
 
 ```text
-// DANGEROUS: Non-atomic race condition!
-1. GET user:101:count
-2. IF count < 100 THEN
-3.   INCR user:101:count
-4.   EXPIRE user:101:count 60
+-- Race condition across multiple pods:
+1. GET ratelimit:user-42      -> returns 99 to Pod A and Pod B simultaneously
+2. Both pods see 99 < 100
+3. Both pods call INCR        -> both requests pass, exceeding the limit
 ```
 
-Under high concurrency, multiple application pods reading step 1 simultaneously will all pass the condition, allowing thousands of requests to bypass the limit.
+Even Redis `MULTI`/`EXEC` transactions cannot branch conditionally on a value read inside the same transaction. To make the read, refill calculation, check, and update atomic without multiple network round trips, run a **Lua script** directly inside Redis. Redis executes Lua scripts atomically on its single command thread: no other command interleaves until the script returns.
 
-The check, token replenishment, and deduction must execute as a single, atomic operation using a **Redis Lua script**.
+### Atomic Token Bucket Lua Script Using `redis.call('TIME')`
 
-### The Atomic Token Bucket Lua Script
+One subtle bug in many sample Lua scripts is passing the current timestamp from the Java application (`System.currentTimeMillis()`) as an argument. In a multi-node cluster, clock skew between pods can cause tokens to jump backward or refill inconsistently. Calling `redis.call('TIME')` inside the Lua script uses Redis's own server clock instead (Redis 7+ uses effects-based replication by default, so non-deterministic reads like `TIME` are safe inside Lua scripts).
 
 ```lua
--- KEYS[1]: Rate limit key (e.g., "ratelimit:user-101")
--- ARGV[1]: Bucket capacity (max burst)
--- ARGV[2]: Refill rate (tokens added per millisecond)
--- ARGV[3]: Current timestamp in milliseconds
--- ARGV[4]: Requested tokens (usually 1)
+-- KEYS[1]: rate limit key (e.g., "rl:token:tenant-42")
+-- ARGV[1]: bucket capacity (max burst)
+-- ARGV[2]: refill rate (tokens per second)
+-- ARGV[3]: tokens requested (typically 1)
 
 local key = KEYS[1]
 local capacity = tonumber(ARGV[1])
-local refill_rate = tonumber(ARGV[2])
-local now = tonumber(ARGV[3])
-local requested = tonumber(ARGV[4])
+local refill_per_sec = tonumber(ARGV[2])
+local requested = tonumber(ARGV[3])
 
--- Retrieve current state: [tokens, last_refreshed_timestamp]
-local data = redis.call("HMGET", key, "tokens", "last_updated")
-local tokens = tonumber(data[1])
-local last_updated = tonumber(data[2])
+-- Use Redis server time to avoid clock skew across application pods
+local server_time = redis.call("TIME")
+local now_ms = (tonumber(server_time[1]) * 1000) + math.floor(tonumber(server_time[2]) / 1000)
+
+local state = redis.call("HMGET", key, "tokens", "last_refill_ms")
+local tokens = tonumber(state[1])
+local last_refill_ms = tonumber(state[2])
 
 if tokens == nil then
     tokens = capacity
-    last_updated = now
+    last_refill_ms = now_ms
 else
-    -- Calculate newly accumulated tokens since last request
-    local elapsed = math.max(0, now - last_updated)
-    local generated_tokens = elapsed * refill_rate
-    tokens = math.min(capacity, tokens + generated_tokens)
-    last_updated = now
+    local elapsed_ms = math.max(0, now_ms - last_refill_ms)
+    local added = (elapsed_ms / 1000.0) * refill_per_sec
+    tokens = math.min(capacity, tokens + added)
+    last_refill_ms = now_ms
 end
 
--- Evaluate token availability
+local allowed = 0
+local retry_after_ms = 0
+
 if tokens >= requested then
     tokens = tokens - requested
-    redis.call("HMSET", key, "tokens", tokens, "last_updated", last_updated)
-    -- Set TTL so idle keys clean themselves up automatically (2 * refill duration)
-    local ttl = math.ceil(capacity / (refill_rate * 1000)) * 2
-    redis.call("EXPIRE", key, math.max(60, ttl))
-    return {1, math.floor(tokens)} -- Allowed: 1, Remaining tokens
+    allowed = 1
 else
-    redis.call("HMSET", key, "tokens", tokens, "last_updated", last_updated)
-    return {0, math.floor(tokens)} -- Blocked: 0, Remaining tokens
+    local deficit = requested - tokens
+    retry_after_ms = math.ceil((deficit / refill_per_sec) * 1000)
 end
+
+redis.call("HSET", key, "tokens", tokens, "last_refill_ms", last_refill_ms)
+
+-- Expire idle keys after twice the time needed to fill an empty bucket
+local ttl_sec = math.max(60, math.ceil((capacity / refill_per_sec) * 2))
+redis.call("EXPIRE", key, ttl_sec)
+
+return { allowed, math.floor(tokens), retry_after_ms }
 ```
 
-Because Redis executes Lua scripts as a single atomic transaction, no two threads can interleave token calculations.
+### Invoking the Script from Spring Boot with `EVALSHA`
+
+Sending the full Lua source code on every HTTP request wastes bandwidth. Spring Data Redis's `DefaultRedisScript` automatically hashes the script with SHA-1 and runs `EVALSHA` against Redis, falling back to `EVAL` only the first time (or if Redis flushes its script cache):
+
+```java
+package com.example.ratelimit.redis;
+
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class RedisTokenBucketLimiter {
+
+    private final StringRedisTemplate redisTemplate;
+    private final DefaultRedisScript<List> tokenBucketScript;
+
+    public RedisTokenBucketLimiter(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+        this.tokenBucketScript = new DefaultRedisScript<>();
+        this.tokenBucketScript.setLocation(new ClassPathResource("scripts/token_bucket.lua"));
+        this.tokenBucketScript.setResultType(List.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    public RateLimitDecision tryAcquire(String key, int capacity, int refillPerSecond, int requestedTokens) {
+        List<Long> result = redisTemplate.execute(
+                tokenBucketScript,
+                List.of("rl:token:" + key),
+                String.valueOf(capacity),
+                String.valueOf(refillPerSecond),
+                String.valueOf(requestedTokens)
+        );
+
+        if (result == null || result.size() < 3) {
+            throw new IllegalStateException("Unexpected Redis Lua script response");
+        }
+
+        boolean allowed = result.get(0) == 1L;
+        long remaining = result.get(1);
+        long retryAfterMs = result.get(2);
+        return new RateLimitDecision(allowed, remaining, retryAfterMs);
+    }
+
+    public record RateLimitDecision(boolean allowed, long remainingTokens, long retryAfterMs) {}
+}
+```
 
 ---
 
-## Production Implementation with Bucket4j and Redisson
+## Spring Cloud Gateway `RequestRateLimiter`
 
-Writing and maintaining raw Lua scripts adds maintenance overhead. In the enterprise Java ecosystem, the production standard for distributed rate limiting is **Bucket4j** integrated with **Redisson**.
+If your architecture already routes external traffic through **Spring Cloud Gateway**, you do not need to write or maintain your own Lua script. Spring Cloud Gateway ships with a built-in `RequestRateLimiter` filter backed by Redis (`RedisRateLimiter`), which runs an atomic Token Bucket Lua script inside Redis under the hood.
 
-### Step 1: Maven Dependencies
+### Dependencies
+
+Include Spring Cloud Gateway and Reactive Redis:
 
 ```xml
 <dependency>
-    <groupId>com.bucket4j</groupId>
-    <artifactId>bucket4j-core</artifactId>
-    <version>8.10.1</version>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-gateway</artifactId>
 </dependency>
 <dependency>
-    <groupId>com.bucket4j</groupId>
-    <artifactId>bucket4j-redis</artifactId>
-    <version>8.10.1</version>
-</dependency>
-<dependency>
-    <groupId>org.redisson</groupId>
-    <artifactId>redisson-spring-boot-starter</artifactId>
-    <version>3.37.0</version>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
 </dependency>
 ```
 
-### Step 2: Rate Limiter Configuration and Tier Definition
+### Configuring Routes and Token Bucket Parameters
+
+In `application.yml`, attach the `RequestRateLimiter` filter to a route and configure the three core Redis Token Bucket properties:
+
+- `redis-rate-limiter.replenishRate`: How many tokens are added per second (sustained throughput per key).
+- `redis-rate-limiter.burstCapacity`: Maximum tokens the bucket can hold (short-term burst allowance).
+- `redis-rate-limiter.requestedTokens`: How many tokens a single request costs (defaults to `1`; set higher for expensive endpoints like report exports or LLM inference).
+
+```yaml
+spring:
+  data:
+    redis:
+      host: redis.internal
+      port: 6379
+      timeout: 50ms
+  cloud:
+    gateway:
+      routes:
+        - id: orders-api
+          uri: lb://order-service
+          predicates:
+            - Path=/api/v1/orders/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@clientKeyResolver}"
+                deny-empty-key: true
+                empty-key-status: FORBIDDEN
+        - id: reports-export-api
+          uri: lb://reporting-service
+          predicates:
+            - Path=/api/v1/reports/export/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 5
+                key-resolver: "#{@clientKeyResolver}"
+```
+
+### Writing a Custom `KeyResolver` Bean
+
+The `KeyResolver` decides *who* gets their own bucket. Never rely blindly on a raw `X-Forwarded-For` header without trusting your reverse proxy, because callers can spoof arbitrary headers to bypass IP rate limits. Prefer an authenticated subject (JWT `sub` or validated API key), falling back to the remote peer address only for unauthenticated endpoints:
 
 ```java
-package com.javahub.ratelimit.config;
+package com.example.gateway.config;
 
-import io.github.bucket4j.Bandwidth;
-import io.github.bucket4j.BucketConfiguration;
-import io.github.bucket4j.distributed.proxy.ProxyManager;
-import io.github.bucket4j.redis.redisson.Bucket4jRedisson;
-import org.redisson.api.RedissonClient;
-import org.redisson.client.codec.ByteArrayCodec;
+import org.springframework.cloud.gateway.filter.ratelimit.KeyResolver;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.server.ServerWebExchange;
+import reactor.core.publisher.Mono;
 
-import java.time.Duration;
+import java.net.InetSocketAddress;
 
 @Configuration
-public class RateLimiterConfig {
+public class GatewayRateLimitConfig {
 
     @Bean
-    public ProxyManager<byte[]> bucketProxyManager(RedissonClient redissonClient) {
-        // Uses Redisson command executor to manage distributed Redis state atomically
-        return Bucket4jRedisson.casBasedBuilder(redissonClient)
-                .build();
+    public KeyResolver clientKeyResolver() {
+        return exchange -> resolveAuthenticatedPrincipal(exchange)
+                .switchIfEmpty(Mono.defer(() -> Mono.justOrEmpty(resolveApiKey(exchange))))
+                .switchIfEmpty(Mono.defer(() -> Mono.just(resolveClientIp(exchange))));
     }
 
-    public enum CustomerTier {
-        FREE(10, Duration.ofMinutes(1)),        // 10 requests / minute
-        STANDARD(100, Duration.ofMinutes(1)),    // 100 requests / minute
-        ENTERPRISE(1000, Duration.ofMinutes(1)); // 1,000 requests / minute
+    private Mono<String> resolveAuthenticatedPrincipal(ServerWebExchange exchange) {
+        return exchange.getPrincipal()
+                .cast(Authentication.class)
+                .filter(Authentication::isAuthenticated)
+                .map(auth -> "user:" + auth.getName());
+    }
 
-        private final long capacity;
-        private final Duration refillPeriod;
+    private String resolveApiKey(ServerWebExchange exchange) {
+        String apiKey = exchange.getRequest().getHeaders().getFirst("X-API-Key");
+        return (apiKey != null && !apiKey.isBlank()) ? "apikey:" + apiKey : null;
+    }
 
-        CustomerTier(long capacity, Duration refillPeriod) {
-            this.capacity = capacity;
-            this.refillPeriod = refillPeriod;
-        }
-
-        public BucketConfiguration toBucketConfiguration() {
-            return BucketConfiguration.builder()
-                    .addLimit(Bandwidth.builder()
-                            .capacity(capacity)
-                            .refillGreedy(capacity, refillPeriod)
-                            .build())
-                    .build();
-        }
+    private String resolveClientIp(ServerWebExchange exchange) {
+        InetSocketAddress remoteAddress = exchange.getRequest().getRemoteAddress();
+        String host = (remoteAddress != null && remoteAddress.getAddress() != null)
+                ? remoteAddress.getAddress().getHostAddress()
+                : "unknown";
+        return "ip:" + host;
     }
 }
 ```
 
-### Step 3: Enterprise WebFilter with IETF RateLimit Headers
+When a request is rejected, Spring Cloud Gateway automatically returns `429 Too Many Requests` along with `X-RateLimit-Remaining`, `X-RateLimit-Replenish-Rate`, `X-RateLimit-Burst-Capacity`, and `X-RateLimit-Requested-Tokens` response headers (which you can disable or customize if you do not want to expose internal bucket parameters).
 
-In modern REST architectures, when an application throttles a client, it must communicate remaining limits and reset intervals via standard **IETF RateLimit Headers**:
+If you are running a servlet-based Spring MVC service without Spring Cloud Gateway, or need tiered multi-window limits (for example, 10 requests/second *and* 5,000 requests/day per tenant), **Bucket4j** with Redisson or Lettuce provides a mature Java abstraction over Redis atomic operations.
 
-- `RateLimit-Limit`: Maximum quota allowed in the current window.
-- `RateLimit-Remaining`: Number of tokens remaining.
-- `RateLimit-Reset`: Seconds remaining until the quota is replenished.
-- `Retry-After`: (Included on 429) Number of seconds the client must wait before retrying.
+---
+
+## API Throttling and `429 Too Many Requests` Responses
+
+Rejecting a request with a bare `429` status code forces clients to guess when to retry, which usually makes them retry too aggressively. Well-behaved APIs return structured throttling metadata:
+
+- **HTTP `429 Too Many Requests`** (defined in RFC 6585).
+- **`Retry-After`:** Standard HTTP header indicating how many seconds the client should wait before sending another request.
+- **`X-RateLimit-*` vs. IETF `RateLimit` headers:** Many existing APIs and Spring Cloud Gateway emit `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset`. Newer APIs are adopting the IETF draft standard headers (`RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`, or the structured `RateLimit` / `RateLimit-Policy` pair). Pick one convention and document it consistently across your API.
+
+Here is a Spring MVC `OncePerRequestFilter` that uses our `RedisTokenBucketLimiter`, emits standard throttling headers, and handles Redis outages explicitly:
 
 ```java
-package com.javahub.ratelimit.filter;
+package com.example.ratelimit.web;
 
-import com.javahub.ratelimit.config.RateLimiterConfig.CustomerTier;
-import io.github.bucket4j.Bucket;
-import io.github.bucket4j.BucketConfiguration;
-import io.github.bucket4j.ConsumptionProbe;
-import io.github.bucket4j.distributed.proxy.ProxyManager;
+import com.example.ratelimit.redis.RedisTokenBucketLimiter;
+import com.example.ratelimit.redis.RedisTokenBucketLimiter.RateLimitDecision;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.stereotype.Component;
+import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.concurrent.TimeUnit;
 
-@Component
-public class DistributedRateLimitFilter extends OncePerRequestFilter {
+public class ApiRateLimitFilter extends OncePerRequestFilter {
 
-    private static final Logger log = LoggerFactory.getLogger(DistributedRateLimitFilter.class);
-    private final ProxyManager<byte[]> proxyManager;
+    private static final Logger log = LoggerFactory.getLogger(ApiRateLimitFilter.class);
 
-    public DistributedRateLimitFilter(ProxyManager<byte[]> proxyManager) {
-        this.proxyManager = proxyManager;
+    private final RedisTokenBucketLimiter limiter;
+    private final boolean failOpenOnRedisError;
+
+    public ApiRateLimitFilter(RedisTokenBucketLimiter limiter, boolean failOpenOnRedisError) {
+        this.limiter = limiter;
+        this.failOpenOnRedisError = failOpenOnRedisError;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        // 1. Identify Client and Customer Tier
-        String rateLimitKey = resolveClientKey(request);
-        CustomerTier tier = resolveCustomerTier();
+        String tenantId = request.getHeader("X-Tenant-Id");
+        String key = (tenantId != null && !tenantId.isBlank())
+                ? "tenant:" + tenantId
+                : "ip:" + request.getRemoteAddr();
 
-        // 2. Retrieve Distributed Bucket from Redis
-        BucketConfiguration config = tier.toBucketConfiguration();
-        Bucket bucket = proxyManager.builder().build(rateLimitKey.getBytes(StandardCharsets.UTF_8), () -> config);
+        int capacity = 60;
+        int refillPerSecond = 10;
 
-        // 3. Attempt to Consume 1 Token
-        ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+        RateLimitDecision decision;
+        try {
+            decision = limiter.tryAcquire(key, capacity, refillPerSecond, 1);
+        } catch (DataAccessException ex) {
+            log.error("Redis rate limiter unavailable for key {}", key, ex);
+            if (failOpenOnRedisError) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+            response.sendError(HttpStatus.SERVICE_UNAVAILABLE.value(), "Rate limiting service unavailable");
+            return;
+        }
 
-        if (probe.isConsumed()) {
-            // Success: Attach Informational Headers
-            response.setHeader("RateLimit-Remaining", String.valueOf(probe.getRemainingTokens()));
+        response.setHeader("RateLimit-Limit", String.valueOf(capacity));
+        response.setHeader("RateLimit-Remaining", String.valueOf(decision.remainingTokens()));
+
+        if (decision.allowed()) {
             filterChain.doFilter(request, response);
-        } else {
-            // Throttled: Calculate Wait Duration
-            long waitForRefillNanos = probe.getNanosToWaitForRefill();
-            long waitSeconds = Math.max(1, TimeUnit.NANOSECONDS.toSeconds(waitForRefillNanos));
-
-            log.warn("Rate limit exceeded for key: {}. Throttling request with 429.", rateLimitKey);
-
-            // Populate RFC 6585 and IETF Throttling Headers
-            response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
-            response.setContentType("application/json");
-            response.setHeader("Retry-After", String.valueOf(waitSeconds));
-            response.setHeader("RateLimit-Remaining", "0");
-            response.setHeader("RateLimit-Reset", String.valueOf(waitSeconds));
-
-            response.getWriter().write(String.format(
-                    "{\"error\": \"Too Many Requests\", \"message\": \"Rate limit exceeded. Retry after %d seconds.\"}",
-                    waitSeconds
-            ));
+            return;
         }
-    }
 
-    private String resolveClientKey(HttpServletRequest request) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getPrincipal() instanceof Jwt jwt) {
-            return "ratelimit:user:" + jwt.getSubject();
-        }
-        // Fallback to client IP for unauthenticated public endpoints
-        return "ratelimit:ip:" + request.getRemoteAddr();
-    }
-
-    private CustomerTier resolveCustomerTier() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getPrincipal() instanceof Jwt jwt) {
-            String plan = jwt.getClaimAsString("subscription_plan");
-            if ("ENTERPRISE".equalsIgnoreCase(plan)) return CustomerTier.ENTERPRISE;
-            if ("STANDARD".equalsIgnoreCase(plan)) return CustomerTier.STANDARD;
-        }
-        return CustomerTier.FREE;
+        long retryAfterSeconds = Math.max(1L, (decision.retryAfterMs() + 999L) / 1000L);
+        response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+        response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+        response.setHeader(HttpHeaders.RETRY_AFTER, String.valueOf(retryAfterSeconds));
+        response.setHeader("RateLimit-Reset", String.valueOf(retryAfterSeconds));
+        response.getWriter().write("""
+                {"type":"about:blank","title":"Too Many Requests","status":429,"detail":"Rate limit exceeded. Retry after %d seconds."}
+                """.formatted(retryAfterSeconds));
     }
 }
 ```
 
----
+### Client Retries: Exponential Backoff with Full Jitter
 
-## Client Throttling, Exponential Backoff, and Jitter
-
-When a server returns HTTP 429, the client's retry behavior determines whether the system recovers gracefully or collapses into a **Thundering Herd**:
-
-```mermaid
-flowchart TD
-    subgraph BadClients["Naive Exponential Backoff (Thundering Herd)"]
-        direction TB
-        B1["1,000 Clients Throttled at T=0"] --> B2["All wait exactly 2.0 seconds"]
-        B2 --> B3["At T=2.0s: All 1,000 clients fire SIMULTANEOUSLY!"]
-        B3 --> B4["Server crashes again under instant spike"]
-    end
-
-    subgraph GoodClients["Exponential Backoff with Full Jitter"]
-        direction TB
-        G1["1,000 Clients Throttled at T=0"] --> G2["Sleep duration = random_between(0, min(cap, base * 2^attempt))"]
-        G2 --> G3["Requests distributed smoothly over time (0.2s, 0.8s, 1.4s, 1.9s)"]
-        G3 --> G4["Server recovers smoothly with zero contention"]
-    end
-```
-
-### The AWS Full Jitter Algorithm
-
-In high-concurrency distributed systems, exponential backoff must always incorporate **randomized jitter** to break client synchronization:
+When hundreds of clients receive `429 Too Many Requests` at the same second and all apply plain exponential backoff (`1s`, `2s`, `4s`), they wake up together and hammer the server in synchronized waves (a **thundering herd**). Adding **full jitter** spreads retries randomly between `0` and the backoff cap, honoring `Retry-After` as a lower bound when the server supplies one:
 
 ```java
-public class ResilientHttpClient {
+package com.example.ratelimit.client;
 
-    public long calculateFullJitterSleepMs(int attempt, long baseDelayMs, long maxDelayMs) {
-        // Calculate exponential ceiling: base * 2^attempt
-        long exponentialCeiling = (long) (baseDelayMs * Math.pow(2, attempt));
-        long cappedDelay = Math.min(maxDelayMs, exponentialCeiling);
+import java.util.concurrent.ThreadLocalRandom;
 
-        // FULL JITTER: Uniform random distribution between 0 and capped delay
-        return ThreadLocalRandom.current().nextLong(0, cappedDelay + 1);
+public final class RetryBackoff {
+
+    private RetryBackoff() {}
+
+    public static long computeDelayMs(int attempt, long baseDelayMs, long maxDelayMs, long retryAfterMs) {
+        // Guard against bit-shift overflow for large attempt numbers
+        int shift = Math.min(attempt, 30);
+        long exponential = Math.min(maxDelayMs, baseDelayMs * (1L << shift));
+        long jittered = ThreadLocalRandom.current().nextLong(0, exponential + 1);
+        return Math.max(retryAfterMs, jittered);
     }
 }
 ```
 
-By scattering retries uniformly between 0 and the exponential ceiling, traffic is converted from synchronized sharp spikes into a smooth, manageable stream that allows the recovering server to stabilize.
+---
+
+## Fail-Open vs. Fail-Closed When Redis Goes Down
+
+Because every request touches Redis on the hot path, you must decide up front what happens when Redis times out or fails over.
+
+First, set an aggressive Redis command timeout on your rate limiter client (typically 20 ms to 50 ms) rather than the multi-second default. If Redis stalls, you want the rate-limit check to fail fast instead of tying up Tomcat or Netty threads across your entire fleet.
+
+Second, pick the failure policy intentionally per endpoint:
+
+- **Fail-open (allow requests through when Redis errors):** The right default for most customer-facing APIs. A Redis hiccup should not take down checkout or search for legitimate users. Pair fail-open with immediate alerting and an optional coarse in-memory fallback limiter per pod so traffic cannot go completely unbounded during a Redis outage.
+- **Fail-closed (reject with `503` or `429` when Redis errors):** Appropriate for endpoints with direct financial or security risk, such as SMS/OTP dispatch, password-reset verification, or metered third-party LLM endpoints where an unthrottled loop could burn thousands of dollars in minutes.
 
 ---
 
-## Senior Engineer Interview Crucible
+## Interview Questions
 
-### Explain the boundary reset flaw in the Fixed Window Counter algorithm and how the Sliding Window Counter resolves it with minimal memory overhead.
+### How does the Fixed Window Counter boundary spike happen, and how do Sliding Window Log and Sliding Window Counter differ in fixing it?
 
-The **Fixed Window Counter** assigns requests to static time buckets (e.g., 100 requests per minute from 12:00:00 to 12:01:00). 
+With a Fixed Window limit of 100 requests per minute, a client can send 100 requests at `12:00:59` and 100 more at `12:01:01`, pushing 200 requests through in 2 seconds even though neither calendar minute exceeded 100. Sliding Window Log solves this with exact precision by storing each request timestamp in a Redis Sorted Set and pruning entries older than `now - 60s`, at the cost of `O(N)` memory per key. Sliding Window Counter keeps only two counters (previous and current window) and weights the previous window by the remaining overlap percentage, eliminating most of the boundary spike in `O(1)` memory.
 
-**The Boundary Reset Flaw:**
-If an attacker sends 100 requests at 12:00:59 (the very end of Window 1), and then sends another 100 requests at 12:01:01 (the start of Window 2), both batches are legally accepted because they fall into separate windows. However, the system receives **200 requests within a 2-second interval** across the boundary—twice the intended maximum capacity.
+### Why should a Redis rate limiter run inside a Lua script rather than using `GET`, `INCR`, and `EXPIRE` from Java?
 
-**How Sliding Window Counter Resolves It:**
-Instead of storing timestamps of every single request (which consumes significant RAM), the **Sliding Window Counter** approximates the rolling rate by weighting the previous window's count by the percentage of time that has elapsed in the current window:
+Separate commands leave a race window between reading the counter and updating it: two concurrent pods can both read `99`, decide the request is allowed, and push the count past the limit. Redis `MULTI`/`EXEC` transactions cannot execute conditional `if` logic based on values read inside the transaction. A Lua script runs atomically on Redis's single execution thread in one network round trip, and calling `redis.call('TIME')` inside the script avoids clock skew across application nodes.
 
-```text
-Rate = (Previous Count * (1 - Percentage of Current Window Passed)) + Current Window Count
-```
+### In Spring Cloud Gateway's `RequestRateLimiter`, what is the difference between `replenishRate` and `burstCapacity`?
 
-If 60% of the current minute has passed, the calculation takes 40% of the previous minute's count and adds it to the current minute's count. This smooths out boundary spikes while requiring only two integer counters in memory per user.
+`replenishRate` is the sustained number of tokens added to the bucket every second, controlling long-term average throughput. `burstCapacity` is the maximum number of tokens the bucket can accumulate when idle, controlling how many requests can pass in a single second before throttling kicks in. Setting `replenishRate: 20` and `burstCapacity: 40` lets an idle client fire a short burst of 40 requests immediately, then caps continued traffic at 20 requests per second.
 
----
+### When should a distributed rate limiter fail open vs. fail closed if Redis becomes unreachable?
 
-### Why must distributed rate limiting in Redis be implemented using Lua scripts rather than sequential multi-command transactions?
-
-Implementing distributed rate limiting with sequential commands (`GET`, followed by conditional application logic, followed by `SET` or `INCR`) fails under concurrency due to check-then-act race conditions. If multiple Kubernetes pods read the key simultaneously, they will all observe the same un-incremented counter and all permit their requests, allowing traffic to drastically exceed the configured limit.
-
-While Redis supports `MULTI` / `EXEC` transactions, transactions cannot branch conditionally based on values read within the transaction itself (Redis transactions cannot execute `if (val > 100)`).
-
-A **Redis Lua script** executes directly on the Redis server engine as a single atomic unit. No other Redis command or script can run while a Lua script is executing. This enables atomic read-modify-write semantics: fetching current tokens, calculating elapsed replenishment, deducting tokens, and setting expiration happens in a single thread-safe step with zero network round-trip latency.
-
----
-
-### Walk through the Token Bucket algorithm. How does it gracefully accommodate legitimate bursty traffic while enforcing a strict long-term rate?
-
-The **Token Bucket** algorithm models capacity using two parameters:
-1. **Capacity (`B`):** The maximum number of tokens the bucket can physically hold.
-2. **Refill Rate (`R`):** The speed at which tokens are continuously added to the bucket (e.g., 10 tokens per second).
-
-When a request arrives, it checks if a token is present. If yes, it removes one token and proceeds; if empty, it is rejected.
-
-**Why It Accommodates Bursts:**
-If a client remains idle for a minute, tokens accumulate up to the maximum capacity `B`. If the client suddenly fires a burst of requests (e.g., rendering an e-commerce dashboard that fires 20 parallel API calls), the bucket has 20 tokens ready. The burst is accommodated immediately with zero artificial delay.
-
-Once the accumulated tokens are exhausted, the client is strictly constrained to the refill rate `R` (10 requests per second). Thus, Token Bucket permits short, legitimate user-driven bursts while guaranteeing that sustained traffic cannot exceed the downstream system's capacity.
-
----
-
-### Why is adding randomized Jitter to exponential backoff essential when clients handle HTTP 429 Too Many Requests?
-
-When a service experiences a temporary bottleneck and returns HTTP 429 to hundreds of concurrent clients, standard **Exponential Backoff** without jitter causes a **Thundering Herd Problem**.
-
-With deterministic backoff, if 1,000 clients are throttled at the exact same millisecond and all back off using `2^attempt` seconds, every single one of those 1,000 clients will sleep for exactly 2.0 seconds and retry at the **exact same millisecond**. 
-
-Instead of recovering, the server is hit by another massive wave of 1,000 requests, forcing it to throttle them again. The clients then all wait exactly 4.0 seconds and hit the server simultaneously again, creating permanent cyclical instability.
-
-**Adding Full Jitter** replaces the deterministic sleep duration with a uniform random value between 0 and the exponential ceiling (`random(0, backoff)`). This distributes the 1,000 retries across a smooth time gradient, eliminating synchronized spikes and allowing the server to clear its backlog.
+Fail open on revenue-critical or general read/write APIs where an outage in the rate-limiting cache would cause worse user impact than briefly relaxing quotas (ideally backed by a coarse local per-pod fallback limiter and a tight 20–50 ms Redis timeout). Fail closed on security-sensitive or directly billable endpoints—such as login/OTP verification or expensive external API proxies—where unchecked traffic could enable brute-force attacks or runaway third-party bills.

@@ -1,74 +1,142 @@
 ---
 title: "Asynchronous Programming"
-description: "Master CompletableFuture pipelines, DAG orchestration, thread locality mechanics, custom executor isolation, and non-blocking timeout handling."
+description: "Learn why raw Future and nested callbacks break down in concurrent Java services, and how to build predictable async pipelines with CompletableFuture, custom executors, composition, timeouts, and error recovery."
 category: "level-5"
 date: "2026-10-29T10:00:00Z"
 ---
 
-If you have ever built an application using raw `Future<T>`, you quickly encountered its fatal flaw: calling `future.get()` blocks the calling thread until the computation finishes. 
+When a backend endpoint needs to gather data from three or four downstream services, running those calls one after another adds their latencies together. If a user profile lookup takes 150ms, recommendations take 200ms, pricing takes 300ms, and inventory takes 100ms, sequential execution takes 750ms before the server can even begin serializing a response.
 
-In a modern web architecture, blocking a thread is an expensive sin. If your API gateway needs to call a user profile service, a product recommendation engine, a credit scoring API, and an inventory database to assemble a single checkout screen, doing so synchronously multiplies your latency:
+Java 5 introduced `Future<T>` to run tasks concurrently on an `ExecutorService`, which helps with basic fan-out, but `Future` has a major limitation: there is no way to attach follow-up work to it without blocking. Calling `future.get()` parks the calling thread until the result arrives. You also cannot easily chain one asynchronous result into the next, combine multiple futures cleanly, or declare fallback logic without writing manual coordination code.
 
+## The Callback Hell Problem
+
+Before `CompletableFuture`, developers who wanted non-blocking pipelines often wrote callback-based APIs, passing a completion handler into each asynchronous call. That works for a single step, but once you need three dependent calls with error handling at each stage, the code turns sideways quickly:
+
+```java
+// Nested callbacks obscure control flow and scatter error handling
+public void loadCheckoutSummary(String userId, Consumer<CheckoutSummary> onSuccess, Consumer<Throwable> onError) {
+    userClient.fetchProfile(userId, profile -> {
+        pricingClient.fetchTierPricing(profile.tier(), pricing -> {
+            inventoryClient.checkStock(profile.region(), stock -> {
+                try {
+                    onSuccess.accept(new CheckoutSummary(profile, pricing, stock));
+                } catch (RuntimeException ex) {
+                    onError.accept(ex);
+                }
+            }, onError);
+        }, onError);
+    }, onError);
+}
 ```
-Total Latency = 150ms + 200ms + 300ms + 100ms = 750ms
-```
 
-To reduce latency, developers historically attempted manual callback chains. But nesting asynchronous callbacks inside callbacks creates "Callback Hell": stack traces disappear into the ether, catching exceptions becomes almost impossible, and thread synchronization spaghetti dominates your business logic.
+Nested callbacks create several practical problems in production code:
 
-Java 8 introduced `CompletableFuture<T>` (implementing `Future<T>` and `CompletionStage<T>`). It is a declarative, monadic railway for concurrent tasks. It allows you to model complex asynchronous Directed Acyclic Graphs (DAGs) that fan out across thread pools, compose intermediate values, handle timeouts, and recover from failures without ever blocking an operating system thread.
+- **Control flow breaks apart.** Reading the happy path requires tracing deeper indentation levels, and adding a conditional branch or a parallel call in the middle makes the nesting worse.
+- **Exception handling does not propagate naturally.** A `try-catch` block in the outer method cannot catch exceptions thrown later on a worker thread, so every callback has to remember to forward failures manually.
+- **Combining parallel tasks requires shared mutable state.** Waiting for two independent callbacks to finish forces you to coordinate results with `AtomicReference`, `CountDownLatch`, or locks.
+- **Debugging gets harder.** Stack traces start at the thread pool worker loop rather than the caller that initiated the request.
+
+Java 8 introduced `CompletableFuture<T>`, which implements both `Future<T>` and `CompletionStage<T>`. Instead of nesting callbacks inside callbacks, you describe a pipeline of stages as a directed acyclic graph (DAG). Each stage registers what should happen when upstream stages finish, fail, or time out.
 
 ```mermaid
 flowchart TD
-    subgraph "CompletableFuture DAG Orchestration"
-        Req["Incoming User Request"] --> FanOut{"Fan-Out Async Subtasks"}
-        
-        FanOut --> S1["Fetch User Profile (IO Pool)"]
-        FanOut --> S2["Fetch Recommendations (ML Pool)"]
-        FanOut --> S3["Fetch Dynamic Pricing (Pricing Pool)"]
-        
-        S1 --> S1T["thenApply (Normalize Tier)"]
-        S3 --> S3F["completeOnTimeout (Default Price)"]
-        
-        S1T & S2 & S3F --> Combine["thenCombine / allOf Barrier"]
-        
-        Combine --> Final["Render Aggregate JSON Response"]
-        Combine -.->|Any Stage Fails| Fallback["exceptionally / handle Recovery"]
-        Fallback --> Final
-    end
+    req["Incoming Request"] --> fanOut["Fan-Out Async Tasks"]
+
+    fanOut --> s1["Fetch User Profile (I/O Pool)"]
+    fanOut --> s2["Fetch Recommendations (I/O Pool)"]
+    fanOut --> s3["Fetch Dynamic Pricing (I/O Pool)"]
+
+    s1 --> s1t["thenApply: Normalize Tier"]
+    s3 --> s3t["completeOnTimeout: Default Price"]
+
+    s1t --> combine["allOf / thenCombine Barrier"]
+    s2 --> combine
+    s3t --> combine
+
+    combine -->|"All succeed"| response["Build Aggregate Response"]
+    combine -->|"Any stage fails"| recover["exceptionally / handle"]
+    recover --> response
 ```
 
----
+In this pipeline, independent network calls run in parallel, transformations attach declaratively to their inputs, and failure recovery sits at the end of the chain rather than inside every nested handler.
 
-## Transforming and Chaining: thenApply vs thenCompose
+## The CompletableFuture API
 
-The two most frequently confused methods in the `CompletionStage` API are `thenApply` and `thenCompose`. Understanding the distinction is the key to writing clean asynchronous pipelines.
-
-### thenApply: Synchronous Value Transformation (Map)
-
-`thenApply` accepts a `Function<T, R>`. It takes the completed value of the current stage, runs a synchronous transformation on it, and yields a `CompletableFuture<R>`. It is the direct equivalent of `Stream.map()` or `Optional.map()`:
-
-```java
-CompletableFuture<String> usernameFuture = CompletableFuture.supplyAsync(() -> "  alice_smith  ")
-    .thenApply(String::trim)
-    .thenApply(String::toUpperCase);
-
-// Yields CompletableFuture<String> containing "ALICE_SMITH"
-```
-
-### thenCompose: Asynchronous Dependent Chaining (FlatMap)
-
-What happens if the next step in your pipeline is *itself* an asynchronous method that returns another `CompletableFuture`?
-
-If you use `thenApply`, you end up with a dreaded nested future: `CompletableFuture<CompletableFuture<UserDetails>>`. You would need to call `.join().join()` to extract the inner data!
-
-`thenCompose` accepts a `Function<T, CompletionStage<R>>`. It takes the output of the first stage, feeds it into an asynchronous function, and automatically **flattens** the result into a single `CompletableFuture<R>`:
+You can create a `CompletableFuture` in three main ways: starting background work that returns a value, starting background work that returns nothing, or creating an already-completed (or manually completed) future.
 
 ```java
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class UserPipeline {
+public class FutureCreationExamples {
+    private final ExecutorService ioPool = Executors.newFixedThreadPool(8);
+
+    public void demonstrateCreation() {
+        // 1. Background task that produces a result
+        CompletableFuture<String> profileFuture = CompletableFuture.supplyAsync(
+            () -> fetchUserProfile("user-42"),
+            ioPool
+        );
+
+        // 2. Background task with no return value (fire-and-forget or side effect)
+        CompletableFuture<Void> auditFuture = CompletableFuture.runAsync(
+            () -> writeAuditLog("user-42"),
+            ioPool
+        );
+
+        // 3. Pre-completed future (useful for caches, mocks, and short-circuiting)
+        CompletableFuture<String> cachedFuture = CompletableFuture.completedFuture("cached-value");
+
+        // 4. Manually completed future (useful for bridging callback-based libraries)
+        CompletableFuture<String> bridge = new CompletableFuture<>();
+        bridge.complete("manual-result");
+    }
+
+    private String fetchUserProfile(String userId) {
+        return "Profile(" + userId + ")";
+    }
+
+    private void writeAuditLog(String userId) {
+        System.out.println("Logged access for " + userId);
+    }
+}
+```
+
+At the end of a pipeline, you also have terminal consumer methods:
+
+- `thenAccept(Consumer<T>)` consumes the result and returns `CompletableFuture<Void>` (for example, sending a response or writing a log).
+- `thenRun(Runnable)` runs an action after completion without receiving the result.
+- `join()` and `get()` block the calling thread to extract the result. `get()` throws checked `InterruptedException` and `ExecutionException`, while `join()` throws an unchecked `CompletionException`, which makes `join()` easier to use inside streams and lambdas.
+
+## Chaining Asynchronous Tasks: thenApply vs thenCompose
+
+Once you have a `CompletableFuture<T>`, the next question is how to feed its result into another step. Choosing between `thenApply` and `thenCompose` depends on whether the next step is synchronous or returns another `CompletionStage`.
+
+### Transforming Values with thenApply
+
+`thenApply` takes a `Function<T, R>`. It transforms the completed value synchronously and wraps the return value in a `CompletableFuture<R>`. Think of it like `Stream.map()` or `Optional.map()`.
+
+```java
+CompletableFuture<String> normalizedName = CompletableFuture
+    .supplyAsync(() -> "  alice_smith  ", ioPool)
+    .thenApply(String::trim)
+    .thenApply(String::toUpperCase);
+```
+
+### Chaining Dependent Async Calls with thenCompose
+
+Now suppose step two is itself asynchronous and returns a `CompletableFuture`. If you pass that method to `thenApply`, the return type nests into `CompletableFuture<CompletableFuture<AccountCredit>>`. Extracting the inner result would force awkward double-unwrapping.
+
+`thenCompose` takes a `Function<T, CompletionStage<R>>` and flattens the nested future into a single `CompletableFuture<R>`. It plays the same role as `Stream.flatMap()` or `Optional.flatMap()`.
+
+```java
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class CreditPipeline {
     record UserProfile(String id, String email) {}
     record AccountCredit(String id, int score) {}
 
@@ -83,116 +151,115 @@ public class UserPipeline {
     }
 
     public CompletableFuture<AccountCredit> getUserCreditScore(String userId) {
-        // thenCompose prevents CompletableFuture<CompletableFuture<AccountCredit>>
+        // Produces CompletableFuture<AccountCredit>, not a nested future
         return fetchProfileAsync(userId)
             .thenCompose(this::fetchCreditAsync);
     }
 }
 ```
 
----
+Use `thenApply` when the function returns a plain value `R`. Use `thenCompose` when the function returns a `CompletionStage<R>`.
 
-## The CommonPool Disaster: The #1 Production Outage Pattern
+## Custom Executors vs ForkJoinPool.commonPool()
 
-If you take only one lesson away from this topic, let it be this: **never call `supplyAsync()` or `runAsync()` without passing an explicit `Executor` in a production application.**
+Every `supplyAsync`, `runAsync`, and `*Async` method on `CompletableFuture` has two overloads: one that accepts an `Executor`, and one that omits it. In production services, omitting the executor for I/O work is one of the most common sources of thread starvation.
 
 ```java
-// PRODUCTION DISASTER WAITING TO HAPPEN:
-CompletableFuture.supplyAsync(() -> {
-    return querySlowMicroserviceOverHttp(); // Blocking network I/O!
-});
+// Avoid this for blocking HTTP, RPC, or JDBC calls:
+CompletableFuture<String> risky = CompletableFuture.supplyAsync(() -> queryPaymentGateway());
 ```
 
-### Why This Crashes JVMs
+When you omit the `Executor`, `CompletableFuture` submits tasks to `ForkJoinPool.commonPool()`. By default, HotSpot sizes `commonPool()` to:
 
-When you do not provide an executor, `CompletableFuture` delegates the task to the JVM's shared `ForkJoinPool.commonPool()`.
-
-The size of `ForkJoinPool.commonPool()` is determined by the JVM at startup using the formula:
-```
-Default Pool Parallelism = Runtime.getRuntime().availableProcessors() - 1
+```text
+parallelism = Runtime.getRuntime().availableProcessors() - 1   (minimum of 1)
 ```
 
-If your microservice runs in a cloud container or Kubernetes pod with 2 or 4 allocated vCPUs, the shared `commonPool()` has only **1 to 3 worker threads**.
-
-`ForkJoinPool` is strictly engineered for **CPU-bound, non-blocking divide-and-conquer computation**. The moment you submit a blocking HTTP call or JDBC query to `commonPool()`, that worker thread sleeps on network socket I/O. 
-
-Within seconds of a traffic spike, all 3 worker threads in `commonPool()` are completely blocked. Because the pool is global to the entire JVM, **every other component in your application that relies on parallel streams or default async tasks freezes completely**.
+In a container with 2 or 4 vCPUs, `commonPool()` starts with only 1 to 3 worker threads. `ForkJoinPool` is designed for CPU-bound, work-stealing tasks that stay active on the CPU. If you submit blocking network or database calls to `commonPool()`, those few worker threads sit idle waiting on sockets. Because `commonPool()` is shared across the entire JVM, blocking it can stall unrelated features such as parallel streams or library code that also defaults to `commonPool()`.
 
 ```mermaid
 flowchart TD
-    subgraph "ForkJoinPool.commonPool() (Shared JVM Global)"
-        W1["Thread 1: BLOCKED (Waiting on Stripe API)"]
-        W2["Thread 2: BLOCKED (Waiting on Postgres DB)"]
-        W3["Thread 3: BLOCKED (Waiting on Kafka RPC)"]
+    subgraph commonPool["ForkJoinPool.commonPool() (JVM-Wide Shared Pool)"]
+        w1["Worker 1: Blocked on Payment HTTP Call"]
+        w2["Worker 2: Blocked on Postgres Query"]
+        w3["Worker 3: Blocked on Inventory RPC"]
     end
-    
-    T1["Incoming Stream.parallel()"] -.->|STARVED!| W1
-    T2["Default CompletableFuture"] -.->|STARVED!| W2
-    T3["Async Event Notification"] -.->|STARVED!| W3
+
+    t1["Parallel Stream Work"] -.->|"Queued / Starved"| w1
+    t2["Other Default CompletableFutures"] -.->|"Queued / Starved"| w2
+    t3["Background Metric Flush"] -.->|"Queued / Starved"| w3
 ```
 
-> [!CAUTION]
-> Always segregate your workloads into dedicated, bounded thread pools:
-> - **CPU Pool**: Sized to `availableProcessors() + 1` for JSON parsing, cryptographic hashing, and data transformation.
-> - **I/O Pool**: Sized according to Goetz's I/O formula for database calls and downstream REST APIs.
-> - **Pass the pool explicitly**: `CompletableFuture.supplyAsync(task, dedicatedIoPool)`!
+> [!WARNING]
+> Always pass an explicit `Executor` when running blocking I/O inside `CompletableFuture`. Keep CPU-bound pools separate from I/O pools so slow downstream services cannot starve local computation.
 
----
+A practical pool layout looks like this:
 
-## Thread Execution Locality: Who Runs What?
+- **CPU-bound tasks** (parsing, compression, scoring): a bounded pool sized close to `Runtime.getRuntime().availableProcessors()`.
+- **Blocking I/O on Java 17 or platform threads**: a dedicated bounded `ThreadPoolExecutor` sized based on downstream capacity and wait-to-compute ratio, with a bounded queue and explicit rejection policy.
+- **Blocking I/O on Java 21+**: `Executors.newVirtualThreadPerTaskExecutor()` works well as the `Executor` passed to `CompletableFuture.supplyAsync(..., virtualExecutor)`, paired with a `Semaphore` if you need to cap concurrent calls to a downstream database or API.
 
-One of the most nuanced questions in Java concurrency interviews is: **"Which thread executes the callback registered in `thenApply()`?"**
+### Which Thread Runs a Continuation Stage?
 
-The answer surprises most engineers: **It depends on whether the previous stage has already finished when `thenApply` is invoked!**
+Developers are often surprised by which thread executes `thenApply` versus `thenApplyAsync`.
 
-1. **If the previous stage is STILL RUNNING**: The thread executing the upstream task will pick up the `thenApply` callback and run it immediately upon completing the first task.
-2. **If the previous stage is ALREADY COMPLETE**: The thread calling `thenApply` (often your main thread or HTTP controller thread) will execute the callback synchronously right then and there!
-3. **If you use `thenApplyAsync(fn, customExecutor)`**: The callback is always dispatched to the specified `customExecutor`, guaranteeing thread isolation regardless of completion timing.
+- **Non-async methods (`thenApply`, `thenCompose`, `thenAccept`)**:
+  - If the upstream future is *still running* when you attach the stage, the thread that completes the upstream future executes the callback.
+  - If the upstream future has *already finished* when you attach the stage, the calling thread (for example, your HTTP request thread or `main`) runs the callback immediately.
+- **Async methods (`thenApplyAsync(fn, executor)`)**:
+  - The callback is always scheduled onto the specified `executor`, regardless of whether the upstream stage has already completed. (Calling `thenApplyAsync(fn)` without an executor dispatches onto `ForkJoinPool.commonPool()`.)
 
 ```java
 CompletableFuture<String> future = CompletableFuture.supplyAsync(() -> {
-    System.out.println("Step 1 executed by: " + Thread.currentThread().getName());
-    return "Data";
+    System.out.println("Fetch: " + Thread.currentThread().getName());
+    return "payload";
 }, ioPool);
 
-// If Step 1 is fast and finishes before this line executes:
-// Step 2 might run on the MAIN thread!
-future.thenApply(data -> {
-    System.out.println("Step 2 executed by: " + Thread.currentThread().getName());
+// Runs on either ioPool (if still running) or the caller thread (if already done)
+CompletableFuture<String> inlineStage = future.thenApply(data -> {
+    System.out.println("Inline transform: " + Thread.currentThread().getName());
     return data.toUpperCase();
 });
 
-// Guaranteed to run on dedicated transform pool:
-future.thenApplyAsync(data -> {
-    System.out.println("Step 3 executed by: " + Thread.currentThread().getName());
+// Always runs on computePool
+CompletableFuture<String> isolatedStage = future.thenApplyAsync(data -> {
+    System.out.println("Isolated transform: " + Thread.currentThread().getName());
     return data.toLowerCase();
 }, computePool);
 ```
 
----
+For tiny in-memory mappings like `String::trim`, non-async `thenApply` avoids an unnecessary context switch. When the next stage does heavy CPU work or must not run on an I/O thread, use the `*Async` variant with a dedicated executor.
 
-## Combining Multiple Futures: Fan-Out and Fan-In
+## Combining Multiple Futures
 
-Real-world architectures frequently require firing off multiple queries in parallel and merging their results.
+Real services rarely stop at a single linear chain. More often, you launch several independent requests concurrently and wait for either all of them or the fastest one.
 
-### Combining Two Stages: thenCombine
+### Combining Two Independent Futures: thenCombine
 
-When two independent asynchronous operations must both complete before computing a composite result, use `thenCombine`:
+When you have two independent futures that can run in parallel and you need both results to compute a combined value, use `thenCombine`:
 
 ```java
-CompletableFuture<Double> priceFuture = CompletableFuture.supplyAsync(() -> fetchItemPrice("SKU-99"), ioPool);
-CompletableFuture<Double> shippingFuture = CompletableFuture.supplyAsync(() -> fetchShippingCost("ZIP-94107"), ioPool);
+CompletableFuture<Double> itemPrice = CompletableFuture.supplyAsync(
+    () -> fetchItemPrice("SKU-99"), ioPool
+);
+CompletableFuture<Double> shippingCost = CompletableFuture.supplyAsync(
+    () -> fetchShippingCost("94107"), ioPool
+);
 
-// Both run simultaneously; lambda executes when BOTH complete
-CompletableFuture<Double> totalCostFuture = priceFuture.thenCombine(
-    shippingFuture, 
+// Runs the combiner once both itemPrice and shippingCost succeed
+CompletableFuture<Double> totalCost = itemPrice.thenCombine(
+    shippingCost,
     (price, shipping) -> price + shipping
 );
 ```
 
-### Combining Arbitrary N Stages: allOf Barrier
+Notice the difference from `thenCompose`: with `thenCompose`, step two cannot even start until step one finishes because it needs step one's output. With `thenCombine`, both tasks start right away and their results merge when both complete.
 
-When aggregating data from an arbitrary list of microservices, use `CompletableFuture.allOf()`:
+### Waiting for All Tasks: CompletableFuture.allOf
+
+When you have a dynamic collection of futures (for example, calling N vendor endpoints), `thenCombine` becomes cumbersome. `CompletableFuture.allOf(CompletableFuture<?>... cfs)` creates a barrier that completes when every passed future has completed.
+
+Because the inputs might have different types, `allOf` returns `CompletableFuture<Void>`. To collect typed results without blocking the calling thread, attach a `thenApply` stage to the barrier and call `join()` on each original future inside it:
 
 ```java
 import java.util.List;
@@ -200,121 +267,191 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class ProductAggregator {
+public class CatalogAggregator {
     private final ExecutorService ioPool = Executors.newFixedThreadPool(16);
 
     public CompletableFuture<List<String>> fetchAllCatalogs(List<String> vendorUrls) {
-        // Step 1: Fan-out requests across all vendors
+        // Fan out all requests concurrently
         List<CompletableFuture<String>> futures = vendorUrls.stream()
             .map(url -> CompletableFuture.supplyAsync(() -> queryVendor(url), ioPool))
             .toList();
 
-        // Step 2: Create a completion barrier
-        CompletableFuture<Void> allDoneBarrier = CompletableFuture.allOf(
-            futures.toArray(new CompletableFuture[0])
+        // Barrier completes only after every future finishes
+        CompletableFuture<Void> allDone = CompletableFuture.allOf(
+            futures.toArray(CompletableFuture[]::new)
         );
 
-        // Step 3: Fan-in results once all futures finish
-        return allDoneBarrier.thenApply(ignored -> 
+        // Fan in results; join() does not block here because all futures are already done
+        return allDone.thenApply(ignored ->
             futures.stream()
-                .map(CompletableFuture::join) // Non-blocking because all are complete!
+                .map(CompletableFuture::join)
                 .toList()
         );
     }
 
     private String queryVendor(String url) {
-        return "Data from " + url;
+        return "Catalog from " + url;
+    }
+}
+```
+
+One important detail about `allOf`: it does **not** short-circuit on failure. If the first future throws an exception after 10ms and another future takes 2 seconds, `allOf` still waits the full 2 seconds for every future to complete, and then completes exceptionally with a `CompletionException`. If you want partial results rather than all-or-nothing behavior, attach `.exceptionally(...)` or `.handle(...)` to each individual child future before passing the list to `allOf`.
+
+### Racing for the Fastest Result: CompletableFuture.anyOf
+
+Sometimes you want the first response from multiple redundant providers, mirrors, or replicas (often called hedged requests). `CompletableFuture.anyOf(CompletableFuture<?>... cfs)` completes as soon as *any* of the input futures completes.
+
+```java
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class HedgedQuoteClient {
+    private final ExecutorService ioPool = Executors.newFixedThreadPool(12);
+
+    public CompletableFuture<String> fetchFastestQuote(String symbol, List<String> providerUrls) {
+        List<CompletableFuture<String>> requests = providerUrls.stream()
+            .map(url -> CompletableFuture.supplyAsync(() -> queryProvider(url, symbol), ioPool))
+            .toList();
+
+        // anyOf returns CompletableFuture<Object> because inputs may have different types
+        return CompletableFuture.anyOf(requests.toArray(CompletableFuture[]::new))
+            .thenApply(result -> (String) result);
+    }
+
+    private String queryProvider(String url, String symbol) {
+        return symbol + " quote from " + url;
+    }
+}
+```
+
+If you only have two futures of the same type `T`, `first.applyToEither(second, Function.identity())` gives you a typed `CompletableFuture<T>` without casting from `Object`.
+
+Keep two subtle behaviors of `anyOf` in mind:
+
+1. **The first completion wins, even if it is an exception.** If Provider A fails immediately with `ConnectException` in 5ms while Provider B would succeed in 40ms, `anyOf` completes exceptionally at 5ms. If you want the first *successful* result rather than the first *completed* result, `anyOf` alone is not enough. You either need to track remaining failures manually or use `StructuredTaskScope.ShutdownOnSuccess` on Java 21+.
+2. **Slower futures are not cancelled automatically.** Once `anyOf` completes, the other in-flight tasks continue running on `ioPool` unless you explicitly track and cancel them (and even `cancel(true)` on a `CompletableFuture` does not interrupt the underlying worker thread, unlike `FutureTask`).
+
+## Exception Handling and Timeouts
+
+Exceptions thrown inside a `CompletableFuture` stage do not crash the worker thread silently. Instead, they transition the future into an exceptional state and skip downstream transformation stages (`thenApply`, `thenCompose`) until a recovery stage handles them.
+
+```mermaid
+flowchart LR
+    s1["Stage 1: supplyAsync"] -->|"Normal result"| s2["Stage 2: thenApply"]
+    s1 -->|"Exception"| rec["exceptionally / handle"]
+    s2 -->|"Exception"| rec
+    s2 -->|"Normal result"| done["Downstream Stage"]
+    rec -->|"Recovered value"| done
+```
+
+### Choosing Between exceptionally, handle, and whenComplete
+
+`CompletableFuture` offers three main hooks for errors, and each serves a different purpose:
+
+- **`exceptionally(Function<Throwable, T>)`**: Runs *only* when an upstream stage failed. Returns a fallback value of the same type `T` to put the pipeline back on the normal path. (Java 12+ also added `exceptionallyCompose`, which lets your fallback itself be asynchronous.)
+- **`handle(BiFunction<T, Throwable, R>)`**: Always runs, whether the upstream stage succeeded or failed. Exactly one of `result` or `throwable` is non-null (unless the result itself is `null`). You can recover from errors *and* transform the return type to `R`.
+- **`whenComplete(BiConsumer<T, Throwable>)`**: Always runs, like `handle`, but it is a side-effect hook for logging, metrics, or cleanup. It cannot change the result or swallow an exception; the returned future retains the original result or exception.
+
+```java
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class ResilientProfileService {
+    private final ExecutorService ioPool = Executors.newFixedThreadPool(8);
+
+    public CompletableFuture<String> loadProfileWithFallback(String userId) {
+        return CompletableFuture.supplyAsync(() -> callPrimaryService(userId), ioPool)
+            .whenComplete((result, ex) -> {
+                if (ex != null) {
+                    Throwable rootCause = (ex instanceof CompletionException && ex.getCause() != null)
+                        ? ex.getCause()
+                        : ex;
+                    System.err.println("Primary lookup failed for " + userId + ": " + rootCause.getMessage());
+                } else {
+                    System.out.println("Primary lookup succeeded for " + userId);
+                }
+            })
+            .handle((result, ex) -> {
+                if (ex != null) {
+                    return "CachedProfile(" + userId + ")";
+                }
+                return result;
+            });
+    }
+
+    private String callPrimaryService(String userId) {
+        throw new IllegalStateException("Upstream 503 Service Unavailable");
+    }
+}
+```
+
+Notice the `CompletionException` unwrapping in `whenComplete`. When an exception occurs in an async stage, `CompletableFuture` usually wraps it in a `CompletionException`, so checking `ex.getCause()` avoids logging only the wrapper type.
+
+### Non-Blocking Timeouts: orTimeout and completeOnTimeout
+
+Before Java 9, enforcing a timeout without blocking meant wiring up a separate `ScheduledExecutorService` to call `completeExceptionally(new TimeoutException())`. Java 9 added two built-in methods backed by an internal shared scheduler:
+
+- **`orTimeout(long timeout, TimeUnit unit)`**: Completes the future exceptionally with a `TimeoutException` if it has not finished within the deadline.
+- **`completeOnTimeout(T value, long timeout, TimeUnit unit)`**: Completes the future normally with a default fallback value if it has not finished in time.
+
+```java
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+public class TimeoutExamples {
+    private final ExecutorService ioPool = Executors.newFixedThreadPool(4);
+
+    public void runExamples() {
+        // Strict SLA: fails with TimeoutException after 500ms, then recovers via exceptionally
+        CompletableFuture<String> strictSla = CompletableFuture
+            .supplyAsync(this::querySlowService, ioPool)
+            .orTimeout(500, TimeUnit.MILLISECONDS)
+            .exceptionally(ex -> "Fallback after timeout: " + ex.getClass().getSimpleName());
+
+        // Degraded default: completes normally with a cached/default value after 300ms
+        CompletableFuture<String> gracefulSla = CompletableFuture
+            .supplyAsync(this::querySlowService, ioPool)
+            .completeOnTimeout("DEFAULT_RECOMMENDATIONS", 300, TimeUnit.MILLISECONDS);
+
+        System.out.println(strictSla.join());
+        System.out.println(gracefulSla.join());
+        ioPool.shutdown();
+    }
+
+    private String querySlowService() {
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
+        return "Live Response";
     }
 }
 ```
 
 > [!NOTE]
-> `CompletableFuture.allOf()` returns `CompletableFuture<Void>`. It does not collect intermediate values for you. Calling `future.join()` inside the `thenApply` callback of `allOf` is completely non-blocking and safe because the barrier guarantees that every future has already finished.
+> `orTimeout` and `completeOnTimeout` complete the *future*, not the underlying work. If `querySlowService()` is blocked on an HTTP client with no socket read timeout configured, that worker thread will stay occupied until the remote call finishes. Always pair `CompletableFuture` timeouts with client-level connect and read timeouts.
 
----
+## Practical Questions
 
-## Resilient Exception Handling and Timeouts
+### What is the difference between thenApply, thenCompose, and thenCombine?
 
-In distributed systems, failures and network latency spikes are mathematical certainties. `CompletableFuture` provides functional recovery mechanisms that mirror railway-oriented programming.
+`thenApply` transforms a completed value synchronously (`T -> R`), similar to `Stream.map()`. `thenCompose` chains a dependent asynchronous operation (`T -> CompletionStage<R>`) and flattens the result so you avoid `CompletableFuture<CompletableFuture<R>>`, similar to `Stream.flatMap()`. `thenCombine` joins two *independent* futures that can run concurrently and combines their two results once both finish (`(T, U) -> R`).
 
-```mermaid
-flowchart LR
-    A["Stage 1 (Upstream)"] -->|Success| B["Stage 2 (thenApply)"]
-    A -->|Exception Thrown| C["exceptionally / handle"]
-    B -->|Exception Thrown| C
-    C -->|Fallback Value| D["Stage 3 (Downstream Recovers)"]
-```
+### Why is omitting the Executor in supplyAsync() risky for I/O workloads?
 
-### Recovery Strategies: exceptionally vs handle
+Without an explicit `Executor`, `CompletableFuture` uses `ForkJoinPool.commonPool()`, whose default parallelism is `availableProcessors - 1`. In a small container with 2 to 4 vCPUs, that means only 1 to 3 worker threads. Running blocking HTTP or database calls on `commonPool()` quickly blocks every worker thread, stalling not only your own async tasks but also any parallel streams or libraries in the same JVM that rely on the common pool.
 
-- `exceptionally(Function<Throwable, T>)`: Invoked **only** if the pipeline encountered an unhandled exception upstream. It allows you to return a cached default value or graceful degradation.
-- `handle(BiFunction<T, Throwable, R>)`: Always invoked, regardless of whether the stage succeeded or failed. Both the result and the exception are passed in (one of them will be `null`).
+### What are the main gotchas with CompletableFuture.allOf() and CompletableFuture.anyOf()?
 
-```java
-CompletableFuture<String> resilientCall = CompletableFuture.supplyAsync(() -> {
-    if (Math.random() < 0.5) throw new RuntimeException("Primary Service Down!");
-    return "Live Data";
-}, ioPool)
-.handle((result, throwable) -> {
-    if (throwable != null) {
-        System.err.println("Primary service failed: " + throwable.getMessage() + ". Falling back to cache.");
-        return "Cached Fallback Data";
-    }
-    return result;
-});
-```
+`allOf()` returns `CompletableFuture<Void>`, so you have to collect results from the original futures inside a follow-up `thenApply`. It also waits for every future to complete even if one fails early, and then completes exceptionally if any child failed. `anyOf()` returns `CompletableFuture<Object>`, does not cancel slower futures once a winner finishes, and completes immediately on the *first* completion, even if that first completion is an exception rather than a success.
 
-### Enforcing Non-Blocking SLAs: orTimeout and completeOnTimeout
+### When should you choose whenComplete() over handle()?
 
-Before Java 9, enforcing a timeout on an async pipeline required scheduling a separate task on a `ScheduledExecutorService` to manually call `future.completeExceptionally()`.
-
-Java 9 introduced built-in non-blocking timeout primitives:
-
-```java
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-
-public class SlaEnforcer {
-    public static void main(String[] args) {
-        // Enforce strict 500ms SLA: Fail exceptionally if exceeded
-        CompletableFuture<String> strictSla = CompletableFuture.supplyAsync(() -> querySlowService())
-            .orTimeout(500, TimeUnit.MILLISECONDS)
-            .exceptionally(ex -> "Request Timed Out: " + ex.getMessage());
-
-        // Enforce fallback default if exceeded: Never fails
-        CompletableFuture<String> gracefulSla = CompletableFuture.supplyAsync(() -> querySlowService())
-            .completeOnTimeout("DEFAULT_RECOMMENDATIONS", 300, TimeUnit.MILLISECONDS);
-
-        System.out.println("Result: " + gracefulSla.join());
-    }
-
-    private static String querySlowService() {
-        try {
-            Thread.sleep(1000); // Exceeds timeout
-        } catch (InterruptedException ignored) {}
-        return "Live Microservice Response";
-    }
-}
-```
-
----
-
-## Senior Engineer Interview Crucible
-
-### What is the exact difference between thenApply and thenCompose?
-`thenApply` accepts a `Function<T, R>` and returns `CompletableFuture<R>`. It is used for synchronous transformations of the completed value, functioning like `Stream.map()`. 
-
-`thenCompose` accepts a `Function<T, CompletionStage<R>>` and returns `CompletableFuture<R>`. It is used when the transformation itself is asynchronous and returns a future. `thenCompose` flattens the nested futures into a single stage, avoiding `CompletableFuture<CompletableFuture<R>>` and functioning like `Stream.flatMap()`.
-
-### Why is calling supplyAsync() without an executor dangerous in enterprise applications?
-`supplyAsync()` defaults to `ForkJoinPool.commonPool()`, which is a JVM-global shared pool sized to `availableProcessors - 1` (often only 1 to 3 threads in cloud container environments). Because `ForkJoinPool` is designed for compute-bound tasks, executing blocking I/O (such as HTTP requests or JDBC queries) will saturate and exhaust all worker threads. This halts not only your async tasks, but also all other components across the JVM relying on `commonPool()`, such as parallel streams.
-
-### If one task in CompletableFuture.allOf() fails with an exception, how does allOf() behave, and how do you extract individual errors?
-`CompletableFuture.allOf()` waits for **all** submitted futures to finish, even if one or more fail. However, if any sub-future fails, the resulting aggregate future completes exceptionally with a `CompletionException`. 
-
-To inspect individual failures without losing error details, you should avoid immediately calling `.join()` on `allOf()`. Instead, attach `.handle()` or `.whenComplete()` to each individual child future before passing them into `allOf()`, or inspect each child future's `.isCompletedExceptionally()` status after `allOf()` completes.
-
-### How does CompletableFuture.orTimeout() differ from Future.get(timeout, unit)?
-`Future.get(timeout, unit)` is a **blocking** operation that halts the calling thread until the timeout expires or the computation finishes. If 1,000 threads call `get()`, 1,000 platform threads are kept dormant in memory.
-
-In contrast, `CompletableFuture.orTimeout()` is completely **non-blocking**. It registers a lightweight timer inside an internal system `ScheduledExecutorService` (delivering a `TimeoutException` if the stage does not complete within the window). The calling thread is immediately freed to perform other work, maintaining high concurrency and low thread count.
+Use `whenComplete()` for observation (logging, recording latency metrics, or decrementing a counter) because it preserves the original result or exception without altering the pipeline outcome. Use `handle()` when you want to recover from a failure with a fallback value or transform the stage's output into a different type.

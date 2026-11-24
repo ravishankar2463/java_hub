@@ -157,3 +157,4 @@ mvn test
 }
 
 console.log('Core topics upgrade complete!');
+

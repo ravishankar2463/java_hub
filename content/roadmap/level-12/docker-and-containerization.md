@@ -1,203 +1,245 @@
 ---
 title: "Docker and Containerization"
-description: "Master enterprise containerization for Java: Multi-stage Dockerfiles, Distroless images, Cgroups v2 JVM memory alignment, Linux OOMKiller Exit Code 137 defenses, and Docker Compose."
-category: "level-10"
+description: "Package Java and Spring Boot applications into lean, secure OCI containers with multi-stage Dockerfiles, proper cgroups v2 JVM memory sizing, clean SIGTERM shutdowns, and Docker Compose."
+category: "level-12"
 date: "2026-10-29T10:00:00Z"
 ---
 
-Before Docker, software engineers uttered the most infamous excuse in computing: *"Well, it worked on my machine!"* To which operations engineers sarcastically replied: *"Then we will ship your laptop to production!"*
+Putting a Java application into a container looks deceptively simple at first: copy a Spring Boot fat JAR into an OpenJDK image, add an `ENTRYPOINT`, and run `docker build`. That works on a laptop, and it usually fails in predictable ways once the image reaches a real CI pipeline or production traffic.
 
-Docker revolutionized application delivery by packaging code, libraries, and runtime dependencies into immutable, portable Open Container Initiative (OCI) images.
-
-However, running the Java Virtual Machine inside a Linux container is fraught with subtle, high-severity traps. If you do not understand how the Linux kernel enforces **Control Groups (cgroups)**, how the **OOM Killer** strikes with Exit Code 137, or why shell-form entrypoints swallow `SIGTERM` signals, your containerized Spring Boot applications will crash mysteriously under peak traffic.
-
-In this guide, we will engineer production-grade multi-stage Dockerfiles, master JVM-to-container memory alignment, configure local multi-service Docker Compose environments, and implement zero-downtime graceful shutdowns.
+Containerized Java services run into four recurring problems: oversized images that rebuild slowly because layer caching is broken, root processes with unnecessary OS utilities exposed to attackers, Linux OOM killer terminations (Exit Code 137) caused by ignoring native JVM memory, and dropped in-flight requests during deployments because a shell process swallowed `SIGTERM`. Working through each of these takes you from a toy Dockerfile to something you can actually run in production.
 
 ---
 
-## The Production Multi-Stage Dockerfile
+## Multi-Stage Dockerfiles for Java Applications
 
-A naive Dockerfile starts with `FROM maven:3.9` and leaves the entire JDK, source code, build cache, and compilers inside the final production container. This creates 1.2 GB bloated images with massive CVE attack surfaces.
+A common starting point is building directly inside a Maven or Gradle image and shipping that same image to production:
 
-A production-grade Dockerfile uses **Multi-Stage Builds** and runs as a **non-root user** on top of a minimal JRE or Distroless base image:
+```dockerfile
+# Avoid this pattern for production images
+FROM maven:3.9-eclipse-temurin-21
+WORKDIR /app
+COPY . .
+RUN mvn clean package -DskipTests
+ENTRYPOINT java -jar target/order-service.jar
+```
+
+There are several things wrong here. First, the final image ships the entire JDK, Maven, your source code, and the `.m2` cache, easily crossing 800 MB to 1 GB. Second, `COPY . .` invalidates the build cache on every edit, even a README tweak, forcing Maven to re-download dependencies from scratch. Third, the container runs as `root`. Fourth, the shell-form `ENTRYPOINT` breaks graceful shutdown.
+
+A **multi-stage build** separates the build toolchain from the runtime image. Stage 1 compiles the application and unpacks the JAR into layers; Stage 2 copies only the compiled layers onto a minimal JRE image and switches to a non-root user.
 
 ```dockerfile
 # -----------------------------------------------------------------------------
-# Stage 1: Build & Dependency Resolution
+# Stage 1: Build and extract Spring Boot layers
 # -----------------------------------------------------------------------------
 FROM eclipse-temurin:21-jdk-jammy AS builder
 WORKDIR /workspace
 
-# Step 1: Copy build descriptors first (Layer Caching Optimization)
+# Copy build metadata first so Docker caches resolved dependencies
 COPY pom.xml mvnw ./
 COPY .mvn .mvn
-
-# Step 2: Download dependencies into Docker cache (skips re-downloading if pom.xml didn't change)
 RUN ./mvnw dependency:go-offline -B
 
-# Step 3: Copy source code and compile fat JAR
+# Copy application source and package the executable JAR
 COPY src src
-RUN ./mvnw clean package -DskipTests -B
+RUN ./mvnw package -DskipTests -B
 
-# Step 4: Extract JAR layers using Spring Boot layertools for fast layer caching
-RUN java -Djarmode=tools -jar target/*.jar extract --layers --destination extracted
+# Extract layers using Spring Boot 3.3+ jarmode=tools
+# (For Spring Boot 2.3 to 3.2, use: java -Djarmode=layertools -jar target/*.jar extract --destination extracted)
+RUN java -Djarmode=tools -jar target/*.jar extract --layers --launcher --destination extracted
 
 # -----------------------------------------------------------------------------
-# Stage 2: Minimal Runtime Environment
+# Stage 2: Minimal runtime image
 # -----------------------------------------------------------------------------
 FROM eclipse-temurin:21-jre-jammy AS runtime
 WORKDIR /application
 
-# Security: Create a dedicated non-root service account
-RUN groupadd -r spring && useradd -r -g spring spring
-USER spring:spring
+# Create a dedicated non-root user with a fixed numeric UID
+RUN groupadd --gid 10001 spring \
+ && useradd --uid 10001 --gid 10001 --no-create-home --shell /sbin/nologin spring
 
-# Copy extracted layers in order of change frequency (least frequent to most frequent)
+# Copy layers from least frequently changed to most frequently changed
 COPY --from=builder /workspace/extracted/dependencies/ ./
 COPY --from=builder /workspace/extracted/spring-boot-loader/ ./
 COPY --from=builder /workspace/extracted/snapshot-dependencies/ ./
 COPY --from=builder /workspace/extracted/application/ ./
 
-# Expose HTTP port
+# Run as numeric UID so Kubernetes runAsNonRoot validation can verify it directly
+USER 10001:10001
+
 EXPOSE 8080
 
-# Environment variables for JVM container alignment
-ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+# Configure JVM flags without needing a shell to expand variables
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"
 
-# EXEC FORM ENTRYPOINT: Mandatory for PID 1 signal forwarding!
+# Exec-form ENTRYPOINT ensures the JVM is PID 1 and receives SIGTERM directly
 ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]
 ```
 
-### Key Engineering Details in This Dockerfile
-1. **Layer Caching**: By copying `pom.xml` and running `dependency:go-offline` before copying `src/`, Docker caches all downloaded Maven artifacts. Subsequent code changes rebuild in 4 seconds instead of 4 minutes!
-2. **Layered JAR Extraction**: Spring Boot 3's `JarLauncher` separates third-party dependencies from your business application classes. When you update one line of Java code, only the final 500 KB layer changes.
-3. **Non-Root User (`USER spring:spring`)**: If an attacker discovers an arbitrary remote code execution vulnerability (e.g., Log4Shell), running as a non-root user prevents them from installing rootkits, modifying container filesystems, or escaping to the host kernel.
-4. **Exec Form `ENTRYPOINT`**: Always use JSON array syntax `["java", "-jar", "..."]`, never shell syntax `java -jar ...`.
+### Why Each Part Matters
+
+**Dependency caching and `.dockerignore`.** Copying `pom.xml` and running `dependency:go-offline` before `COPY src src` keeps Docker from re-fetching third-party JARs whenever Java source files change. If you use BuildKit (default in modern Docker), you can go a step further with a cache mount (`RUN --mount=type=cache,target=/root/.m2 ./mvnw package -DskipTests -B`) so the Maven repository persists across builds even when `pom.xml` changes. Always pair your Dockerfile with a `.dockerignore` file excluding `.git`, `target/`, `build/`, and IDE directories so Docker does not copy hundreds of megabytes into the build context.
+
+**Spring Boot layered JAR extraction.** A standard executable JAR bundles 80 to 150 MB of third-party libraries (Spring, Jackson, Hibernate, JDBC drivers) with a few hundred kilobytes of your own `.class` files. Changing one line of business logic changes the hash of the whole JAR, forcing Docker to push a new 100+ MB layer on every build. Extracting layers splits the archive into `dependencies`, `spring-boot-loader`, `snapshot-dependencies`, and `application`. On a typical code change, Docker reuses the first three cached layers and only rebuilds the small `application` layer.
+
+> [!NOTE]
+> Spring Boot 3.2 moved `JarLauncher` from `org.springframework.boot.loader.JarLauncher` to `org.springframework.boot.loader.launch.JarLauncher`. In Spring Boot 3.3+, you can also omit `--launcher` when running `extract --layers`, which unpacks a regular `lib/` folder alongside a thin executable JAR that you launch with `java -jar order-service.jar`, avoiding nested-JAR scanning at startup.
+
+**Non-root execution and file ownership.** Copying the extracted files while still `root` and then switching to `USER 10001:10001` leaves the application artifacts owned by `root` and read-only to the running JVM. If a vulnerability allows arbitrary code execution inside the container, the attacker cannot overwrite application bytecode or install OS packages. Using a numeric UID (`10001:10001`) rather than just a username (`spring:spring`) also allows Kubernetes `securityContext.runAsNonRoot: true` checks to verify non-root execution without inspecting `/etc/passwd`.
 
 ---
 
-## Container Resource Limits vs JVM Memory Alignment
+## Choosing a Base Image: Debian Slim vs Alpine vs Distroless
 
-The single most common production outage in containerized Java is the **Exit Code 137 Mystery** (Linux OOMKiller).
+The base image you pick for Stage 2 shapes image size, native library compatibility, CVE noise, and how you debug production containers.
+
+| Base Image | C Library | Approximate Size | Security & CVE Surface | Practical Trade-Offs |
+| :--- | :--- | :--- | :--- | :--- |
+| `eclipse-temurin:21-jre-jammy` (Ubuntu/Debian) | `glibc` | ~260–290 MB | Moderate (includes shell and standard OS utilities) | Broad compatibility with JNI libraries (Netty native transport, RocksDB, Snappy); easy to troubleshoot |
+| `eclipse-temurin:21-jre-alpine` | `musl` | ~150–180 MB | Small (minimal BusyBox + `apk`) | JNI libraries compiled against `glibc` can fail or crash; `musl` thread allocator and DNS behavior differ under load |
+| `gcr.io/distroless/java21-debian12:nonroot` | `glibc` | ~200–220 MB | Minimal (no shell, no `apt`, no `curl`/`wget`) | `glibc` compatible with very few OS CVEs and built-in UID `65532`; no `/bin/sh` for `docker exec` |
+
+For most Spring Boot services in production, **Distroless** (`gcr.io/distroless/java21-debian12:nonroot`) or a slim `glibc`-based JRE image is the safest default. Alpine is tempting because of its small size, but `musl` surprises Java teams when a dependency quietly bundles a `glibc`-linked native library (such as Netty's `epoll` transport, Snappy compression, or RocksDB in Kafka Streams) or when multi-threaded native allocations behave differently than on `glibc`.
+
+Distroless gives you `glibc` compatibility while removing shells and package managers so an attacker with remote code execution cannot run `curl` or spawn `/bin/sh`. The trade-off is operational: you cannot shell into a running container. In Kubernetes, teams handle emergency inspection with ephemeral debug containers (`kubectl debug`) and rely on structured logs, metrics, and Java Flight Recorder (JFR) rather than interactive shells. If you need an even smaller runtime, you can also build a stripped custom JRE using `jlink` in Stage 1 and copy it onto `gcr.io/distroless/java-base-debian12:nonroot`.
+
+---
+
+## Container Resource Limits and JVM Memory Alignment
+
+The most frequent production surprise when moving Java to containers is a pod or container dying silently with **Exit Code 137** and no stack trace in the application logs.
+
+Exit Code 137 is `128 + 9`, meaning the Linux kernel sent signal 9 (`SIGKILL`). When a container exceeds the memory ceiling enforced by Linux **control groups (cgroups)**, the kernel's Out-Of-Memory (OOM) killer terminates the process immediately. The JVM gets no chance to log an error, run shutdown hooks, or write a heap dump.
 
 ```mermaid
 flowchart TD
-    Host["Bare Metal / Cloud VM Host
-(Physical RAM: 64 GB)"]
-    
-    subgraph ContainerLimit ["Docker Container Cgroup Limit: 2 GB"]
-        JVMTotal["JVM Process Total Memory (Must fit in 2 GB!)"]
-        
-        subgraph JVMSplit ["JVM Memory Architecture"]
-            Heap["Java Heap Space (-Xmx)
-Managed by Garbage Collector"]
-            OffHeap["Non-Heap / Native Memory
-- Metaspace (Class Metadata)
-- Thread Stacks (1MB per thread)
-- Netty / DirectByteBuffers
-- JIT Code Cache
-- C++ JVM Runtime Overhead"]
-        end
-        
-        JVMTotal --- Heap
-        JVMTotal --- OffHeap
+    Host["Linux Host Machine (64 GB Physical RAM)"]
+    Host --> CgroupLimit
+
+    subgraph CgroupLimit ["Container Cgroup Memory Limit (2048 MiB)"]
+        RSS["Total JVM Process RSS (Must Stay Under 2048 MiB)"]
+        Heap["Java Heap (-XX:MaxRAMPercentage=75.0 -> 1536 MiB)"]
+        Native["Off-Heap and Native Memory (~512 MiB Headroom)"]
+        NativeDetails["Metaspace, Thread Stacks, JIT Code Cache, DirectByteBuffers, GC Structures"]
+
+        RSS --- Heap
+        RSS --- Native
+        Native --- NativeDetails
     end
 
-    Host --> ContainerLimit
-    JVMTotal -.->|Exceeds 2 GB Container Limit!| OOM["Linux Kernel OOM Killer sends SIGKILL (Exit Code 137)!"]
+    RSS -->|"Combined RSS exceeds 2048 MiB"| OOM["Linux OOM Killer sends SIGKILL (Exit Code 137)"]
 ```
 
-### The Cgroups History and The Legacy Bug
-In the early days of Docker (Java 8u121 and older), the JVM was completely blind to container resource limits. When HotSpot inspected system memory, it queried `/proc/meminfo` on the underlying Linux host (e.g., a 64 GB cloud server). 
+### How Cgroups v1 and v2 Interact with HotSpot
 
-HotSpot automatically allocated 25% of physical host memory (16 GB) as its default maximum heap. When placed inside a 2 GB Docker container, the JVM eagerly allocated memory past 2 GB. The Linux kernel's **OOM Killer** detected the container exceeding its cgroup limit and instantly terminated the container with a lethal `SIGKILL` (signal 9, exit code 128 + 9 = 137).
+Older versions of Java (prior to Java 8u191 and Java 10) did not read container cgroup limits at all. HotSpot inspected the host's `/proc/meminfo`, saw a 64 GB server, and defaulted max heap to 25% of host RAM (16 GB) inside a 2 GB container. The process ran fine at startup and got OOM-killed as soon as traffic grew.
 
-### Modern Container Awareness: `-XX:MaxRAMPercentage`
-Modern Java (Java 17, 21+) is fully cgroup-aware (supporting both cgroups v1 and cgroups v2). It reads the container's memory limit directly.
+Modern HotSpot JVMs (Java 17 and Java 21 LTS) are container-aware by default (`-XX:+UseContainerSupport` is enabled out of the box) and support both **cgroups v1** and **cgroups v2**. Most current Linux distributions and Kubernetes nodes run cgroups v2, which uses a single unified hierarchy (`/sys/fs/cgroup`) and tracks memory more consistently via files like `memory.max` and `memory.current`.
 
-Never configure static heap sizes like `-Xmx2g` inside a 2 GB container! 
-The Java process requires significant **Off-Heap / Native Memory**:
-- **Metaspace**: Stores loaded class definitions (typically 100 MB to 250 MB).
-- **Thread Stacks**: Each thread allocates a 1 MB stack outside the heap. 200 Tomcat threads consume 200 MB of native RAM!
-- **Direct Byte Buffers**: Netty and NIO socket buffers allocate native memory for zero-copy I/O.
-- **JIT Code Cache**: Stores compiled machine instructions (up to 240 MB).
-
-### The Golden Production Formula
-Set `-XX:MaxRAMPercentage=75.0`:
+You can verify exactly what memory and CPU limits the JVM detects inside a running container without guessing:
 
 ```bash
--XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=75.0
+docker run --rm --memory=2g --cpus=2 eclipse-temurin:21-jre-jammy \
+  java -XshowSettings:system -XX:+PrintFlagsFinal -version | grep -E "Memory|MaxHeapSize|CPU"
 ```
-If your container limit is set to **2 GB**, the JVM automatically calculates:
-`Max Heap (-Xmx) = 75% x 2048 MB = 1536 MB`
-This leaves **512 MB of headroom** for thread stacks, Metaspace, DirectByteBuffers, and native C++ allocations, completely immunizing your container from the Linux OOM Killer!
+
+### Why You Must Account for Native Memory
+
+A common mistake is setting `-Xmx2g` inside a container whose memory limit is `2Gi`. **The Java heap is only part of the JVM's memory footprint.** Every Java process also allocates native (off-heap) memory outside `-Xmx`:
+
+- **Metaspace**: stores class metadata loaded by the JVM. Spring Boot services with Hibernate, Jackson, and dynamic proxies commonly use 100 to 250 MB.
+- **Thread stacks**: each platform thread reserves stack space (typically 1 MB by default on 64-bit Linux, committed lazily as stack depth grows). Two hundred Tomcat worker threads plus background pools can consume 100 to 200 MB of native memory.
+- **JIT Code Cache**: stores machine code compiled by the C1 and C2 compilers, with a default ceiling of 240 MB under tiered compilation.
+- **Direct Byte Buffers**: Netty, NIO channels, and some database or HTTP clients allocate off-heap buffers for I/O. By default, `-XX:MaxDirectMemorySize` can grow as large as `-Xmx` if left uncapped.
+- **GC and JVM internal structures**: G1GC remembered sets, card tables, symbol tables, and native libraries add another 5 to 15% overhead.
+
+### Sizing Heap with `-XX:MaxRAMPercentage`
+
+Instead of hardcoding `-Xmx` in your Dockerfile (which goes stale the moment someone changes the container memory limit in Kubernetes), size the heap proportionally:
+
+```bash
+JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0 -XX:+ExitOnOutOfMemoryError"
+```
+
+In a **2048 MiB** container, `-XX:MaxRAMPercentage=75.0` caps the heap at **1536 MiB**, leaving **512 MiB** for Metaspace, thread stacks, Code Cache, and DirectByteBuffers.
+
+Be careful not to treat `75.0` as a magic constant for every container size. Native overhead does not shrink linearly:
+
+- In a **512 MiB** container, 25% headroom is only 128 MiB, which is often not enough for a Spring Boot application's Metaspace, Code Cache, and threads. A value around `50.0` to `55.0` (or bumping the container limit to 768 MiB or 1 GiB) is much safer.
+- In a **4 GiB or 8 GiB** container, `75.0` to `80.0` usually leaves comfortable headroom unless your application allocates heavy Netty direct buffers or JNI memory (such as RocksDB in Kafka Streams).
+
+If you want to measure actual native memory usage rather than guess, enable Native Memory Tracking in staging with `-XX:NativeMemoryTracking=summary` and inspect it while running load tests:
+
+```bash
+jcmd 1 VM.native_memory summary
+```
+
+> [!TIP]
+> Adding `-XX:+ExitOnOutOfMemoryError` tells the JVM to terminate immediately if the heap or Metaspace is exhausted instead of limping along in a half-broken state where health checks intermittently fail. Combine it with `-XX:MaxDirectMemorySize` if your service uses Netty or heavy NIO.
 
 ---
 
 ## PID 1 and Graceful Shutdown: `SIGTERM` vs `SIGKILL`
 
-When Kubernetes or Docker stops a container (e.g., during a rolling deployment), it sends a **`SIGTERM` (Signal 15)** to Process ID 1 (PID 1). It gives the process a graceful shutdown period (typically 30 seconds). If the process is still running after 30 seconds, it sends a **`SIGKILL` (Signal 9)** to force-kill it.
+When Docker or Kubernetes stops a container during a rolling deployment or scale-down, it sends **`SIGTERM` (Signal 15)** to **PID 1** inside the container and waits for a grace period (10 seconds by default in Docker, 30 seconds in Kubernetes). If the process has not exited by then, the runtime sends **`SIGKILL` (Signal 9)** and cuts every open TCP socket and active database transaction.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Kube as Kubernetes / Docker Engine
-    participant PID1 as PID 1 (Your Java Process)
-    participant Tomcat as Embedded Tomcat Server
-    participant DB as Active Database Transactions
+    participant Runtime as Container Runtime
+    participant JVM as PID 1 (Java Process)
+    participant Web as Embedded Web Server
+    participant DB as Database
 
-    Kube->>PID1: Send SIGTERM (Signal 15 - Graceful Shutdown)
-    PID1->>Tomcat: Stop accepting new incoming HTTP requests
-    Tomcat-->>Kube: Return 503 to new connections / remove from Load Balancer
-    PID1->>Tomcat: Wait for active in-flight requests to complete (Grace Period)
-    Tomcat->>DB: Complete and COMMIT active database transactions
-    PID1-->>Kube: Process terminates cleanly with Exit Code 0!
+    Runtime->>JVM: Send SIGTERM (Signal 15)
+    JVM->>Web: Trigger Spring shutdown hook
+    Web->>Web: Stop accepting new requests
+    Web->>DB: Finish in-flight requests and commit transactions
+    DB-->>Web: Transactions committed
+    Web-->>JVM: Web server stopped
+    JVM-->>Runtime: Process exits cleanly (Exit Code 0)
 ```
 
-### The Shell Form Anti-Pattern
-If you write your Dockerfile entrypoint like this:
+### The Shell-Form Entrypoint Trap
+
+If your Dockerfile uses shell form instead of exec form:
+
 ```dockerfile
-# ANTI-PATTERN: DO NOT USE SHELL FORM
+# Problematic: runs /bin/sh -c "java -jar app.jar"
 ENTRYPOINT java -jar app.jar
 ```
-Docker executes `/bin/sh -c "java -jar app.jar"`. 
-The shell (`/bin/sh`) becomes PID 1, and Java runs as a child process (PID 2). 
 
-Standard Linux shells **do not forward `SIGTERM` signals to child processes**! 
-When Kubernetes issues `SIGTERM`, `/bin/sh` absorbs and ignores it. The JVM continues processing requests, completely unaware that it is being shut down. After 30 seconds, Kubernetes loses patience and sends `SIGKILL`, abruptly severing database connections, dropping customer HTTP requests, and leaving transactions uncommitted.
+Docker invokes `/bin/sh -c "java -jar app.jar"`. That makes `/bin/sh` PID 1 and puts `java` at PID 2. Standard POSIX shells do not forward `SIGTERM` to child processes. When Kubernetes asks the container to stop, `/bin/sh` ignores the signal, the JVM keeps accepting traffic, and 30 seconds later `SIGKILL` kills the process mid-request.
 
-### The Fix: Exec Form and Spring Boot Configuration
-Always use Exec Form in your Dockerfile:
-```dockerfile
-ENTRYPOINT ["java", "-jar", "app.jar"]
-```
+Using exec form (`ENTRYPOINT ["java", ...]`) places the JVM directly at PID 1 so it receives `SIGTERM` immediately. And because there is no shell to expand environment variables like `$JAVA_OPTS`, pass JVM arguments through **`JAVA_TOOL_OPTIONS`** (a standard HotSpot environment variable that the JVM reads directly at startup without needing a shell).
 
-And configure Spring Boot for graceful shutdown in `application.yml`:
+### Configuring Spring Boot for Graceful Shutdown
+
+Receiving `SIGTERM` only helps if the web server actually drains active work before closing. Configure graceful shutdown explicitly in `application.yml`:
+
 ```yaml
 server:
   shutdown: graceful
 
 spring:
   lifecycle:
-    timeout-per-shutdown-phase: 25s # Allow 25s for in-flight HTTP requests to drain
+    timeout-per-shutdown-phase: 25s
 ```
+
+In Spring Boot 3.4+, `server.shutdown` defaults to `graceful`, while earlier Spring Boot 3.x releases defaulted to `immediate`. Setting both properties explicitly makes the shutdown budget clear across versions and ensures `timeout-per-shutdown-phase` stays comfortably below the container runtime's `SIGKILL` deadline.
 
 ---
 
-## Local Development Ecosystems with Docker Compose
+## Local Development Environments with Docker Compose
 
-Modern microservices depend on databases, caches, and message brokers. Relying on developers to manually install PostgreSQL, Redis, and Kafka natively on their laptops creates inconsistent environments and installation nightmares.
+Running a Spring Boot microservice locally usually means talking to PostgreSQL, Redis, or a message broker. Having every developer install and configure different versions natively on macOS, Windows, and Linux leads to subtle schema and version mismatches.
 
-Docker Compose provisions an entire production-like local development topology with a single command:
+Docker Compose defines the local topology in a single `compose.yaml` file (note that the top-level `version:` key is obsolete in modern Compose v2 and can be omitted).
 
 ```yaml
-version: '3.8'
-
 services:
-  # 1. PostgreSQL Relational Database
   postgres:
     image: postgres:16-alpine
-    container_name: local-postgres
     environment:
       POSTGRES_DB: ecommerce_db
       POSTGRES_USER: dev_user
@@ -212,10 +254,8 @@ services:
       timeout: 5s
       retries: 5
 
-  # 2. Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: local-redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -224,28 +264,10 @@ services:
       timeout: 3s
       retries: 5
 
-  # 3. Apache Kafka (Kraft Mode - No ZooKeeper required!)
-  kafka:
-    image: bashj79/kafka-kraft:latest
-    container_name: local-kafka
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_CFG_NODE_ID: 1
-      KAFKA_CFG_PROCESS_ROLES: broker,controller
-      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@127.0.0.1:9093
-      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-
-  # 4. Spring Boot Order Service
   order-service:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: local-order-service
     ports:
       - "8080:8080"
     environment:
@@ -253,10 +275,15 @@ services:
       SPRING_DATASOURCE_USERNAME: dev_user
       SPRING_DATASOURCE_PASSWORD: dev_password
       SPRING_DATA_REDIS_HOST: redis
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
     depends_on:
       postgres:
-        condition: service_healthy # Waits for DB to be 100% ready before starting Spring Boot!
+        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -264,59 +291,41 @@ volumes:
   postgres_data:
 ```
 
----
+Notice two practical details in this file:
 
-## Architectural Traps and Real-World Outages
+1. **`condition: service_healthy`**: A plain `depends_on` list only waits for the PostgreSQL *container* to start, not for PostgreSQL to finish initializing its data directory and accept TCP connections. Combining `healthcheck` with `service_healthy` prevents Spring Boot from failing at startup with `Connection refused`.
+2. **Local resource limits (`deploy.resources.limits`)**: Applying a 1 GB memory limit locally lets you verify `-XX:MaxRAMPercentage` behavior and catch memory spikes on your laptop before deploying to a shared cluster.
 
-### The "OOMKilled at Peak Traffic" Disaster
-An e-commerce team deployed a Spring Boot inventory service to Kubernetes with container memory limits set to `limits.memory: 2Gi`. The deployment engineer set JVM arguments to `-Xmx2g -Xms2g`. 
-
-During normal traffic, the service ran fine because heap occupancy stayed around 600 MB. During a Black Friday flash sale, 10,000 requests/second arrived. Tomcat spawned 200 worker threads (200 MB native RAM), Metaspace loaded dynamic proxy classes, and Netty allocated 300 MB of off-heap direct buffers. Total process memory crossed 2,050 MB. 
-
-The Linux kernel immediately killed the pod with `Exit Code 137`. The pod crashed and restarted. The new pod was instantly slammed with the backlog of traffic, exceeded 2 GB, and crashed again, creating a catastrophic crash loop that lasted 45 minutes until the memory limit was increased and `-XX:MaxRAMPercentage=75.0` was applied.
-
-### The "Uncached Maven Dependencies" CI/CD Bottleneck
-A development team copied their entire application directory before downloading dependencies in their Dockerfile:
-```dockerfile
-COPY . .
-RUN mvn clean package
-```
-Every time a developer fixed a typo in a markdown README or CSS file, Docker invalidated the layer cache. The CI pipeline had to download all 1,200 Maven dependencies from Maven Central on every single commit, turning a 30-second build into a 12-minute build and generating a USD 4,000 monthly AWS data transfer bill.
+If you prefer running Spring Boot directly from IntelliJ IDEA for fast debug restarts while keeping PostgreSQL and Redis in containers, Spring Boot 3.1+ provides `spring-boot-docker-compose`. Adding it as an optional runtime dependency lets Spring Boot automatically detect `compose.yaml`, start the backing services, and wire datasource and Redis connection properties without manual configuration.
 
 ---
 
-## Senior Interview Questions
+## Common Failure Modes
 
-### Question 1: What is the exact difference between `cgroups v1` and `cgroups v2` in how Linux manages container memory for Java?
-**Answer:**  
-- **Cgroups v1**: Managed resource limits in isolated, orthogonal hierarchies (`/sys/fs/cgroup/memory`, `/sys/fs/cgroup/cpu`). It had major flaws in accounting for buffered page cache memory and swap, often causing misleading memory reporting and premature OOMKilled events.
-- **Cgroups v2**: Implemented a unified, single hierarchy where all resource controllers are coordinated per process group. It introduced superior memory management metrics (`memory.current`, `memory.min`, `memory.low`, `memory.high`) and accurately tracks kernel memory, socket memory, and page caches. 
+**Setting `-Xmx` equal to the container memory limit.** A service deployed with `limits.memory: 2Gi` and `-Xmx2g` often passes light staging tests because heap usage stays around 600 MB. Under peak load, the heap expands toward 2 GB while Tomcat threads, Metaspace, and Netty buffers consume another 350 to 500 MB. Total RSS crosses 2 GiB and the kernel kills the container with Exit Code 137. Each restarted instance immediately takes the traffic backlog and hits the same wall, producing a prolonged crash loop until heap is capped with `-XX:MaxRAMPercentage` or the container limit is raised.
 
-Modern Java (Java 17, 21+) natively detects whether the host runs cgroups v1 or v2 and configures its internal `OSContainer` subsystem accordingly.
+**Copying the entire workspace before resolving dependencies.** Writing `COPY . .` before `mvn package` invalidates the dependency layer whenever any tracked or untracked file changes. On a busy team, every commit re-downloads hundreds of Maven artifacts, turning 20-second builds into multi-minute bottlenecks and driving up CI network egress costs.
 
-### Question 2: Why does a Java container process terminate with Exit Code 137, and how can you distinguish between an internal Java OutOfMemoryError and an external Linux OOMKill?
-**Answer:**  
-Exit Code 137 is calculated as `128 + N`, where `N` is the Linux signal number. Signal 9 is `SIGKILL` (`128 + 9 = 137`).
-- **Internal Java `OutOfMemoryError`**: Occurs when the JVM's Heap, Metaspace, or DirectByteBuffers exceed their configured internal limits (`-Xmx`). The JVM throws `java.lang.OutOfMemoryError`, prints a stack trace to stdout/stderr, and (if configured) generates a `.hprof` heap dump file before exiting.
-- **External Linux OOMKill**: Occurs when the total physical memory consumed by the entire Linux process (Heap + Off-Heap + Native C++ libraries + Thread Stacks + JVM runtime overhead) exceeds the Docker/Kubernetes container memory limit (`limits.memory`). The Linux kernel terminates the process immediately with `SIGKILL`. **No stack trace, no OutOfMemoryError message, and no heap dump is generated in application logs!** You can confirm an external OOMKill by inspecting `kubectl describe pod` (checking for `OOMKilled: true`) or running `dmesg -T | grep -i oom`.
+**Forgetting `.dockerignore`.** Without `.dockerignore`, `docker build .` sends `.git/`, local `target/` directories, and log files to the Docker daemon on every build, bloating the build context and occasionally leaking local `.env` files into build layers.
 
-### Question 3: Why should you use Spring Boot's Layered JAR feature (`JarLauncher`) when building container images?
-**Answer:**  
-In a standard fat JAR, all application classes and third-party dependencies are zipped into a single monolithic `.jar` file (typically 80 MB to 150 MB). In Docker, modifying a single line of Java code invalidates the entire layer, forcing Docker to upload and store a full 150 MB layer on every build.
+---
 
-Spring Boot's **Layered JAR** decomposes the fat JAR into distinct physical layers based on how frequently they change:
-1. `dependencies`: Third-party release dependencies (Spring, Hibernate, Jackson) - changes almost never.
-2. `spring-boot-loader`: Spring Boot runtime launcher - changes only on framework upgrades.
-3. `snapshot-dependencies`: Internal organization snapshot libraries - changes occasionally.
-4. `application`: Your compiled business classes and resources - changes on every commit.
+## Interview Questions
 
-Because Docker reuses cached layers, rebuilding a container after a code change only builds and transfers the final 500 KB `application` layer, saving gigabytes of CI/CD network bandwidth and reducing deployment times from minutes to seconds.
+### What is the difference between cgroups v1 and cgroups v2 for Java containers?
 
-### Question 4: What is the purpose of the Distroless base image (`gcr.io/distroless/java`), and what are its trade-offs?
-**Answer:**  
-**Distroless** container images contain *only* the application and its runtime dependencies (the JRE and minimal glibc/openssl shared libraries). They contain **no package managers (apt, apk), no shells (/bin/sh, /bin/bash), and no standard Linux utilities (curl, wget, ls)**.
-- **Advantages:**
-  1. **Minimal Attack Surface**: Vulnerabilities in shell utilities or system libraries (e.g., Shellshock) cannot be exploited. Attackers who gain remote execution cannot spawn a shell or download malicious binaries via `curl`.
-  2. **Zero CVE Clutter**: Security scanners (Trivy, Snyk) report virtually zero operating system vulnerabilities.
-- **Trade-offs:**
-  - **Debugging Friction**: You cannot run `docker exec -it <container> /bin/sh` to inspect files or test network connectivity with `curl`. Debugging requires Kubernetes ephemeral debug containers (`kubectl debug`) or JFR/APM tools.
+Cgroups v1 managed CPU, memory, and I/O in separate directory hierarchies (`/sys/fs/cgroup/memory`, `/sys/fs/cgroup/cpu`). Accounting for kernel memory, page cache, and nested groups had edge cases that sometimes caused misleading usage stats or unexpected OOM kills. Cgroups v2 unifies all controllers under a single hierarchy (`/sys/fs/cgroup`) with cleaner memory controls (`memory.min`, `memory.low`, `memory.high`, `memory.max`) and more accurate tracking of page cache and socket memory. Modern HotSpot builds (Java 17 and 21) detect whether the host runs v1 or v2 automatically through HotSpot's `OSContainer` layer and size heap and GC thread counts accordingly.
+
+### How do you tell an internal Java `OutOfMemoryError` apart from a Linux OOMKill (Exit Code 137)?
+
+An internal `java.lang.OutOfMemoryError` happens when a JVM-managed region (such as Heap, Metaspace, or Direct Memory) hits its configured JVM limit. The JVM stays in control long enough to log the exception and stack trace, and if configured with `-XX:+HeapDumpOnOutOfMemoryError`, it can write an `.hprof` file before exiting.
+
+An external Linux OOMKill happens when the combined resident memory of the entire process (Heap plus Metaspace, thread stacks, Code Cache, direct buffers, and native libraries) exceeds the container's cgroup memory limit. The kernel immediately terminates the process with `SIGKILL` (`128 + 9 = 137`). You see no `OutOfMemoryError` and no heap dump in application logs; instead, you confirm it by checking `OOMKilled: true` in `docker inspect` or `kubectl describe pod`, or checking the host kernel logs (`dmesg`).
+
+### Why extract Spring Boot layered JARs in a multi-stage Dockerfile?
+
+In a monolithic fat JAR, third-party dependencies and application classes sit inside a single archive file. Any code change alters the file hash and forces Docker to rebuild and push the entire 100+ MB layer. Spring Boot's layered extraction places stable release dependencies, the Boot loader, snapshot dependencies, and application classes into separate `COPY` instructions ordered from least to most volatile. When application code changes, Docker reuses the cached dependency layers and only rebuilds and transfers the small final application layer.
+
+### When should you choose Google Distroless over Debian-slim or Alpine for a Java service?
+
+Distroless (`gcr.io/distroless/java21-debian12:nonroot`) is a strong default for production services because it keeps `glibc` compatibility while removing shells, package managers, and OS utilities. That shrinks both the post-exploit attack surface and scanner CVE noise. The trade-off is that you cannot run `docker exec -it <container> /bin/sh` for live debugging, so your team needs solid logging, metrics, and familiarity with `kubectl debug` ephemeral containers. Debian-slim is easier if your team still depends on in-container troubleshooting tools, while Alpine should be tested carefully with any dependency that ships native JNI binaries compiled against `glibc`.

@@ -1,100 +1,90 @@
 ---
 title: "Spring Data JPA"
-description: "Master Spring Data JPA repository abstractions: SimpleJpaRepository internals, derived queries, JPQL vs Native SQL, DTO projections, Slice vs Page pagination, and auditing."
+description: "How Spring Data JPA generates repository proxies, derives and runs JPQL or native SQL queries, avoids L1 cache desync and count-query bottlenecks, and automates entity auditing."
 category: "level-8"
 date: "2026-10-29T10:00:00Z"
 ---
 
-Every Java engineer remembers the first time they typed `List<User> findByEmailAndStatus(String email, Status status);` into an empty interface, ran their application, and watched Spring Data synthesize a fully functional database query out of thin air. It feels like pure wizardry.
+Declaring `List<Order> findByCustomerIdAndStatus(UUID customerId, OrderStatus status);` on an empty Java interface and getting a working database query feels effortless. That convenience has a trade-off: if you treat Spring Data JPA as a black box, innocent-looking repository methods can silently trigger N+1 queries, full-table `COUNT(*)` scans, or stale reads from Hibernate's first-level cache.
 
-However, treating Spring Data JPA as a magical black box is one of the quickest paths to catastrophic production performance. Underneath the declarative syntax lies the Java Dynamic Proxy mechanism, Hibernate's first-level cache, entity state transitions, and JDBC execution plans. When you do not understand how Spring translates interface methods into SQL, innocent-looking repository calls can issue un-indexed table scans, duplicate count queries, and trigger silent cache desynchronization.
-
-In this guide, we will peel back the proxy layer of Spring Data JPA, master high-performance querying patterns, evaluate `Slice` versus `Page`, and learn how to write enterprise data access code that scales gracefully to millions of records.
+Under the hood, Spring Data JPA combines JDK dynamic proxies, `SimpleJpaRepository`, and Hibernate's `EntityManager`. Knowing how those layers interact makes it straightforward to write repositories that stay fast as tables grow into the tens of millions of rows.
 
 ---
 
-## The Repository Hierarchy and Dynamic Proxies
+## Repository Interfaces and Runtime Proxies
 
-Spring Data does not generate bytecode files on disk. Instead, when your application context boots up, Spring scans for interfaces extending `Repository<T, ID>` and uses JDK Dynamic Proxies (`java.lang.reflect.Proxy`) to synthesize runtime implementations backed by `SimpleJpaRepository`.
+Spring Data does not generate `.class` files on disk for your repositories. At startup, `JpaRepositoriesRegistrar` scans for interfaces extending `Repository<T, ID>` and registers a `JpaRepositoryFactoryBean` for each one. At runtime, Spring creates a **JDK Dynamic Proxy** (`java.lang.reflect.Proxy`) backed by `SimpleJpaRepository` and an interceptor chain (`QueryExecutorMethodInterceptor`) that dispatches standard CRUD calls to `SimpleJpaRepository` and custom methods to parsed `RepositoryQuery` implementations.
 
 ```mermaid
 flowchart TD
-    Repo["Repository&lt;T, ID&gt;
-(Marker Interface - No Methods)"]
-    CrudRepo["CrudRepository&lt;T, ID&gt;
-(Basic CRUD: save, findById, delete)"]
-    ListCrud["ListCrudRepository&lt;T, ID&gt;
-(Returns List&lt;T&gt; instead of Iterable&lt;T&gt;)"]
-    PagingRepo["PagingAndSortingRepository&lt;T, ID&gt;
-(findAll(Sort), findAll(Pageable))"]
-    JpaRepo["JpaRepository&lt;T, ID&gt;
-(JPA-specific: flush, saveAndFlush, deleteInBatch)"]
+    Repo["Repository (Marker Interface)"]
+    Crud["CrudRepository (save, findById, delete)"]
+    ListCrud["ListCrudRepository (Spring Data 3: returns List)"]
+    Paging["PagingAndSortingRepository (findAll with Sort / Pageable)"]
+    ListPaging["ListPagingAndSortingRepository (Spring Data 3)"]
+    Jpa["JpaRepository (flush, saveAndFlush, deleteAllInBatch)"]
 
-    Repo --> CrudRepo
-    CrudRepo --> ListCrud
-    Repo --> PagingRepo
-    ListCrud --> JpaRepo
-    PagingRepo --> JpaRepo
+    Repo --> Crud
+    Crud --> ListCrud
+    Repo --> Paging
+    Paging --> ListPaging
+    ListCrud --> Jpa
+    ListPaging --> Jpa
 
-    subgraph RuntimeProxy ["Runtime Execution"]
-        Proxy["JDK Dynamic Proxy
-(OrderRepository Proxy)"] -.-> Target["Target Implementation
-(SimpleJpaRepository)"]
-        Target --> EM["EntityManager / Hibernate Session"]
+    subgraph Runtime["Runtime Execution"]
+        Proxy["JDK Dynamic Proxy (OrderRepository)"] -.->|"delegates CRUD"| Simple["SimpleJpaRepository"]
+        Simple --> EM["EntityManager / Hibernate Session"]
     end
 ```
 
-### The Interface Layers
-- **`Repository<T, ID>`**: A pure marker interface with zero methods. It flags the interface for Spring Data's component scanner.
-- **`CrudRepository<T, ID>`**: Provides standard persistence methods (`save`, `findById`, `existsById`, `deleteById`). In older Spring versions, methods like `findAll()` returned `Iterable<T>`.
-- **`ListCrudRepository<T, ID>`**: Introduced in Spring Data 3.0 to replace `Iterable<T>` return types with standard `List<T>`, eliminating awkward manual casting and stream collectors.
-- **`PagingAndSortingRepository<T, ID>`**: Isolates pagination and sorting concerns (`findAll(Pageable)`, `findAll(Sort)`).
-- **`JpaRepository<T, ID>`**: The full-featured JPA interface extending `ListCrudRepository` and `PagingAndSortingRepository`. It adds JPA-specific flush methods (`flush()`, `saveAndFlush()`) and batch operations (`deleteAllInBatch()`).
+### Choosing the Right Base Interface
 
-> [!TIP]
-> **Should every repository extend `JpaRepository`?**  
-> No. In Clean Architecture or Domain-Driven Design (DDD), you want to minimize database leaks into your domain. Extending `Repository<T, ID>` and explicitly declaring only the 3 or 4 methods your application actually uses (e.g., `findById` and `save`) prevents developers from accidentally calling `deleteAll()` or triggering unconstrained queries.
+- **`Repository<T, ID>`**: Pure marker interface with zero methods. Useful in Domain-Driven Design when you want to expose only the exact operations a domain aggregate needs (for example, `findById` and `save`, without exposing `deleteAll()`).
+- **`CrudRepository<T, ID>`**: Basic persistence (`save`, `findById`, `existsById`, `deleteById`). Collection methods like `findAll()` return `Iterable<T>`.
+- **`ListCrudRepository<T, ID>`** *(introduced in Spring Data 3.0)*: Extends `CrudRepository` and narrows `findAll()` / `saveAll()` return types from `Iterable<T>` to `List<T>`, removing awkward stream conversions.
+- **`PagingAndSortingRepository<T, ID>`** (and `ListPagingAndSortingRepository`): Adds `findAll(Sort)` and `findAll(Pageable)`.
+- **`JpaRepository<T, ID>`**: Combines `ListCrudRepository` and `ListPagingAndSortingRepository` with JPA-specific methods like `flush()`, `saveAndFlush()`, `getReferenceById()`, and `deleteAllInBatch()`.
 
 ---
 
-## How Derived Queries Work: The PartTree Parser
+## Query Derivation from Method Names
 
-When Spring Data initializes, it creates a `PartTree` for every repository method that does not have an explicit `@Query` annotation. It breaks down the method name using regex tokens:
+For any repository method without `@Query`, Spring Data parses the method name at startup using `PartTree`:
 
-```
+```text
 findByCustomerEmailAndStatusOrderByCreatedAtDesc
-  │         │          │     │          │
-Prefix   Property   Keyword Property OrderClause
+  |         |          |          |
+Prefix   Property   Property   Sort Clause
 ```
 
-### Supported Keywords and Property Paths
-- **Comparisons**: `Is`, `Equals`, `Between`, `LessThan`, `GreaterThan`, `IsNull`, `IsNotNull`.
-- **String matching**: `Like`, `StartingWith`, `EndingWith`, `Containing`, `IgnoreCase`.
-- **Booleans**: `True`, `False`.
-- **Limiting**: `findFirst5ByOrderByScoreDesc`, `findTop10ByStatus`.
+Because parsing happens during application startup, a typo in an entity property name (for example, `findByCustmerEmail`) fails immediately when the context boots rather than waiting for a production request.
 
-### Disambiguating Nested Properties with Underscores
-Suppose your `Order` entity has a nested property `customerAddress` containing a `zipCode`, and also has a property named `customer` with an `addressZipCode`. 
+### Useful Derived Query Keywords
+- **Filtering**: `Is`, `Equals`, `Between`, `LessThan`, `GreaterThanEqual`, `In`, `IsNull`, `IsNotNull`
+- **Strings**: `StartingWith`, `EndingWith`, `Containing`, `IgnoreCase`
+- **Booleans**: `True`, `False`
+- **Limiting & Existence**: `findFirst5ByOrderByCreatedAtDesc`, `findTop10ByStatus`, `existsByEmail`, `countByStatus`
 
-If you write `findByCustomerAddressZipCode(String zip)`:
-Spring Data first tries to match `customerAddressZipCode` on `Order`. If that fails, it splits from right to left: `customerAddress` and `zipCode`. 
-To avoid ambiguity and startup parsing bugs, use an explicit underscore `_` to demarcate the property traversal boundary:
+### Disambiguating Nested Property Paths
+
+When traversing nested properties, ambiguous names can confuse the parser. Suppose `Order` has a `customerAddress` embeddable with a `zipCode` field, and also a `customer` association. Use an underscore `_` to mark the property boundary explicitly:
 
 ```java
 public interface OrderRepository extends JpaRepository<Order, UUID> {
-    // Explicit traversal: Order -> customerAddress -> zipCode
+    // Explicit path: Order -> customerAddress -> zipCode
     List<Order> findByCustomerAddress_ZipCode(String zipCode);
 }
 ```
 
+Once a derived method needs more than two or three predicates, or requires a `JOIN FETCH`, switch to an explicit `@Query` with a short, readable method name.
+
 ---
 
-## Declarative Queries: JPQL vs Native SQL
+## Custom Queries: JPQL vs. Native SQL
 
-When method names become unwieldy (e.g., `findByStatusAndRegionAndCreatedAtAfterAndDeletedFalseOrderByPriorityDesc`), derived queries become unreadable. Use `@Query`.
+### JPQL Queries
 
-### Java Persistence Query Language (JPQL)
-JPQL queries operate on the **Entity object graph**, referencing Java class names and entity field attributes rather than physical table and column names:
+JPQL targets your **Java entity classes and fields**, not physical database table or column names. Hibernate translates JPQL into the configured SQL dialect at runtime:
 
 ```java
 package com.example.ecommerce.repository;
@@ -112,77 +102,78 @@ import java.util.UUID;
 public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     @Query("""
-        SELECT o FROM Order o
-        JOIN FETCH o.items i
+        SELECT DISTINCT o FROM Order o
+        JOIN FETCH o.items
         WHERE o.status = :status
-          AND o.createdAt >= :cutoffDate
+          AND o.createdAt >= :cutoff
         ORDER BY o.createdAt DESC
     """)
     List<Order> findRecentOrdersWithItems(
             @Param("status") OrderStatus status,
-            @Param("cutoffDate") Instant cutoffDate
+            @Param("cutoff") Instant cutoff
     );
 }
 ```
 
-### Native SQL
-Native queries talk directly to the underlying database engine using physical table names and database-specific SQL dialect:
+### Native SQL Queries
+
+Set `nativeQuery = true` when you need database-specific syntax that JPQL does not support, such as PostgreSQL `JSONB` operators, full-text search (`to_tsvector`), CTEs (`WITH ...`), window functions, or `INSERT ... ON CONFLICT DO UPDATE`:
 
 ```java
-    @Query(value = """
-        SELECT * FROM customer_orders
-        WHERE status = :status
-          AND metadata->>'tier' = 'ENTERPRISE'
-        ORDER BY created_at DESC
-    """, nativeQuery = true)
-    List<Order> findEnterpriseOrdersNative(@Param("status") String status);
+    @Query(
+        value = """
+            SELECT * FROM customer_orders
+            WHERE status = :status
+              AND metadata ->> 'tier' = 'ENTERPRISE'
+            ORDER BY created_at DESC
+        """,
+        countQuery = """
+            SELECT COUNT(*) FROM customer_orders
+            WHERE status = :status
+              AND metadata ->> 'tier' = 'ENTERPRISE'
+        """,
+        nativeQuery = true
+    )
+    Page<Order> findEnterpriseOrdersNative(
+            @Param("status") String status,
+            Pageable pageable
+    );
 ```
 
-### When to Choose Native SQL over JPQL
-1. **Database-specific operators**: Querying PostgreSQL `JSONB` columns using `->>` or full-text search operators (`to_tsvector`).
-2. **Window functions and CTEs**: Using `ROW_NUMBER() OVER (PARTITION BY ...)` or Common Table Expressions (`WITH recursive_cte AS ...`).
-3. **Complex bulk inserts/upserts**: `INSERT INTO ... ON CONFLICT DO UPDATE`.
+Notice the explicit `countQuery` attribute: when combining `nativeQuery = true` with a `Page<T>` return type, supplying a clean `countQuery` prevents Spring Data from failing to rewrite complex SQL (such as CTEs or `GROUP BY`) into a valid count statement.
 
 ---
 
-## The Modifying Query Trap: Hibernate L1 Cache Desynchronization
+## Bulk `@Modifying` Queries and L1 Cache Desynchronization
 
-When you execute an update or delete query using `@Query`, you must annotate the method with `@Modifying`. However, bulk modifying queries bypass the Hibernate First-Level Cache (the `EntityManager` persistence context) and execute directly against the database!
+Bulk `UPDATE` and `DELETE` queries require `@Modifying` alongside `@Query` (and must execute within a `@Transactional` boundary). The catch is that bulk JPQL and native queries execute directly against the database and **bypass Hibernate's First-Level Cache (Persistence Context)**.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant App as Application Service
-    participant L1 as Hibernate L1 Cache (Session)
-    participant DB as Relational Database
+    participant Svc as UserService
+    participant L1 as Hibernate L1 Cache (Persistence Context)
+    participant DB as Database
 
-    App->>L1: findById(101)
-    L1->>DB: SELECT * FROM users WHERE id = 101
-    DB-->>L1: User(id=101, status='ACTIVE')
-    L1-->>App: Managed User Entity (status='ACTIVE')
+    Svc->>L1: findById(userId)
+    L1->>DB: SELECT * FROM users WHERE id = ?
+    DB-->>L1: User(status = ACTIVE)
+    L1-->>Svc: Managed User (status = ACTIVE)
 
-    Note over App,DB: Bulk Modifying Query Executed Directly
-    App->>DB: @Modifying UPDATE users SET status = 'SUSPENDED' WHERE id = 101
-    DB-->>App: 1 row affected
+    Note over Svc,DB: Bulk @Modifying query runs directly on DB
+    Svc->>DB: UPDATE users SET status = 'SUSPENDED' WHERE tenant_id = ?
+    DB-->>Svc: 1 row updated
 
-    Note over L1: DANGER! L1 Cache is NOT notified!
-    App->>L1: findById(101)
-    L1-->>App: Stale User Entity (status='ACTIVE')!
+    Note over L1: L1 cache still holds the old snapshot!
+    Svc->>L1: findById(userId)
+    L1-->>Svc: Stale User (status = ACTIVE)
 ```
 
-### The Fix: `clearAutomatically` and `flushAutomatically`
-If you do not clear the persistence context, subsequent reads in the same transaction will return stale, un-updated entity instances from the L1 cache.
+### Fixing Cache Desync with `flushAutomatically` and `clearAutomatically`
+
+Configure both flags on `@Modifying` whenever managed entities may exist in the same transaction:
 
 ```java
-package com.example.ecommerce.repository;
-
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
-
-import java.util.UUID;
-
 public interface UserRepository extends JpaRepository<User, UUID> {
 
     @Modifying(flushAutomatically = true, clearAutomatically = true)
@@ -193,19 +184,41 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     );
 }
 ```
-- **`flushAutomatically = true`**: Flushes any pending dirty entity changes from memory to the database before executing the bulk SQL query.
-- **`clearAutomatically = true`**: Evicts all managed entities from the Hibernate L1 cache immediately after the query runs, forcing subsequent reads to fetch fresh data from the database.
+
+- **`flushAutomatically = true`**: Flushes any pending in-memory dirty changes to the database *before* the bulk statement runs, preventing the bulk `UPDATE` from overwriting unsaved entity changes or seeing stale rows.
+- **`clearAutomatically = true`**: Clears the `EntityManager` persistence context immediately *after* the query executes, so subsequent reads in the same transaction fetch the updated state from the database instead of returning stale L1 cache instances.
+
+Keep in mind that clearing the persistence context detaches any other entity references already held in local variables inside that transaction.
 
 ---
 
-## High-Performance Projections: Skipping the Hibernate Overhead
+## Interface and Record Projections
 
-When an API endpoint only needs 3 fields from a 40-column table (e.g., displaying a summary list in a UI table), fetching the entire managed entity is a massive waste of CPU, memory, and database bandwidth. 
+Loading a full managed JPA entity for a read-only summary screen wastes both database I/O and JVM heap: Hibernate fetches every column, instantiates the entity, copies every field into a snapshot array for dirty checking, and tracks it in the L1 cache for the duration of the transaction.
 
-Hibernate must allocate entity snapshots in the Persistence Context, track dirty state for every field, and resolve associations. **DTO Projections** bypass entity management entirely and populate lightweight data carriers directly.
+**Projections** select only the required columns and skip managed entity tracking.
 
-### Class-Based (Record) Projections with JPQL Constructor Expressions
-Java 21 records make the cleanest, highest-performance projections:
+### Interface-Based (Closed) Projections
+
+Define a lightweight interface whose getter names match entity properties. Spring Data rewrites the `SELECT` clause to fetch only those columns:
+
+```java
+public interface OrderSummaryView {
+    UUID getId();
+    String getStatus();
+    BigDecimal getTotalAmount();
+}
+
+public interface OrderRepository extends JpaRepository<Order, UUID> {
+    List<OrderSummaryView> findByCustomerId(UUID customerId);
+}
+```
+
+Closed interface projections work directly with derived query methods and native queries (matching column aliases), though Spring backs each row with a dynamic proxy.
+
+### Record (Class-Based) DTO Projections
+
+For maximum clarity and zero proxy overhead, project directly into a Java record using a JPQL constructor expression (or directly in a derived method when property names match record components):
 
 ```java
 package com.example.ecommerce.dto;
@@ -221,16 +234,6 @@ public record OrderSummaryDto(
 ```
 
 ```java
-package com.example.ecommerce.repository;
-
-import com.example.ecommerce.dto.OrderSummaryDto;
-import com.example.ecommerce.entity.Order;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-
-import java.util.List;
-import java.util.UUID;
-
 public interface OrderRepository extends JpaRepository<Order, UUID> {
 
     @Query("""
@@ -240,62 +243,68 @@ public interface OrderRepository extends JpaRepository<Order, UUID> {
             o.totalAmount
         )
         FROM Order o
-        WHERE o.status = 'COMPLETED'
+        WHERE o.status = :status
     """)
-    List<OrderSummaryDto> findCompletedOrderSummaries();
+    List<OrderSummaryDto> findSummariesByStatus(@Param("status") OrderStatus status);
 }
 ```
 
-> [!NOTE]
-> **Performance Benchmark Impact**  
-> DTO projections frequently achieve a 5x to 10x throughput improvement over entity queries for read-heavy operations because Hibernate maps JDBC `ResultSet` columns directly into the constructor, avoiding entity instantiation, proxy wrapping, and L1 cache management.
+Hibernate reads the JDBC `ResultSet` straight into `OrderSummaryDto` instances without creating managed entities or dirty-checking snapshots, which measurably lowers memory allocation and latency on wide tables.
 
 ---
 
-## Pagination: `Page<T>` vs `Slice<T>` vs Keyset Pagination
+## Pagination and Sorting: `Page<T>` vs. `Slice<T>`
 
-When serving paginated endpoints, developers default to accepting a `Pageable` and returning `Page<T>`. On large tables, this is a ticking latency bomb.
+Spring Data accepts `Pageable` (constructed via `PageRequest.of(page, size, Sort.by(...))`) and `Sort` parameters on both derived and `@Query` methods. Choosing the return type has a big impact on database load.
 
-### The Hidden Penalty of `Page<T>`
-To return a `Page<T>`, Spring Data must know the total number of pages and elements. Therefore, it executes **two queries**:
-1. The data query: `SELECT * FROM orders WHERE ... LIMIT 20 OFFSET 100000;`
-2. The count query: `SELECT COUNT(*) FROM orders WHERE ...;`
+### `Page<T>` and the Hidden Count Query
 
-On a table with 20 million rows, running `SELECT COUNT(*)` on an un-indexed or filtered query forces the database to scan millions of index blocks or rows. The count query alone can take 10 to 30 seconds!
+Returning `Page<T>` tells the caller `totalElements` and `totalPages`. To compute those numbers, Spring Data runs **two queries**:
+1. The page query: `SELECT ... FROM orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 20 OFFSET 0`
+2. The count query: `SELECT COUNT(*) FROM orders WHERE customer_id = ?`
 
-### The Solution: `Slice<T>`
-If your frontend uses an "infinite scroll" or a simple "Next / Previous" UI rather than explicit numbered page buttons (e.g., `Page 1, 2, 3... 450`), use `Slice<T>`:
+On tables with tens of millions of rows and selective filters, that `COUNT(*)` query can become far slower than fetching the 20 rows themselves.
+
+### `Slice<T>` Skips the Count Query
+
+If the UI only needs "Load more" or "Next / Previous" navigation (no total page count), return `Slice<T>`:
 
 ```java
-package com.example.ecommerce.repository;
-
-import com.example.ecommerce.entity.Order;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Slice;
-import org.springframework.data.jpa.repository.JpaRepository;
-
-import java.util.UUID;
-
 public interface OrderRepository extends JpaRepository<Order, UUID> {
-    // Zero count query overhead!
+    // Executes a single query with LIMIT (size + 1); never runs SELECT COUNT(*)
     Slice<Order> findByCustomerId(UUID customerId, Pageable pageable);
 }
 ```
 
-### How `Slice` Eliminates the Count Query
-When you request `PageRequest.of(0, 20)`, `Slice` requests `LIMIT 21` from the database. 
-- If the database returns 21 records, Spring discards the 21st record and sets `slice.hasNext() = true`.
-- If the database returns 20 or fewer records, Spring sets `slice.hasNext() = false`.
-The expensive `SELECT COUNT(*)` query is never executed!
+When you request `PageRequest.of(0, 20)`, Spring Data queries `LIMIT 21`. If 21 rows come back, it drops the extra row and sets `slice.hasNext()` to `true`; if 20 or fewer come back, `hasNext()` is `false`.
+
+> [!NOTE]
+> `Slice<T>` still uses `OFFSET` under the hood. When users paginate very deep (for example, `OFFSET 500000`), the database still has to scan and discard 500,000 rows. For deep feeds or batch exports, switch to **keyset (cursor) pagination** (`WHERE (created_at, id) < (:lastCreatedAt, :lastId) ORDER BY created_at DESC, id DESC LIMIT 20`), which uses an index seek in constant time regardless of depth.
+
+### Allowlisting Sort Fields from HTTP Requests
+
+Never pass an unsanitized `Pageable` directly from a controller to a repository without restricting sortable columns:
+
+```java
+private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("createdAt", "totalAmount", "status");
+
+public Slice<OrderSummaryDto> listOrders(UUID customerId, int page, int size, String sortBy) {
+    String safeSort = ALLOWED_SORT_FIELDS.contains(sortBy) ? sortBy : "createdAt";
+    int boundedSize = Math.min(Math.max(size, 1), 100);
+    Pageable pageable = PageRequest.of(Math.max(page, 0), boundedSize, Sort.by(Sort.Direction.DESC, safeSort));
+    return orderRepository.findSummariesByCustomerId(customerId, pageable);
+}
+```
+
+Bounding `size` also prevents a caller from requesting `?size=1000000` and exhausting heap memory.
 
 ---
 
 ## Entity Auditing with `@EnableJpaAuditing`
 
-Tracking when a record was created, who created it, and when it was last modified is a universal requirement for audit compliance (SOC2, HIPAA, PCI-DSS).
+Tracking creation timestamps, modification timestamps, and acting users is standard across enterprise domains. Spring Data JPA automates these fields using JPA entity lifecycle listeners.
 
-### Step 1: Enable Auditing and Define AuditorAware
-Spring Data integrates seamlessly with Spring Security to capture the authenticated username:
+### Enabling Auditing and Providing `AuditorAware`
 
 ```java
 package com.example.ecommerce.config;
@@ -318,12 +327,12 @@ public class JpaAuditConfig {
         return () -> Optional.ofNullable(SecurityContextHolder.getContext().getAuthentication())
                 .filter(Authentication::isAuthenticated)
                 .map(Authentication::getName)
-                .or(() -> Optional.of("SYSTEM_AUTOMATION"));
+                .or(() -> Optional.of("SYSTEM"));
     }
 }
 ```
 
-### Step 2: Create a Reusable Auditable Base Entity
+### Reusable `@MappedSuperclass` Base Entity
 
 ```java
 package com.example.ecommerce.entity;
@@ -341,7 +350,7 @@ import java.time.Instant;
 
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
-public abstract class AuditableBaseEntity {
+public abstract class AuditableEntity {
 
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -359,69 +368,52 @@ public abstract class AuditableBaseEntity {
     @Column(name = "last_modified_by", nullable = false)
     private String lastModifiedBy;
 
-    // Getters and Setters omitted for brevity
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getLastModifiedAt() { return lastModifiedAt; }
+    public String getCreatedBy() { return createdBy; }
+    public String getLastModifiedBy() { return lastModifiedBy; }
 }
 ```
 
+Two practical caveats to keep in mind:
+- **Bulk `@Modifying` queries bypass `AuditingEntityListener`**: If you run a JPQL `UPDATE`, `@LastModifiedDate` and `@LastModifiedBy` will not update automatically, so set those columns explicitly inside the `UPDATE` query.
+- **Test slices**: `@DataJpaTest` does not load your main `@SpringBootApplication` class's auditing config if `@EnableJpaAuditing` is placed on the application class itself. Keeping `@EnableJpaAuditing` in a dedicated `JpaAuditConfig` class lets you `@Import(JpaAuditConfig.class)` selectively in repository tests.
+
 ---
 
-## Architectural Traps and Real-World Outages
+## Common Production Pitfalls
 
-### The "COUNT(*) Table Lock" Meltdown
-A banking application displayed an audit log dashboard for compliance officers. The repository method was defined as:
-```java
-Page<AuditLog> findByTenantId(UUID tenantId, Pageable pageable);
-```
-During a high-traffic morning peak, 50 compliance auditors refreshed their dashboards simultaneously. The `audit_logs` table contained 45 million rows. PostgreSQL fired 50 concurrent `SELECT COUNT(*) FROM audit_logs WHERE tenant_id = ...` queries. 
+### Count-Query Saturation Under Concurrent Traffic
+When a busy dashboard endpoint returns `Page<AuditLog>` over a 40-million-row table, dozens of concurrent users refreshing the page fire dozens of overlapping `SELECT COUNT(*)` scans. CPU climbs, query queues grow, and HikariCP pools time out across pods. Switching the endpoint to `Slice<AuditLog>` removes the count query completely and keeps query cost proportional to the page size.
 
-The CPU spiked to 100%, query queues backed up, and HikariCP connection pools in all web pods exhausted within 90 seconds, causing a complete cascading outage. The fix was migrating the endpoint to `Slice<AuditLog>`, instantly dropping database CPU utilization from 100% to 12%.
+### Redundant `save()` Calls Inside `@Transactional` Methods
 
-### The Silent Dirty Checking Bug with Explicit `save()`
-Many developers write code like this inside a `@Transactional` service:
 ```java
 @Transactional
 public void updateEmail(UUID userId, String newEmail) {
     User user = userRepository.findById(userId).orElseThrow();
     user.setEmail(newEmail);
-    userRepository.save(user); // Redundant!
+    // Calling userRepository.save(user) here is redundant for a managed entity
 }
 ```
-While calling `userRepository.save(user)` is technically harmless here, understanding that Hibernate's Persistence Context automatically performs **dirty checking** at transaction commit time is fundamental. When you realize that any mutation on a managed entity is automatically flushed to the database, you avoid unnecessary intermediate saves, unexpected triggers, and mental confusion about entity lifecycle boundaries.
+
+Inside an active transaction, `user` is already managed by the persistence context. Hibernate tracks dirty fields automatically and flushes the `UPDATE` statement at commit time. Calling `save()` on an already-managed entity is harmless in `SimpleJpaRepository` (it calls `merge`), but understanding dirty checking prevents confusion about *when* SQL actually executes and avoids accidental mutations of managed entities you only meant to read (mark read-only service methods `@Transactional(readOnly = true)` to skip dirty-checking snapshots altogether).
 
 ---
 
-## Senior Interview Questions
+## Interview Questions
 
-### Question 1: How does Spring Data JPA implement repository interfaces without any concrete implementation classes written by the developer?
-**Answer:**  
-Spring Data JPA uses JDK Dynamic Proxies (`java.lang.reflect.Proxy`). During application initialization:
-1. `JpaRepositoriesRegistrar` scans for interfaces extending `Repository`.
-2. For each interface, Spring registers a `JpaRepositoryFactoryBean`.
-3. The factory initializes a `RepositoryFactorySupport` (specifically `JpaRepositoryFactory`), which configures a dynamic proxy interceptor chain (`QueryExecutorMethodInterceptor`).
-4. Any default CRUD method (`save`, `findById`) is routed to a target implementation class, `SimpleJpaRepository`.
-5. Any derived or annotated query method (`@Query`, `findBy...`) is parsed into a `RepositoryQuery` instance (such as `PartTreeJpaQuery` or `SimpleJpaQuery`) and executed against the `EntityManager`.
+### How does Spring Data JPA provide implementations for repository interfaces you never implement?
+During context initialization, `JpaRepositoriesRegistrar` detects interfaces extending `Repository` and registers a `JpaRepositoryFactoryBean` for each. The factory builds a JDK Dynamic Proxy backed by `SimpleJpaRepository` for built-in CRUD operations and attaches a `QueryExecutorMethodInterceptor` that parses derived names (`PartTreeJpaQuery`) or `@Query` annotations (`SimpleJpaQuery`) into executable queries against the `EntityManager`.
 
-### Question 2: What is the N+1 query problem in Spring Data JPA, and what are three distinct ways to solve it?
-**Answer:**  
-The N+1 query problem occurs when an application loads an entity (1 query) and then accesses a lazy association across N entity instances in a loop, causing Hibernate to execute N additional queries to fetch the associated records.
+### What causes the N+1 query problem in Spring Data JPA, and what are three ways to fix it?
+N+1 happens when a query loads `N` parent entities (1 query) and subsequent code iterates over a `LAZY` collection on each parent, triggering `N` extra queries. You can fix it by:
+1. Using `JOIN FETCH` in a JPQL `@Query` to load the association in a single SQL join.
+2. Adding `@EntityGraph(attributePaths = {"items"})` on the repository method to override the fetch plan declaratively.
+3. Switching to a DTO or interface projection that selects only the exact columns needed.
 
-Three distinct solutions:
-1. **`JOIN FETCH` in JPQL**: Force the query to eagerly retrieve the association in a single SQL inner or left join: `SELECT o FROM Order o JOIN FETCH o.items`.
-2. **`@EntityGraph`**: Declaratively override the entity's fetch plan on a repository method:
-   ```java
-   @EntityGraph(attributePaths = {"items", "items.product"})
-   List<Order> findByStatus(OrderStatus status);
-   ```
-3. **DTO Constructor Projections**: Bypass entities entirely by selecting only the specific fields needed into an immutable record DTO.
+### What is the difference between `save()` and `saveAndFlush()` on `JpaRepository`?
+`save()` delegates to `EntityManager.persist()` (for new entities) or `merge()` (for detached entities), placing the entity in the persistence context without necessarily sending SQL yet; Hibernate normally defers SQL execution until transaction commit or before a dependent query. `saveAndFlush()` calls `save()` and immediately invokes `EntityManager.flush()`, sending the `INSERT` or `UPDATE` to the database right away within the current transaction (useful when you need database-generated constraints or triggers evaluated immediately, though the transaction itself is still not committed until the `@Transactional` method finishes).
 
-### Question 3: What is the difference between `save()` and `saveAndFlush()` in `JpaRepository`?
-**Answer:**  
-- `save()` passes the entity to `EntityManager.persist()` (if new) or `EntityManager.merge()` (if detached). It attaches the entity to the Persistence Context (L1 cache), but **does not immediately execute an SQL INSERT or UPDATE statement**. The SQL is deferred until Hibernate's dirty-check flush phase (usually when the surrounding `@Transactional` boundary commits).
-- `saveAndFlush()` performs `save()` and then immediately calls `EntityManager.flush()`. This forces Hibernate to translate all pending in-memory entity changes into SQL statements and execute them against the database transaction buffer immediately. Note that this does *not* commit the database transaction—it merely sends the SQL so database triggers or foreign key checks evaluate immediately.
-
-### Question 4: Why should you avoid using `Pageable` and `Sort` with un-sanitized user input from a REST controller?
-**Answer:**  
-If a REST controller accepts a `Pageable` directly from query parameters (e.g., `?sort=passwordHash,asc`), Spring Data's sort parser attempts to map the property name against entity attributes. 
-1. **Information Leakage**: If an attacker sorts by a private or hashed field (`passwordHash`), they can infer data values by measuring sorting order or timing side channels.
-2. **SQL Injection in Native Queries**: While JPQL validates sort properties against entity metadata, passing a dynamic `Sort` into a native SQL query (`nativeQuery = true`) can lead to SQL syntax errors or SQL injection if the property cannot be safely bound as a parameter.
-Always validate and map external sort parameters against an explicit allowlist before passing them to the repository layer.
+### Why should you avoid binding raw `Pageable` and `Sort` parameters from untrusted HTTP query strings?
+Passing raw `sort` parameters straight to a repository lets clients sort by sensitive entity fields (such as `passwordHash` or internal scores), risking information leakage, and can throw `PropertyReferenceException` or break native SQL queries if the property name does not map cleanly. Always validate sort property names against an explicit allowlist and clamp page sizes to a safe maximum before constructing `PageRequest`.

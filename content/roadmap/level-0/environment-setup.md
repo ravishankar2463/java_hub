@@ -1,94 +1,81 @@
 ---
 title: "Environment Setup"
-description: "Master the Java ecosystem from the ground up: understand the JVM, JRE, and JDK, explore bytecode mechanics, and configure your machine like a senior engineer."
-category: "basics"
+description: "Understand how the JVM, JRE, and JDK fit together, install a modern Java LTS release, configure IntelliJ IDEA or Eclipse, and compile and run code from the command line."
+category: "level-0"
 date: "2026-06-20T12:00:00Z"
 ---
 
-Every developer remembers the first time they tried to get Java running on their machine. You download an installer, open a terminal, type `javac`, and get hit with:
+When you set up Java for the first time, it is common to run into an error before writing a single line of code:
 
 ```text
 'javac' is not recognized as an internal or external command, operable program or batch file.
 ```
 
-You pause and wonder: *Why on earth does a platform powering global banking, Android phones, mission-critical microservices, and NASA rovers feel so complicated before you’ve even written your first curly brace?*
+Unlike a scripting language where you install one interpreter and run files directly, Java splits development and execution across a small set of tools: a compiler, a virtual machine, and a standard library. That extra layer can feel confusing on day one, but it exists for a practical reason. Java was built so you can compile your program once and run the resulting file on Windows, macOS, or Linux without rewriting platform-specific code.
 
-The answer lies in Java’s bold design philosophy. Unlike languages like Python that ship as a simple script interpreter, or C++ that compiles straight into raw x86 machine instructions for one specific processor, Java chose a radical architectural middle ground: **a virtual computer running on top of your physical machine.**
-
-Once you understand why this architecture exists, the tools stop feeling like arbitrary hurdles and start feeling like an engineering superpower. Let's unpack the machine behind the language.
+Once you understand how those pieces relate, installing Java, wiring up an IDE, and running code from the terminal become straightforward.
 
 ---
 
-## The Holy Trinity: JDK, JRE, and JVM
+## JDK, JRE, and JVM: How the Pieces Fit Together
 
-If you've searched for "how to install Java," you've probably been bombarded with acronyms: **JVM**, **JRE**, and **JDK**. They are frequently conflated, but mixing them up is a dead giveaway that a developer doesn't understand their runtime environment.
-
-Here is the exact architectural relationship between them:
+Almost every Java installation guide mentions three acronyms: **JVM**, **JRE**, and **JDK**. They are nested layers rather than competing downloads.
 
 ```mermaid
-graph TD
-    subgraph JDK ["JDK (Java Development Kit)"]
-        subgraph JRE ["JRE (Java Runtime Environment)"]
-            subgraph JVM ["JVM (Java Virtual Machine)"]
+flowchart TD
+    subgraph JDK["JDK (Java Development Kit)"]
+        subgraph JRE["JRE (Java Runtime Environment)"]
+            subgraph JVM["JVM (Java Virtual Machine)"]
                 CL["Class Loader"] --> BV["Bytecode Verifier"]
                 BV --> EE["Execution Engine"]
                 EE --> JIT["JIT Compiler"]
                 EE --> GC["Garbage Collector"]
             end
-            L["Core Class Libraries (java.lang, java.util...)"]
+            Lib["Standard Class Libraries (java.lang, java.util, java.io)"]
         end
-        T["Developer Tooling (javac, jdb, javadoc, javap...)"]
+        Tools["Developer Tools (javac, javap, javadoc, jdb)"]
     end
-
-    style JDK fill:transparent,stroke:#059669,stroke-width:2px,stroke-dasharray: 5 5
-    style JRE fill:transparent,stroke:#10b981,stroke-width:2px,stroke-dasharray: 5 5
-    style JVM fill:transparent,stroke:#34d399,stroke-width:2px
 ```
 
-To cement this in your head, imagine running an artisan bakery:
+Here is what each layer is responsible for:
 
-- **The JVM (Java Virtual Machine) is the Oven.** It doesn’t know who wrote the recipe or where the ingredients came from. Its only job is to take prepared dough and bake it consistently into bread.
-- **The JRE (Java Runtime Environment) is the Kitchen.** It includes the oven (JVM) *plus* the pre-packaged pantry of ingredients (the Java Standard Class Library: `String`, `ArrayList`, `HashMap`, networking utilities). If you are a customer who just wants to run a pre-packaged program, the kitchen is all you need.
-- **The JDK (Java Development Kit) is the Master Chef's Toolkit.** It includes the entire kitchen and oven (JRE + JVM), *plus* the professional chef utensils: the compiler (`javac`) that turns raw recipe ideas into dough, the debugger (`jdb`), the disassembler (`javap`), and documentation generators (`javadoc`). 
+- **JVM (Java Virtual Machine):** The runtime engine that loads compiled `.class` files, verifies that they are safe to run, executes their instructions, and manages memory through garbage collection. Each operating system and CPU architecture has its own JVM implementation (for example, Windows x86_64 or macOS ARM64).
+- **JRE (Java Runtime Environment):** The JVM combined with the Java Standard Class Library (`String`, `List`, `HashMap`, file I/O, networking, and so on). If you only want to *run* a compiled Java application, the runtime environment is what executes it.
+- **JDK (Java Development Kit):** Everything in the JRE plus the developer tools you need to *build* Java programs. That includes `javac` (the compiler), `javadoc` (the documentation generator), `javap` (the bytecode disassembler), `jar` (the packaging tool), and `jdb` (the command-line debugger).
 
 > [!IMPORTANT]
-> **As a developer, you always install the JDK.** Without the JDK, you lack `javac` (the Java Compiler) and cannot turn `.java` source code into executable bytecode. (Note: Since Java 11, Oracle and the OpenJDK community stopped distributing standalone JRE installers for end-users anyway; installing a modern JDK gives you everything you need in one clean package).
+> **Always install a JDK when you are writing Java code.** Since Java 11, OpenJDK vendors stopped shipping separate standalone JRE installers for most desktop use cases anyway. Installing a modern JDK gives you both the runtime and the compiler in one package.
 
 ---
 
-## The "Write Once, Run Anywhere" Promise
+## Write Once, Run Anywhere
 
-In the early 1990s, software was brittle. If you wrote a game or a spreadsheet in C for Windows x86, you couldn’t simply copy the `.exe` file to a Mac with a PowerPC chip or a Unix Sun Solaris workstation. You had to rewrite OS-specific API calls, adjust for 32-bit vs. 64-bit pointer sizes, handle memory alignment quirks, and recompile from scratch.
+Before Java appeared in 1995, compiling a C or C++ program produced native machine instructions tied directly to one operating system and processor. A binary compiled for Windows on Intel x86 would not run on a Mac or a Linux server without recompiling and often adjusting OS-specific system calls.
 
-James Gosling and the Sun Microsystems team envisioned a different world: **Write Once, Run Anywhere (WORA)**.
+Java introduced an intermediate step called **bytecode**.
 
 ```mermaid
 flowchart TD
-    Src["Source Code (HelloWorld.java)"] -->|"javac (Compiler)"| BC["Intermediate Bytecode (HelloWorld.class)"]
-    BC --> JVM_Win["Windows JVM"]
-    BC --> JVM_Mac["macOS JVM (Apple Silicon)"]
-    BC --> JVM_Lin["Linux JVM (x86_64 Cloud)"]
-    
-    JVM_Win --> Win["Windows Machine Code (x86)"]
-    JVM_Mac --> Mac["macOS Machine Code (ARM64)"]
-    JVM_Lin --> Lin["Linux Machine Code (x86_64)"]
+    Src["Source Code (HelloWorld.java)"] -->|"javac compiler"| BC["Bytecode (HelloWorld.class)"]
+    BC --> WinJVM["Windows JVM"]
+    BC --> MacJVM["macOS JVM (Apple Silicon)"]
+    BC --> LinJVM["Linux JVM (x86_64)"]
+
+    WinJVM --> WinCPU["Windows Native Instructions"]
+    MacJVM --> MacCPU["macOS ARM64 Instructions"]
+    LinJVM --> LinCPU["Linux x86_64 Instructions"]
 ```
 
-How does this work under the hood?
-1. You write human-readable Java code in a text file named `HelloWorld.java`.
-2. You run the `javac` compiler. It does **not** output native x86 machine instructions. Instead, it outputs universal, platform-agnostic **Bytecode** stored in a `HelloWorld.class` file.
-3. Every operating system has its own custom-built JVM (a Windows JVM, a macOS ARM64 JVM, a Linux x86_64 JVM).
-4. The local JVM takes that identical, universal bytecode and translates it into native CPU instructions on the fly.
+The workflow has two phases:
 
-Your bytecode doesn’t know what chip it is running on; the JVM handles the messy real-world hardware translation.
+1. You write source code in a `.java` file and compile it with `javac`. Instead of generating Windows or macOS machine code, `javac` outputs platform-independent bytecode inside a `.class` file.
+2. When you run the program, the JVM installed on that machine reads the bytecode and translates it into native CPU instructions for the host operating system and processor.
 
----
+Because the `.class` file is identical across platforms, you can compile an application on a MacBook and deploy the resulting `.jar` archive straight to a Linux container in production.
 
-## Deep Dive: Peeking Under the Hood at Bytecode
+### What Bytecode Actually Looks Like
 
-You will hear developers throw around the word "bytecode" all day. But what does it actually look like?
-
-Let’s write the simplest Java class imaginable:
+"Bytecode" sounds abstract until you look at a small class. Take this simple method:
 
 ```java
 public class Calculator {
@@ -98,220 +85,284 @@ public class Calculator {
 }
 ```
 
-When you compile this with `javac Calculator.java`, you get `Calculator.class`. If you open that file in a raw hexadecimal viewer, the very first 4 bytes will look familiar to computer science historians:
+When you run `javac Calculator.java`, the compiler creates `Calculator.class`. Every valid `.class` file begins with the same four hexadecimal bytes:
 
 ```text
-CA FE BA BE 00 00 00 41 00 13 07 00 ...
+CA FE BA BE 00 00 00 41 ...
 ```
 
-### The `0xCAFEBABE` Magic Number
+Those first four bytes (`0xCAFEBABE`) act as a file signature. When the JVM loads a class file, it checks for that signature immediately and throws a `ClassFormatError` if the file is malformed or not a valid class file.
 
-Every valid compiled Java `.class` file in the world begins with the exact same 4-byte hexadecimal signature: **`CA FE BA BE`** ("Café Babe"). 
-
-Back in the early 1990s, James Gosling and his team were looking for an obscure, recognizable 32-bit hex word to identify compiled Java binaries. Inspired by a local café in Silicon Valley, they chose `CAFEBABE`. When the JVM ClassLoader reads any file, the very first thing it checks is whether the file starts with `0xCAFEBABE`. If it doesn't, it immediately throws a `ClassFormatError` and refuses to touch it.
-
-### Reading Real Bytecode with `javap`
-
-You don't need a hex editor to see bytecode. The JDK ships with a built-in disassembler tool called `javap`. If you run:
+You do not need a hex editor to inspect bytecode. The JDK includes `javap`, a disassembler that prints readable JVM instructions:
 
 ```bash
 javap -c Calculator.class
 ```
 
-You will see the actual assembly instructions of the Java Virtual Machine:
+Output:
 
 ```text
 public int add(int, int);
   Code:
-     0: iload_1         // Push integer parameter 1 onto the operand stack
-     1: iload_2         // Push integer parameter 2 onto the operand stack
-     2: iadd            // Pop both integers, add them, push result
-     3: ireturn         // Return the integer at the top of the stack
+     0: iload_1         // Push int parameter 'a' onto the operand stack
+     1: iload_2         // Push int parameter 'b' onto the operand stack
+     2: iadd            // Pop both ints, add them, push the sum
+     3: ireturn         // Return the int on top of the stack
 ```
 
-Notice how clean that is. The JVM is a **stack-based virtual machine**. It loads local variables onto an internal operand stack, performs operations (like `iadd`), and returns the top of the stack. Seeing this demystifies the JVM: it is simply an elegant software processor executing instructions.
+The JVM works as a stack-based virtual machine. Rather than operating directly on named hardware registers, bytecode pushes values onto an operand stack, applies operations like `iadd`, and returns the result.
 
----
+### How the JIT Compiler Keeps Java Fast
 
-## Why Java Isn't Slow: The JIT Compiler
-
-In 1996, Java had a reputation for being sluggish. Early JVMs were pure **interpreters**: the JVM would read bytecode instruction `0: iload_1`, translate it to native machine code, execute it, read instruction `1: iload_2`, translate it, and so on.
-
-Interpreting bytecode line-by-line in a loop is inherently slower than running pre-compiled C or Rust code directly on the CPU.
-
-Modern JVMs solved this with an engineering marvel called the **Just-In-Time (JIT) Compiler** and **Tiered Compilation**:
+Early JVMs interpreted bytecode one instruction at a time, which made Java noticeably slower than compiled C or C++. Modern JVMs such as HotSpot (the default OpenJDK JVM) solve this using **Just-In-Time (JIT) compilation** with tiered compilation.
 
 ```mermaid
 flowchart LR
-    BC["Bytecode (.class)"] --> Interp["1. Interpreter (Fast Startup)"]
-    Interp --> Profiler{"Is method a 'Hot Spot'?"}
-    Profiler -->|"Cold (runs rarely)"| Interp
-    Profiler -->|"Hot (loops / high call count)"| C1["2. C1 Compiler (Client JIT: Quick Native Code)"]
-    C1 --> C2Profiler{"Extremely Hot?"}
-    C2Profiler -->|"Critical Performance Path"| C2["3. C2 Compiler (Server JIT: Aggressive Optimization)"]
-    C2 --> Native["Native CPU Instructions (Direct Silicon Speed)"]
+    BC["Bytecode (.class)"] --> Interp["Interpreter (fast startup)"]
+    Interp --> Hot{"Called frequently?"}
+    Hot -->|"No (cold code)"| Interp
+    Hot -->|"Yes (warm)"| C1["C1 JIT Compiler (quick native code)"]
+    C1 --> VeryHot{"Heavy traffic path?"}
+    VeryHot -->|"No"| C1
+    VeryHot -->|"Yes (hot)"| C2["C2 JIT Compiler (optimized native code)"]
+    C2 --> Native["Native CPU Instructions"]
 ```
 
-Here is how the modern JVM operates:
-1. **Instant Startup**: When your application boots, the JVM starts interpreting bytecode immediately. It doesn't waste time doing slow ahead-of-time compilation for code that might only run once.
-2. **Profiling Hot Spots**: As your program runs, the JVM execution engine keeps internal counters for every method and loop. If a method is called tens of thousands of times (a "Hot Spot"), the JVM flags it.
-3. **C1 (Client) Compilation**: The JVM compiles that hot method directly into native CPU instructions on a background thread. Subsequent calls bypass the interpreter.
-4. **C2 (Server) Optimization**: If that code continues to be pounded under heavy load (like in a high-traffic payment processing service), the **C2 compiler** steps in. It performs aggressive hardware-level optimizations: **method inlining**, **loop unrolling**, **dead-code elimination**, and **escape analysis** (allocating temporary objects in CPU registers instead of the Heap).
+When a Java program starts, HotSpot begins by interpreting bytecode so startup stays quick. In the background, it profiles which methods and loops run frequently. Once a method crosses a call threshold, the **C1** compiler compiles it into native machine code quickly. If that method stays busy, the **C2** compiler recompiles it with heavier optimizations such as method inlining, loop unrolling, and escape analysis.
 
-The result? Once a Java server warms up, its critical paths run at native C++ speeds, while retaining memory safety and garbage collection.
+Keep in mind that C1 and C2 tiered compilation is a HotSpot JVM implementation detail rather than a requirement of the Java Language Specification. Other JVMs (such as GraalVM or Eclipse OpenJ9) use different JIT compilers, though they follow the same general idea: interpret cold code, compile hot code to native instructions.
 
 ---
 
-## Setting Up Your Development Environment
+## Installing Java
 
-Now that you understand the machinery, let’s configure your system properly.
+Java is developed in the open under the **OpenJDK** project. Several organizations build, test, and distribute free, production-ready JDK builds from OpenJDK source code:
 
-### Which JDK Distribution Should You Choose?
-
-Java is defined by an open specification (**OpenJDK**). While Oracle maintains a build, several enterprise vendors provide free, battle-tested, Long-Term Support (LTS) distributions:
-
-| Distribution | Provider | Why Engineers Use It |
+| Distribution | Maintainer | Good Fit For |
 | :--- | :--- | :--- |
-| **Eclipse Adoptium (Temurin)** | Eclipse Foundation | The gold standard community distribution; vendor-neutral and verified against the official TCK (Technology Compatibility Kit). |
-| **Amazon Corretto** | Amazon Web Services | The default choice if you deploy to AWS or run production microservices on Linux. |
-| **Azul Zulu** | Azul Systems | Renowned for exceptional multi-platform support, especially on Apple Silicon and embedded hardware. |
+| **Eclipse Adoptium (Temurin)** | Eclipse Foundation | General development and production. Vendor-neutral, widely adopted, and TCK-verified. |
+| **Amazon Corretto** | Amazon Web Services | Teams deploying on AWS or standardizing on Amazon-supported Linux/Windows builds. |
+| **Azul Zulu** | Azul Systems | Broad platform and architecture coverage, including Apple Silicon and older platforms. |
 
 > [!TIP]
-> **Which Java version should you install?**
-> Always pick the latest **Long-Term Support (LTS)** release for serious work (currently **Java 21 LTS** or **Java 17 LTS**). Non-LTS releases (like Java 22 or 23) arrive every six months and are great for testing bleeding-edge features, but enterprise production systems standardize on LTS releases.
+> **Which version should you install?**
+> Pick a **Long-Term Support (LTS)** release. **Java 21 LTS** is the most widely used modern baseline across companies, frameworks, and libraries (and **Java 25 LTS** is the next LTS release after it). Feature releases arrive every six months, which is useful for trying new language features, while LTS releases receive years of security patches.
 
-### Installing Java the Modern Way
+### Installing on macOS and Linux with SDKMAN
 
-#### For macOS & Linux: Use `SDKMAN!`
-Do not manually drag folders into `/Library/Java`. Professional JVM engineers manage their Java versions using **SDKMAN!**:
+If you work on macOS or Linux, **SDKMAN!** makes it easy to install Java and switch between versions per project without manually editing system directories:
 
 ```bash
 # Install SDKMAN
 curl -s "https://get.sdkman.io" | bash
 source "$HOME/.sdkman/bin/sdkman-init.sh"
 
-# Install the latest Eclipse Temurin Java 21 LTS
-sdk install java 21.0.2-tem
+# List available Java builds (look for Temurin 'tem' or Corretto 'amzn')
+sdk list java
 
-# Verify it is active
+# Install Eclipse Temurin Java 21 LTS (replace with the current patch version from sdk list)
+sdk install java 21.0.5-tem
+
+# Confirm the active version
 java -version
+javac -version
 ```
 
-#### For Windows: Use Windows Package Manager (`winget`)
-Open PowerShell as Administrator:
+You can also download native `.pkg` or `.tar.gz` installers directly from [adoptium.net](https://adoptium.net/) or the Amazon Corretto downloads page if you prefer not to use a version manager.
+
+### Installing on Windows
+
+On Windows, you can install a JDK cleanly via `winget` in PowerShell, or download the `.msi` installer from Adoptium or Amazon Corretto:
 
 ```powershell
-# Install Amazon Corretto 21 LTS
-winget install Amazon.Corretto.21
-
-# Or install Eclipse Temurin 21 LTS
+# Option 1: Install Eclipse Temurin 21 LTS
 winget install EclipseAdoptium.Temurin.21.JDK
+
+# Option 2: Install Amazon Corretto 21 LTS
+winget install Amazon.Corretto.21
 ```
+
+If you use the Adoptium `.msi` graphical installer, make sure the options **"Add to PATH"** and **"Set JAVA_HOME variable"** are enabled during the installation wizard.
 
 ---
 
-## The Environment Variables That Trip Everyone Up
+## Environment Variables: `PATH` and `JAVA_HOME`
 
-Even with an installer, every new Java developer eventually faces the dreaded environment variable trap. Understanding how your OS locates binaries will save you hours of debugging.
+Most setup headaches come from two operating system environment variables: `PATH` and `JAVA_HOME`. They serve different jobs.
 
 ```mermaid
 flowchart TD
-    CMD["Terminal: 'javac HelloWorld.java'"] --> PATH{"Is 'javac' in any directory listed in $PATH?"}
-    PATH -->|"No"| ERR["Error: 'javac' command not found"]
-    PATH -->|"Yes"| BIN["Execute: /path/to/jdk-21/bin/javac"]
-    
-    TOOL["Build Tool (Maven / Gradle / IntelliJ)"] --> JH{"Does $JAVA_HOME exist?"}
-    JH -->|"No or points to JRE"| JHERR["Build Failed: JAVA_HOME is invalid"]
-    JH -->|"Yes: /path/to/jdk-21"| RUN["Locates JDK headers, tools, and runtime"]
+    Term["Terminal: javac HelloWorld.java"] --> CheckPath{"Is JDK bin folder in PATH?"}
+    CheckPath -->|"No"| PathErr["Error: javac command not found"]
+    CheckPath -->|"Yes"| RunJavac["Runs /path/to/jdk-21/bin/javac"]
+
+    Build["Build Tool (Maven, Gradle, IDE)"] --> CheckHome{"Is JAVA_HOME set to JDK root?"}
+    CheckHome -->|"No or points to bin"| HomeErr["Error: invalid JAVA_HOME"]
+    CheckHome -->|"Yes"| FindTools["Finds compiler, headers, and runtime"]
 ```
 
-### The `PATH` Variable
-`PATH` is a list of directory paths that your operating system searches whenever you type a command into your terminal.
-- When you type `javac`, your operating system checks each folder in `PATH` sequentially.
-- If the `bin` directory of your JDK (e.g., `C:\Program Files\Eclipse Adoptium\jdk-21\bin` or `/opt/homebrew/opt/openjdk@21/bin`) is not listed in `PATH`, your shell has no idea what `javac` is.
+### `PATH`
 
-### The `JAVA_HOME` Variable
-Unlike `PATH`, `JAVA_HOME` is not meant for your terminal command prompt; it is meant for **developer tools**. Build systems like Maven, Gradle, Android Studio, and IntelliJ IDEA inspect `$JAVA_HOME` to determine which JDK installation to compile against.
+`PATH` is the list of directories your shell searches when you type a command like `java` or `javac`. For your terminal to recognize Java commands, the JDK's `bin` directory must be on `PATH` (for example, `C:\Program Files\Eclipse Adoptium\jdk-21.0.5.11-hotspot\bin` on Windows, or `$HOME/.sdkman/candidates/java/current/bin` on macOS/Linux).
 
-- **The Golden Rule**: `JAVA_HOME` must point to the **root** folder of your JDK, **never** the `bin` directory.
-  - ✅ Correct: `C:\Program Files\Amazon Corretto\jdk21.0.2_13`
-  - ❌ Incorrect: `C:\Program Files\Amazon Corretto\jdk21.0.2_13\bin`
+### `JAVA_HOME`
+
+`JAVA_HOME` is read by other tools rather than by your shell directly. Maven, Gradle, application servers, and some IDEs check `JAVA_HOME` to locate the JDK installation.
+
+One rule prevents a very common mistake: **`JAVA_HOME` must point to the root JDK folder, never the `bin` subfolder.**
+
+```text
+Correct (Windows):   C:\Program Files\Amazon Corretto\jdk21.0.5_11
+Incorrect (Windows): C:\Program Files\Amazon Corretto\jdk21.0.5_11\bin
+
+Correct (macOS):     /Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
+Incorrect (macOS):   /Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home/bin
+```
+
+After changing environment variables, always open a **new** terminal window. Already-open shells keep the old environment values until restarted.
 
 ---
 
-## Hands-On Verification: From Raw Terminal to Running Code
+## Understanding the Command Line (`javac` and `java`)
 
-Before launching a 2-gigabyte IDE like IntelliJ IDEA, every software engineer should experience the foundational ritual of compiling and executing a Java file by hand.
+Even though you will spend most of your time inside an IDE, knowing how to compile and run a file from the terminal helps whenever a build breaks, a classpath goes wrong, or you need to debug something on a remote server.
 
-### Step 1: Verify Your Terminal Sees the JDK
-Open a brand-new terminal window (environment variables do not refresh in already-open shells) and run:
+### Verify the Installation
+
+Open a fresh terminal and run:
 
 ```bash
 java -version
 javac -version
 ```
 
-Both should return version `21.x.x` (or your chosen LTS release).
+Both commands should succeed and print matching major versions (for example, `21.x.x`). If `java -version` works but `javac -version` fails, you likely have only a JRE on your `PATH`, or `PATH` is pointing to an older Java installation ahead of your new JDK. On Windows you can diagnose this with `where java` and `where javac`; on macOS/Linux use `which java` and `which javac`.
 
-### Step 2: Write the Source Code
-Create a new directory and create a file named `HelloWorld.java`:
+### Write a Small Source File
+
+Create a folder called `hello-java`, and inside it create a file named `HelloWorld.java`:
 
 ```java
 public class HelloWorld {
     public static void main(String[] args) {
-        System.out.println("JVM is alive and running!");
+        System.out.println("Hello from the JVM!");
     }
 }
 ```
 
-### Step 3: Compile to Bytecode
-Run the compiler:
+Make sure the filename matches the `public class` name (`HelloWorld.java`), including capitalization.
+
+### Compile to Bytecode
+
+From the `hello-java` directory, run the compiler:
 
 ```bash
 javac HelloWorld.java
 ```
 
-Inspect your folder. Notice that a new file has appeared: `HelloWorld.class`. That is your compiled bytecode!
+If there are no syntax or type errors, `javac` exits silently and writes a new file named `HelloWorld.class` into the same directory.
 
-### Step 4: Run the Bytecode on the JVM
-Execute the class using the `java` launcher:
+### Run the Compiled Class
+
+Launch the JVM and pass the **class name**, not the `.class` filename:
 
 ```bash
 java HelloWorld
 ```
 
-> [!CAUTION]
-> Notice that you run `java HelloWorld`, **not** `java HelloWorld.class`. You pass the name of the *class* to the JVM, not the filename on disk.
+Output:
 
 ```text
-JVM is alive and running!
+Hello from the JVM!
 ```
 
-Congratulations. You have compiled your first universal bytecode and executed it inside a live Java Virtual Machine.
+> [!CAUTION]
+> Running `java HelloWorld.class` will fail with `Could not find or load main class HelloWorld.class`. The `java` launcher expects a fully qualified class name (`HelloWorld`), not a filename on disk.
+
+### Running Single Source Files Directly
+
+Since Java 11, you can also run a single `.java` file directly without invoking `javac` yourself:
+
+```bash
+java HelloWorld.java
+```
+
+The launcher compiles the file in memory and executes it immediately without leaving a `.class` file behind. This is handy for quick experiments and small scripts. For real projects with multiple packages and dependencies, you still compile to `.class` files (typically through Maven, Gradle, or your IDE).
 
 ---
 
-## "Wait, Why Can't I Just...?" (The Skeptic's Corner)
+## Setting Up an IDE (IntelliJ IDEA or Eclipse)
 
-### *"Why can't Java just execute raw source code directly like Python or JavaScript?"*
-Starting in Java 11, you actually can for single files! You can run `java HelloWorld.java` directly without calling `javac` first. The JVM will compile it in-memory on the fly and execute it. 
+A text editor and a terminal are great for learning how `javac` and `java` work, but real Java projects have dozens or hundreds of files, third-party libraries, and unit tests. An **Integrated Development Environment (IDE)** handles compilation as you type, flags errors immediately, refactors code safely across files, and provides a visual debugger.
 
-However, for enterprise applications with thousands of interconnected classes, compiling ahead of time into bytecode allows the compiler to perform exhaustive type-checking, detect bugs before deployment, and package everything into a high-performance archive (a `.jar` file) that boots predictably.
+The two most widely used Java IDEs are **IntelliJ IDEA** and **Eclipse**.
 
-### *"Why do we have Garbage Collection? Why not manage memory manually like C?"*
-In C and C++, you manually allocate memory with `malloc()` and release it with `free()`. If you forget to free memory, your server crashes from a memory leak. If you free memory too early and try to access it later, you cause undefined behavior, security vulnerabilities (like buffer overflows), and core dumps. 
+### IntelliJ IDEA (Recommended for Most Developers)
 
-Java introduced an automated **Garbage Collector (GC)** that tracks objects on the Heap and reclaims memory when objects are no longer reachable. It eliminated an entire category of catastrophic memory corruption bugs that plagued 1980s and 1990s enterprise software.
+JetBrains offers **IntelliJ IDEA Community Edition** (free and open source, covering core Java, Maven, Gradle, and JUnit) and **IntelliJ IDEA Ultimate** (paid, adding built-in support for Spring Boot, databases, profiling, and web frameworks). Community Edition is more than enough for learning Java from scratch.
+
+#### Creating Your First Project and Configuring the JDK
+
+1. Download and install IntelliJ IDEA from JetBrains (or install it through the JetBrains Toolbox app).
+2. Click **New Project**.
+3. Give the project a name (for example, `java-fundamentals`), select **Java** as the language, and pick **IntelliJ** as the build system while you are learning basics (you will move to Maven or Gradle later).
+4. In the **JDK** dropdown, select the JDK 21 installation IntelliJ detected on your machine. If it is not listed, click **Add JDK...** to browse to your JDK root folder, or choose **Download JDK...** to let IntelliJ download Eclipse Temurin or Amazon Corretto automatically.
+5. Click **Create**.
+
+If you ever need to change the JDK later, open **File > Project Structure > Project** (shortcut: `Ctrl+Alt+Shift+S` on Windows/Linux, `Cmd+;` on macOS) and update the **SDK** and **Language level** fields.
+
+#### Understanding the Project Layout
+
+IntelliJ creates a clean folder layout:
+
+```text
+java-fundamentals/
+├── .idea/              # IDE settings (do not commit to Git)
+├── out/                # Compiled .class files generated automatically
+└── src/                # Your .java source files live here
+    └── Main.java
+```
+
+Right-click `src`, choose **New > Java Class**, enter a name like `Greeting`, and write a `main` method. Typing `main` and pressing `Tab` expands the full `public static void main(String[] args)` method; typing `sout` and pressing `Tab` expands `System.out.println()`.
+
+#### Running and Debugging in IntelliJ
+
+- **Run:** Click the green play icon in the left gutter next to `main` (or press `Shift+F10` on Windows/Linux, `Ctrl+R` on macOS). IntelliJ compiles any modified files into `out/` and launches the JVM in the bottom **Run** console.
+- **Debug:** Click in the left margin next to a line number to place a red **breakpoint**. Then click the green gutter icon and choose **Debug** (instead of Run). Execution pauses right before that line, letting you inspect variable values in the **Variables** pane and step through code line by line (**Step Over** `F8`, **Step Into** `F7`, **Resume** `F9`).
+
+### Eclipse IDE
+
+**Eclipse IDE for Java Developers** is completely free, open source, and still widely used in enterprise teams and universities.
+
+#### Setting Up a Workspace and JDK
+
+1. Download the Eclipse Installer from [eclipse.org](https://www.eclipse.org/) and choose **Eclipse IDE for Java Developers**.
+2. On startup, Eclipse asks you to pick a **Workspace** directory. A workspace is simply a parent folder that holds multiple related projects and your IDE preferences.
+3. Verify your JDK under **Window > Preferences** (or **Eclipse > Settings** on macOS) **> Java > Installed JREs**. Click **Add... > Standard VM**, point **JRE home** to your JDK 21 root folder, check the box next to it, and click **Apply and Close**.
+
+#### Creating, Running, and Debugging a Project in Eclipse
+
+1. Go to **File > New > Java Project**, name it `JavaFundamentals`, verify that the Execution Environment matches **JavaSE-21**, and click **Finish** (you can uncheck creating `module-info.java` while learning basics).
+2. Expand the project in the **Package Explorer**, right-click `src`, and choose **New > Class**. Enter a class name and check the box for `public static void main(String[] args)`.
+3. Click the green **Run** button on the toolbar (or right-click the editor and select **Run As > Java Application**). Eclipse compiles Java files incrementally every time you save (`Ctrl+S` / `Cmd+S`), placing `.class` files in the project's `bin/` directory.
+4. To debug, double-click the left margin next to a line to toggle a breakpoint, then click the **Debug** icon (the small bug button) or choose **Debug As > Java Application**. Eclipse switches to the **Debug Perspective**, where you can inspect variables and step through code (`F6` to Step Over, `F5` to Step Into, `F8` to Resume).
 
 ---
 
-## Summary & Mental Model Checkpoint
+## Practical Questions
 
-To walk away from this lesson with a rock-solid mental model:
+### What happens if you try to compile a Java program on a machine that only has a JRE?
 
-1. **JVM**: The abstract execution engine that translates universal bytecode into native hardware instructions.
-2. **JRE**: The JVM plus the standard class libraries needed to *run* programs.
-3. **JDK**: The complete developer toolkit (JRE + compiler `javac` + profilers + debuggers) needed to *write* programs.
-4. **Bytecode**: The intermediate, platform-agnostic language stored in `.class` files, always starting with `0xCAFEBABE`.
-5. **JIT Compiler**: The runtime performance engine that identifies frequently executed bytecode ("hot spots") and turns it into native machine code at runtime.
-6. **`JAVA_HOME` & `PATH`**: `PATH` allows your terminal to find `javac`; `JAVA_HOME` tells external build tools (like Maven and Gradle) which JDK root directory to use.
+Compilation fails because `javac` is part of the JDK, not the JRE. A JRE only includes the JVM and standard libraries needed to execute already-compiled `.class` or `.jar` files. To compile `.java` source code, you need a JDK installed.
+
+### Why did `java -version` work in my terminal, while `javac -version` failed?
+
+This usually means your system `PATH` contains a directory with a standalone JRE (or an older Oracle auto-updated runtime shim), or `PATH` does not include your JDK's `bin` folder. Check which binary your shell is finding by running `where java` (Windows) or `which java` (macOS/Linux), and make sure your JDK's `bin` directory appears first in `PATH`.
+
+### Why should `JAVA_HOME` point to the JDK root directory instead of the `bin` folder?
+
+Tools like Maven and Gradle append relative paths such as `bin/javac` and `lib` directly onto `JAVA_HOME`. If `JAVA_HOME` already ends in `bin`, those tools end up looking for `.../bin/bin/javac` and fail to start.
+
+### If I already have IntelliJ IDEA or Eclipse, why bother learning `javac` and `java` on the command line?
+
+IDEs hide compilation flags, output directories, and classpath configuration behind a Play button. That is convenient during normal coding, but when a CI pipeline fails, a Docker container refuses to boot, or a library conflict appears at runtime, knowing how `javac` and `java` actually locate and execute `.class` files lets you diagnose the problem directly instead of guessing.

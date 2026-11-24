@@ -1,111 +1,185 @@
-# OAuth2 and OIDC Resource Servers
-
-In modern cloud-native architectures, microservices rarely handle user credentials, password hashing, or multi-factor authentication directly. Instead, identity is delegated to a centralized **Identity Provider (IdP)** or **Authorization Server**—such as Keycloak, Okta, or Auth0.
-
-Your Spring Boot microservices operate as **OAuth2 Resource Servers**. Their job is not to log users in, but to guard protected endpoints, cryptographically verify bearer tokens on incoming HTTP requests, and enforce fine-grained authorization policies based on scopes and roles.
-
-However, moving from simple monolithic authentication to an OAuth2/OIDC ecosystem introduces cryptographic and architectural nuances: public key distribution via **JWKS**, asymmetric key rotation, custom claim extraction, and token revocation. 
-
-In this guide, we will unpack how Spring Security 6 implements the Resource Server specification and build a battle-tested token verification pipeline.
-
+---
+title: "OAuth2 and OIDC Resource Servers"
+description: "How Authorization Code with PKCE and Client Credentials flows work, how Spring Security validates JWTs against JWKS endpoints or introspects opaque tokens, and how to configure custom claim converters and multi-tenant issuers."
+category: "level-9"
+date: "2026-10-29T10:00:00Z"
 ---
 
-## OAuth 2.1 and OpenID Connect (OIDC) Fundamentals
+Once an organization grows beyond a single application, storing passwords and running login screens inside each backend service stops making sense. Instead, authentication is centralized in an **Authorization Server / Identity Provider (IdP)** such as Keycloak, Okta, Auth0, or Microsoft Entra ID.
 
-Developers often conflate authentication and authorization. OAuth 2.0 and OIDC solve two completely different problems:
+Your Spring Boot APIs then act as **OAuth2 Resource Servers**. They do not collect passwords or render login pages. Their responsibility is narrower and well-defined: extract the bearer token from incoming HTTP requests, verify that it came from a trusted issuer and is still valid, map its claims into Spring Security authorities, and enforce authorization rules.
 
-```mermaid
-flowchart TD
-    subgraph ClientLayer["Frontend Client (React / Angular / Mobile)"]
-        User["End User"]
-    end
+## OAuth2 Grant Flows: Authorization Code with PKCE and Client Credentials
 
-    subgraph AuthServer["Identity Provider / Authorization Server (Keycloak / Okta)"]
-        OIDC["OpenID Connect (OIDC)<br/>Identity Layer<br/>Issues ID Token (Who you are)"]
-        OAuth["OAuth 2.0 / 2.1<br/>Delegation Protocol<br/>Issues Access Token (What you can access)"]
-    end
+Before configuring a resource server, it helps to be clear on how clients actually obtain the access tokens your API receives. OAuth 2.1 (the ongoing consolidation of OAuth 2.0 best practices) removes legacy flows like the Implicit Grant and Resource Owner Password Credentials (ROPC). In modern systems, almost every interaction uses one of two flows.
 
-    subgraph ResourceServers["Protected Backend APIs (Spring Boot Resource Servers)"]
-        API1["Order Service (Resource Server)"]
-        API2["Billing Service (Resource Server)"]
-    end
+### Authorization Code Flow with PKCE (Human Users)
 
-    User -->|"1. Authenticates (MFA, SSO)"| AuthServer
-    AuthServer -->|"2. Returns ID Token (JWT)"| ClientLayer
-    AuthServer -->|"3. Returns Access Token (JWT / Opaque)"| ClientLayer
-    ClientLayer -->|"4. Authorization: Bearer &lt;Access Token&gt;"| API1
-    ClientLayer -->|"4. Authorization: Bearer &lt;Access Token&gt;"| API2
-```
+Whenever a human user signs in through a browser, single-page app (SPA), mobile app, or server-rendered web app, the client uses the **Authorization Code Flow with PKCE (Proof Key for Code Exchange, RFC 7636)**.
 
-### The Separation of Responsibilities
-
-- **OpenID Connect (OIDC) = Authentication:** Built on top of OAuth 2.0, OIDC issues an **ID Token**. The ID Token is meant *strictly for the client application* (the frontend) to display the user's name, profile picture, and email. Your backend Resource Servers should never use the ID Token to authorize API calls.
-- **OAuth 2.0 / 2.1 = Authorization:** Issues an **Access Token**. The Access Token is presented to backend Resource Servers in the HTTP `Authorization: Bearer <token>` header to grant access to protected endpoints.
-- **The Resource Server:** Your Spring Boot API. It holds the protected resources (order data, user profiles, payment records). It accepts requests accompanied by an Access Token, validates the token's cryptographic signature, checks its claims, and returns the requested data.
-
----
-
-## Cryptographic Token Validation: The JWKS Architecture
-
-In early microservice setups, developers often signed JWTs using symmetric algorithms like `HS256` (HMAC with SHA-256).
-
-### Why Symmetric Signing (`HS256`) Breaks in Microservices
-
-With symmetric signing, the same secret key used to sign the token must be shared with every single microservice that verifies it. If your organization has 40 microservices, that secret key exists in 40 configuration files, environment variables, and CI/CD pipelines. If a single junior developer accidentally commits the secret to a public Git repository or a single service is compromised, an attacker can forge valid administrative tokens for every service in your enterprise.
-
-### The Modern Standard: Asymmetric Signatures and JWKS (`RS256` / `ES256`)
-
-In production, OAuth2 Resource Servers use **asymmetric public-key cryptography**:
-
-1. The Authorization Server holds the **Private Key** securely in hardware or an encrypted key vault. It signs Access Tokens using this private key.
-2. The Authorization Server exposes its **Public Keys** over HTTPS via a standardized **JSON Web Key Set (JWKS)** endpoint, typically located at:
-   `https://auth.company.com/realms/enterprise/.well-known/jwks.json`
-3. Resource Servers download and cache the public keys. When an API request arrives, the Resource Server verifies the cryptographic signature using the public key locally in memory (taking less than 10 microseconds).
+Historically, confidential web servers proved their identity during the code-for-token exchange with a `client_secret`. Public clients (SPAs and native mobile apps) cannot hide a secret inside bundled JavaScript or an app binary. Without PKCE, an attacker who intercepted the authorization code on redirect could exchange it for tokens. PKCE closes that gap using a per-login cryptographic proof, and OAuth 2.1 now recommends it for confidential clients as well as public ones.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Client as Frontend Client
+    participant Client as Client App (SPA / Mobile / Web)
+    participant Auth as Authorization Server (IdP)
     participant RS as Spring Boot Resource Server
-    participant Auth as Authorization Server (JWKS Endpoint)
 
-    Note over RS,Auth: Startup: Resource Server fetches & caches Public Keys
-    RS->>Auth: GET /.well-known/jwks.json
-    Auth-->>RS: Returns JSON Web Key Set (keys with 'kid', 'n', 'e', 'alg')
-
-    Client->>RS: GET /api/v1/orders (Authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6ImtleS0xI...)
-    Note over RS: 1. Extract 'kid' ('key-1') from JWT header
-    Note over RS: 2. Match with cached Public Key 'key-1'
-    Note over RS: 3. Verify signature cryptographically in RAM (0.01ms)
-    Note over RS: 4. Validate claims (exp, nbf, iss, aud)
-    RS-->>Client: 200 OK (Protected Order Data)
+    Client->>Client: Generate random code_verifier & S256 code_challenge
+    Client->>Auth: Redirect /authorize (client_id, redirect_uri, scope, code_challenge, S256)
+    Auth->>Auth: User logs in (Password / MFA / SSO)
+    Auth-->>Client: Redirect back with short-lived authorization code
+    Client->>Auth: POST /token (code, redirect_uri, client_id, code_verifier)
+    Auth->>Auth: Hash code_verifier and verify match with stored code_challenge
+    Auth-->>Client: Returns Access Token (+ ID Token if openid scope)
+    Client->>RS: GET /api/v1/orders (Authorization: Bearer access_token)
+    RS-->>Client: 200 OK (Order JSON)
 ```
 
-### Key Rotation via the `kid` (Key ID) Header
+Notice the separation of outputs when the `openid` scope is requested:
+- The **ID Token** (OpenID Connect) is consumed by the **client app** to identify the logged-in user.
+- The **Access Token** (OAuth2) is sent to your **Resource Server** in the `Authorization: Bearer` header. Never accept an ID Token as an API credential.
 
-What happens when security policy requires rotating the signing key every 90 days?
+### Client Credentials Grant (Machine-to-Machine)
 
-Every JWT header contains a `kid` (Key ID) attribute:
+When a backend service (such as an Order Service or scheduled billing job) calls another backend API with no human user involved, there is no browser redirect or login screen. The calling service authenticates directly with the Authorization Server using the **Client Credentials Grant** (`grant_type=client_credentials`), presenting its `client_id` and `client_secret` (or a signed `private_key_jwt` assertion) to obtain an access token scoped for the downstream API.
+
+In Spring Boot 3, `OAuth2AuthorizedClientManager` handles requesting, caching, and refreshing these M2M tokens automatically when calling downstream services with `RestClient` (Spring Security 6.4+ even provides `OAuth2ClientHttpRequestInterceptor` out of the box):
+
+```yaml
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          billing-m2m:
+            provider: corporate-idp
+            authorization-grant-type: client_credentials
+            client-id: order-service
+            client-secret: ${ORDER_SERVICE_CLIENT_SECRET}
+            scope: billing.charge
+        provider:
+          corporate-idp:
+            token-uri: https://auth.company.com/realms/enterprise/protocol/openid-connect/token
+```
+
+## JWT Validation Against a JWKS Endpoint
+
+When an Authorization Server issues self-contained JWT access tokens, microservices validate them using asymmetric cryptography (`RS256`, `ES256`, or `PS256`) rather than a shared `HS256` secret. With asymmetric signing, only the Authorization Server holds the private signing key; resource servers only need the public keys, so a compromised microservice cannot forge tokens.
+
+### OIDC Discovery, Caching, and Zero-Downtime Key Rotation
+
+Rather than hardcoding PEM files into every microservice, the Authorization Server publishes its active public keys at a **JSON Web Key Set (JWKS)** endpoint, discovered automatically from `/.well-known/openid-configuration`:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Client as API Client
+    participant RS as Spring Boot Resource Server
+    participant IdP as Authorization Server (JWKS)
+
+    RS->>IdP: GET /.well-known/openid-configuration
+    IdP-->>RS: Returns issuer and jwks_uri
+    RS->>IdP: GET /protocol/openid-connect/certs (JWKS)
+    IdP-->>RS: Public keys indexed by kid (key-2026-q4)
+
+    Client->>RS: GET /api/v1/orders (Bearer JWT with header kid=key-2026-q4)
+    Note over RS: Looks up key-2026-q4 in local cache
+    Note over RS: Verifies signature + exp + nbf + iss + aud in memory
+    RS-->>Client: 200 OK
+```
+
+Under the hood, Spring Security's `NimbusJwtDecoder` uses Nimbus JOSE's `RemoteJWKSet` (and `DefaultJWKSetCache`), which caches the fetched JWKS in memory (by default with a 5-minute cache lifespan and rate-limited refresh protection).
+
+When your security team rotates signing keys:
+1. The Authorization Server publishes the new public key (`kid: "key-2027-q1"`) alongside the previous key in the JWKS response and starts signing new tokens with the new key.
+2. When a Resource Server receives a token carrying an unknown `kid`, Nimbus triggers a rate-limited JWKS refresh, caches the new public key, and validates the token.
+3. Once all tokens signed by the old key have expired, the Authorization Server removes the old key from the JWKS document.
+
+No pods need to restart, and no configuration secrets need to be redeployed.
+
+> [!NOTE]
+> The rate limit on unknown-`kid` refreshes matters for security: without it, an attacker could send thousands of forged tokens with random `kid` values to force your Resource Server into flooding your IdP's JWKS endpoint.
+
+## Opaque Tokens and Token Introspection (RFC 7662)
+
+Not every OAuth2 Access Token is a JWT. Many organizations issue **opaque tokens**: high-entropy random reference strings that carry no readable claims at all.
+
+Because an opaque token cannot be decoded locally, the Resource Server validates it by making a back-channel HTTP `POST` to the Authorization Server's **Token Introspection** endpoint (RFC 7662), authenticating itself with its own client credentials:
+
+```http
+POST /realms/enterprise/protocol/openid-connect/token/introspect HTTP/1.1
+Host: auth.company.com
+Authorization: Basic <base64(resource-server-id:resource-server-secret)>
+Content-Type: application/x-www-form-urlencoded
+
+token=2YotnFZFEjr1zCsicMWpAA
+```
+
+The Authorization Server checks its session/token store and responds with the live status and metadata:
+
 ```json
 {
-  "alg": "RS256",
-  "typ": "JWT",
-  "kid": "prod-auth-key-2026-q4"
+  "active": true,
+  "sub": "usr_998877",
+  "username": "alice",
+  "scope": "orders.read orders.write",
+  "client_id": "web-portal",
+  "exp": 1793260800
 }
 ```
 
-When the Authorization Server rotates keys:
-1. It begins signing new tokens with a new key ID (`prod-auth-key-2027-q1`) and adds this new public key to the JWKS JSON document.
-2. When the Resource Server receives a token with the new `kid` that is not present in its local in-memory cache, Spring Security automatically issues an HTTP request to refresh its cached JWKS set.
-3. Zero downtime. Zero microservice restarts required.
+If the user logged out two seconds ago or an admin revoked the session, the IdP immediately returns `{ "active": false }` and the Resource Server rejects the request with `401`.
 
----
+### Configuring Opaque Token Introspection in Spring Security
 
-## Configuring a Spring Boot 3 / Spring Security 6 Resource Server
+Add `spring-boot-starter-oauth2-resource-server` (plus `com.nimbusds:oauth2-oidc-sdk` on the classpath, which Spring Security requires for `SpringOpaqueTokenIntrospector`) and configure the introspection properties:
 
-Let's implement a production-grade OAuth2 Resource Server using Spring Boot 3 and Spring Security 6.
+```yaml
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        opaquetoken:
+          introspection-uri: https://auth.company.com/realms/enterprise/protocol/openid-connect/token/introspect
+          client-id: order-resource-server
+          client-secret: ${RESOURCE_SERVER_INTROSPECTION_SECRET}
+```
 
-### Maven Dependencies
+In your `SecurityFilterChain`, switch from `.jwt(...)` to `.opaqueToken(...)`:
+
+```java
+@Bean
+public SecurityFilterChain opaqueSecurityFilterChain(HttpSecurity http) throws Exception {
+    return http
+        .csrf(csrf -> csrf.disable())
+        .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .authorizeHttpRequests(auth -> auth
+            .requestMatchers("/actuator/health").permitAll()
+            .anyRequest().authenticated()
+        )
+        .oauth2ResourceServer(oauth2 -> oauth2
+            .opaqueToken(Customizer.withDefaults())
+        )
+        .build();
+}
+```
+
+### JWT vs Opaque Tokens: Architectural Trade-Offs
+
+| Dimension | Self-Contained JWT (JWKS) | Opaque Token (RFC 7662 Introspection) |
+|---|---|---|
+| **Validation latency** | Sub-millisecond local CPU check using cached public key. | Adds a network round-trip to the Authorization Server per request (unless briefly cached). |
+| **IdP availability impact** | Resource servers continue validating existing tokens even if the IdP is briefly unreachable. | If the IdP goes down or slows down, every API request stalls or fails. |
+| **Instant revocation** | Hard; valid until `exp` unless paired with short TTLs or a shared Redis `jti` deny-list. | Immediate; revoking the token on the IdP stops access on the very next call. |
+| **Claim confidentiality** | Payload is Base64URL-encoded and readable by the client. | Zero internal claims or roles exposed to browsers or mobile devices. |
+
+A common hybrid pattern is the **Phantom Token** approach: the API Gateway receives an opaque token from external clients, calls `/introspect` (or exchanges it) once at the edge, and forwards a short-lived signed JWT to internal microservices.
+
+## Configuring Spring Security as an OAuth2 Resource Server
+
+For most Spring Boot 3 microservices using JWTs, start with the official starter:
 
 ```xml
 <dependency>
@@ -114,17 +188,11 @@ Let's implement a production-grade OAuth2 Resource Server using Spring Boot 3 an
 </dependency>
 <dependency>
     <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-security</artifactId>
-</dependency>
-<dependency>
-    <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-web</artifactId>
 </dependency>
 ```
 
-### Step 1: Application Configuration (`application.yml`)
-
-Spring Boot can auto-configure the entire `JwtDecoder` pipeline from a single issuer URI or JWKS URI:
+Configure the issuer and expected audience in `application.yml` (Spring Boot 3.2+ natively supports the `audiences` property):
 
 ```yaml
 spring:
@@ -132,21 +200,16 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          # Automatically discovers JWKS URI from OpenID configuration endpoint
           issuer-uri: https://auth.company.com/realms/enterprise
-          # Or specify JWKS directly if custom or internal network
-          # jwk-set-uri: https://auth.company.com/realms/enterprise/protocol/openid-connect/certs
           audiences:
             - https://api.company.com/orders
 ```
 
----
+### Mapping Custom Claims with `JwtAuthenticationConverter`
 
-## Custom Claims Extraction and Role-Based Access Control
+By default, Spring Security's `JwtGrantedAuthoritiesConverter` reads the `scope` (or `scp`) claim and creates authorities prefixed with `SCOPE_` (for example, `SCOPE_orders.read`).
 
-By default, Spring Security inspects the `scope` or `scp` claim in the JWT and maps it to authorities prefixed with `SCOPE_`. For example, `"scope": "orders.read"` becomes `GrantedAuthority("SCOPE_orders.read")`.
-
-However, enterprise Identity Providers like **Keycloak** or **Auth0** store user roles inside nested custom JSON structures:
+Identity providers like Keycloak or Auth0 often place user roles in nested claims such as `realm_access.roles` or `resource_access.<client>.roles`:
 
 ```json
 {
@@ -156,97 +219,75 @@ However, enterprise Identity Providers like **Keycloak** or **Auth0** store user
   "exp": 1793260800,
   "scope": "openid email orders.read orders.write",
   "realm_access": {
-    "roles": [
-      "ADMIN",
-      "BILLING_MANAGER"
-    ]
+    "roles": ["ADMIN", "BILLING_MANAGER"]
   }
 }
 ```
 
-If you rely on default mappings, the `realm_access.roles` are ignored, and role-based checks like `@PreAuthorize("hasRole('ADMIN')")` will fail.
-
-### Step 2: Building the Enterprise JWT Authentication Converter
-
-We must create a custom converter that combines both standard OAuth2 scopes (prefixed with `SCOPE_`) and nested IdP roles (prefixed with `ROLE_`):
+If you leave the default converter untouched, `@PreAuthorize("hasRole('ADMIN')")` will always fail because `realm_access.roles` is never read. You can preserve standard `SCOPE_*` authorities while adding `ROLE_*` authorities by customizing `JwtAuthenticationConverter`:
 
 ```java
 package com.javahub.security.converter;
 
 import org.springframework.core.convert.converter.Converter;
-import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
-import org.springframework.stereotype.Component;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-@Component
-public class EnterpriseJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
+public class EnterpriseAuthoritiesConverter implements Converter<Jwt, Collection<GrantedAuthority>> {
 
-    private final JwtGrantedAuthoritiesConverter defaultScopesConverter = new JwtGrantedAuthoritiesConverter();
+    private final JwtGrantedAuthoritiesConverter scopeConverter = new JwtGrantedAuthoritiesConverter();
 
     @Override
-    public AbstractAuthenticationToken convert(Jwt jwt) {
-        // 1. Extract standard scopes (e.g. SCOPE_orders.read)
-        Collection<GrantedAuthority> scopeAuthorities = defaultScopesConverter.convert(jwt);
-        if (scopeAuthorities == null) {
-            scopeAuthorities = Collections.emptyList();
+    public Collection<GrantedAuthority> convert(Jwt jwt) {
+        Collection<GrantedAuthority> scopes = scopeConverter.convert(jwt);
+        if (scopes == null) {
+            scopes = Collections.emptyList();
         }
 
-        // 2. Extract nested realm_access.roles from Keycloak / IdP
-        Collection<GrantedAuthority> roleAuthorities = extractRealmRoles(jwt);
+        Collection<GrantedAuthority> realmRoles = extractRealmRoles(jwt);
 
-        // 3. Combine both collections into a single authority set
-        List<GrantedAuthority> combinedAuthorities = Stream.concat(scopeAuthorities.stream(), roleAuthorities.stream())
-                .collect(Collectors.toList());
-
-        // Use the preferred username or subject as the Principal name
-        String principalClaimName = jwt.hasClaim("preferred_username") 
-                ? jwt.getClaimAsString("preferred_username") 
-                : jwt.getSubject();
-
-        return new JwtAuthenticationToken(jwt, combinedAuthorities, principalClaimName);
+        return Stream.concat(scopes.stream(), realmRoles.stream()).toList();
     }
 
-    @SuppressWarnings("unchecked")
     private Collection<GrantedAuthority> extractRealmRoles(Jwt jwt) {
-        Map<String, Object> realmAccess = jwt.getClaim("realm_access");
-        if (realmAccess == null || realmAccess.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        Object rolesObj = realmAccess.get("roles");
-        if (!(rolesObj instanceof List<?> rawRoles)) {
+        Map<String, Object> realmAccess = jwt.getClaimAsMap("realm_access");
+        if (realmAccess == null || !(realmAccess.get("roles") instanceof List<?> rawRoles)) {
             return Collections.emptyList();
         }
 
         return rawRoles.stream()
                 .filter(String.class::isInstance)
-                .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
-                .collect(Collectors.toList());
+                .map(String.class::cast)
+                .map(role -> (GrantedAuthority) new SimpleGrantedAuthority("ROLE_" + role))
+                .toList();
+    }
+
+    public static JwtAuthenticationConverter buildAuthenticationConverter() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(new EnterpriseAuthoritiesConverter());
+        converter.setPrincipalClaimName("preferred_username");
+        return converter;
     }
 }
 ```
 
----
+### Full Resource Server Configuration and Audience Validation
 
-## Modern Spring Security 6 Configuration
-
-In Spring Security 6, all legacy adapter classes (`WebSecurityConfigurerAdapter`) are gone. Everything is configured using lambda-based domain-specific configuration in a `@Bean SecurityFilterChain`.
+Wire the converter and an explicit `JwtDecoder` (including issuer, timestamp, and audience validation) into your Spring Security 6 configuration:
 
 ```java
 package com.javahub.security.config;
 
-import com.javahub.security.converter.EnterpriseJwtAuthenticationConverter;
+import com.javahub.security.converter.EnterpriseAuthoritiesConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -269,92 +310,59 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity(prePostEnabled = true) // Enables @PreAuthorize and @PostAuthorize
+@EnableMethodSecurity
 public class ResourceServerSecurityConfig {
-
-    private final EnterpriseJwtAuthenticationConverter jwtAuthenticationConverter;
 
     @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
     private String issuerUri;
 
-    public ResourceServerSecurityConfig(EnterpriseJwtAuthenticationConverter jwtAuthenticationConverter) {
-        this.jwtAuthenticationConverter = jwtAuthenticationConverter;
-    }
-
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-            // 1. Disable CSRF for stateless REST APIs using Bearer tokens
+        return http
             .csrf(csrf -> csrf.disable())
-
-            // 2. Enforce completely stateless sessions (no JSESSIONID)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-            // 3. Define URL Authorization Rules
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
-                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
-
-            // 4. Configure OAuth2 Resource Server with JWT decoding and custom converter
             .oauth2ResourceServer(oauth2 -> oauth2
                 .jwt(jwt -> jwt
-                    .jwtAuthenticationConverter(jwtAuthenticationConverter)
+                    .jwtAuthenticationConverter(EnterpriseAuthoritiesConverter.buildAuthenticationConverter())
                 )
-            );
-
-        return http.build();
+            )
+            .build();
     }
 
-    // Custom Token Validator: Enforce Audience Verification
     @Bean
     public JwtDecoder jwtDecoder() {
-        NimbusJwtDecoder jwtDecoder = JwtDecoders.fromIssuerLocation(issuerUri);
+        NimbusJwtDecoder decoder = JwtDecoders.fromIssuerLocation(issuerUri);
 
+        // Validates exp, nbf (with 60s default clock skew), and iss
         OAuth2TokenValidator<Jwt> withIssuer = JwtValidators.createDefaultWithIssuer(issuerUri);
-        
-        // Ensure the token was specifically issued for this microservice audience
+
+        // Ensures the token was explicitly minted for this microservice
         OAuth2TokenValidator<Jwt> audienceValidator = new JwtClaimValidator<List<String>>(
                 "aud",
                 aud -> aud != null && aud.contains("https://api.company.com/orders")
         );
 
-        OAuth2TokenValidator<Jwt> combinedValidator = new DelegatingOAuth2TokenValidator<>(withIssuer, audienceValidator);
-        jwtDecoder.setJwtValidator(combinedValidator);
-
-        return jwtDecoder;
+        decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(withIssuer, audienceValidator));
+        return decoder;
     }
 }
 ```
 
----
+### Combining Scopes and Roles at the Method Level
 
-## Method-Level Security: Scopes vs Roles
+Scopes and roles protect different axes of authorization:
+- **`hasAuthority('SCOPE_orders.delete')`** checks what the *client application* was permitted to do.
+- **`hasRole('ADMIN')`** checks what the *human user* is allowed to do.
 
-With `@EnableMethodSecurity` active, you can apply fine-grained access control directly at your service and controller methods.
-
-Understand the difference:
-- **`hasAuthority('SCOPE_read:orders')`:** Verifies the *client application* has been delegated permission to perform this action.
-- **`hasRole('ADMIN')`:** Verifies the *human user* possesses administrative business privileges.
+Requiring both prevents an overly privileged user from accidentally performing destructive actions through a restricted third-party client, and prevents a privileged client from escalating a regular user's access:
 
 ```java
-package com.javahub.controller;
-
-import com.javahub.model.Order;
-import com.javahub.service.OrderService;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
 @RestController
 @RequestMapping("/api/v1/orders")
 public class OrderController {
@@ -365,16 +373,13 @@ public class OrderController {
         this.orderService = orderService;
     }
 
-    // Requires the client app to have 'orders.read' scope AND user must be authenticated
     @GetMapping("/{orderId}")
     @PreAuthorize("hasAuthority('SCOPE_orders.read')")
     public ResponseEntity<Order> getOrder(@PathVariable String orderId,
                                           @AuthenticationPrincipal Jwt jwt) {
-        String userId = jwt.getSubject();
-        return ResponseEntity.ok(orderService.findByIdAndUser(orderId, userId));
+        return ResponseEntity.ok(orderService.findByIdAndUser(orderId, jwt.getSubject()));
     }
 
-    // Requires both 'orders.delete' scope AND the user must hold the 'ADMIN' role
     @DeleteMapping("/{orderId}")
     @PreAuthorize("hasAuthority('SCOPE_orders.delete') and hasRole('ADMIN')")
     public ResponseEntity<Void> deleteOrder(@PathVariable String orderId) {
@@ -384,77 +389,107 @@ public class OrderController {
 }
 ```
 
----
+### Multi-Tenant Resource Servers with `JwtIssuerAuthenticationManagerResolver`
 
-## The Revocation Dilemma: Distributed Token Deny-Listing
+In B2B SaaS platforms, each enterprise customer often has its own realm or identity provider (for example, `https://auth.company.com/realms/tenant-a` and `https://auth.company.com/realms/tenant-b`, or a customer's own Okta tenant). A single `issuer-uri` property cannot validate tokens from multiple issuers.
 
-The primary strength of JWTs—their statelessness—is also their greatest operational vulnerability.
+Spring Security handles this with `JwtIssuerAuthenticationManagerResolver`. It peeks at the `iss` claim of the incoming JWT, checks it against a **strict allowlist of trusted issuers**, and delegates validation to the `AuthenticationManager` (and cached `JwtDecoder`) for that tenant:
 
-If a user reports their laptop stolen, clicks "Log out of all devices", or is terminated by HR, their active JWT remains cryptographically valid until its `exp` timestamp passes. Because Resource Servers validate tokens purely using the local cached public key without calling the Authorization Server, standard JWTs cannot be revoked immediately.
+```java
+package com.javahub.security.config;
 
-### Production Solution: Redis Deny-List with Event Streaming
+import com.javahub.security.converter.EnterpriseAuthoritiesConverter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationManagerResolver;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtDecoders;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
+import org.springframework.security.oauth2.server.resource.authentication.JwtIssuerAuthenticationManagerResolver;
+import org.springframework.security.web.SecurityFilterChain;
 
-To achieve sub-second revocation without sacrificing stateless performance:
+import jakarta.servlet.http.HttpServletRequest;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Configuration
+public class MultiTenantResourceServerConfig {
+
+    private static final Set<String> TRUSTED_ISSUERS = Set.of(
+            "https://auth.company.com/realms/tenant-a",
+            "https://auth.company.com/realms/tenant-b"
+    );
+
+    @Bean
+    public SecurityFilterChain multiTenantFilterChain(HttpSecurity http) throws Exception {
+        Map<String, AuthenticationManager> managers = new ConcurrentHashMap<>();
+
+        AuthenticationManagerResolver<HttpServletRequest> resolver =
+                new JwtIssuerAuthenticationManagerResolver(issuer -> {
+                    if (!TRUSTED_ISSUERS.contains(issuer)) {
+                        return null; // Reject untrusted issuers immediately
+                    }
+                    return managers.computeIfAbsent(issuer, this::createManagerForIssuer);
+                });
+
+        return http
+            .csrf(csrf -> csrf.disable())
+            .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+            .oauth2ResourceServer(oauth2 -> oauth2
+                .authenticationManagerResolver(resolver)
+            )
+            .build();
+    }
+
+    private AuthenticationManager createManagerForIssuer(String issuer) {
+        JwtDecoder decoder = JwtDecoders.fromIssuerLocation(issuer);
+        JwtAuthenticationProvider provider = new JwtAuthenticationProvider(decoder);
+        provider.setJwtAuthenticationConverter(EnterpriseAuthoritiesConverter.buildAuthenticationConverter());
+        return provider::authenticate;
+    }
+}
+```
+
+> [!WARNING]
+> Never blindly resolve any `iss` URL present in an incoming JWT without checking it against an explicit allowlist or tenant registry. If you auto-discover arbitrary issuer URLs from unverified tokens, an attacker can host their own JWKS server, point `iss` to it, and forge valid signatures for any role, while also turning your Resource Server into an SSRF proxy.
+
+## Handling Immediate Revocation for JWTs
+
+When you choose JWTs for their low latency, keep access token lifetimes short (5 to 15 minutes). If your compliance requirements demand sub-second logout or immediate account lockout across microservices, combine JWT validation with a shared Redis deny-list fed by revocation events:
 
 ```mermaid
 flowchart TD
-    User["User clicks 'Log Out' / HR terminates account"] --> AuthServer["Identity Provider"]
-    AuthServer -->|"1. Publish Token Revocation Event"| Kafka["Kafka Topic: 'security.token-revocations'"]
-    Kafka -->|"2. Event Consumer"| Pods["Resource Server Cluster"]
-    Pods -->|"3. Write JTI (JWT ID) to Redis"| Redis[("Redis Distributed Cache<br/>Key: blacklist:{jti}<br/>TTL: Remaining JWT Lifetime")]
+    Event["User Logs Out / Account Terminated"] --> IdP["Identity Provider"]
+    IdP -->|"1. Publish revocation event"| Kafka["Kafka Topic (security.token-revocations)"]
+    Kafka -->|"2. Consume event"| Worker["Revocation Consumer"]
+    Worker -->|"3. Store jti with remaining TTL"| Redis[("Redis Cache<br/>Key: revoked:{jti}")]
 
-    Inbound["Incoming HTTP Request"] --> RS["Resource Server"]
-    RS -->|"4. Cryptographic Validation"| Valid{"Signature Valid?"}
-    Valid -- Yes --> CheckRedis{"Is JTI in Redis Deny-List?"}
-    CheckRedis -- Yes (Revoked) --> Reject["Return 401 Unauthorized"]
-    CheckRedis -- No (Active) --> Allow["Allow Request"]
+    Req["Incoming HTTP Request"] --> RS["Resource Server"]
+    RS -->|"4. Verify JWT signature & claims"| Valid{"Valid JWT?"}
+    Valid -->|"Yes"| Check{"Is jti in Redis?"}
+    Check -->|"Yes"| Reject["Return 401 Unauthorized"]
+    Check -->|"No"| Allow["Proceed to Controller"]
 ```
 
-1. Every JWT must include a unique **`jti` (JWT ID)** claim.
-2. When a token is revoked, the Auth Server publishes a revocation event containing the `jti` and remaining expiration duration to Kafka.
-3. Resource Servers or a security gateway write the `jti` to Redis with a TTL set to the exact remaining validity time of the token.
-4. During request evaluation, after the cryptographic signature passes, a rapid Redis `EXISTS blacklist:{jti}` check is performed. Once the token naturally expires, Redis automatically evicts the key, keeping memory strictly bounded.
+Because each Redis key expires automatically when the token's `exp` timestamp passes, memory stays tightly bounded while giving you near-instant revocation.
 
----
+## Interview Questions
 
-## Senior Engineer Interview Crucible
+### How does a Resource Server validate an RS256 JWT without calling the Authorization Server on every request?
 
-### How does a Resource Server verify the authenticity of a JWT signed with RS256 without contacting the Authorization Server on every HTTP request?
+On startup (or when it first sees an unknown `kid`), `NimbusJwtDecoder` fetches the Authorization Server's public keys from its JWKS endpoint and caches them in memory. On each incoming request, it reads the `kid` from the JWT header, looks up the matching cached public key, verifies the RSA signature locally in memory, and validates `exp`, `nbf`, `iss`, and `aud`. No network call is made on the hot path.
 
-The Resource Server fetches and caches the Authorization Server's public keys from its **JWKS (JSON Web Key Set)** endpoint during application startup or upon first encounter of an unknown Key ID (`kid`). 
+### Why does PKCE matter even if your authorization server only issues short-lived authorization codes?
 
-When an HTTP request arrives, the Resource Server extracts the JWT from the `Authorization: Bearer` header, inspects the unencrypted header to retrieve the `kid`, and retrieves the matching public key from its local in-memory cache. It then cryptographically verifies the signature over the header and payload using the public key in RAM. This operation is purely mathematical, takes fractions of a millisecond, and requires zero network round-trips to the Authorization Server.
+An authorization code returned to a mobile custom URL scheme or browser redirect can be intercepted by a malicious app registered on the same URI scheme or read from browser history/logs. Without PKCE, a public client has no `client_secret`, so anyone who captures that code can immediately exchange it at `/token` before the legitimate app does. With PKCE, the authorization server requires the original random `code_verifier` whose SHA-256 hash matches the `code_challenge` sent at the start of the login flow, making an intercepted code useless on its own.
 
----
+### When should you choose opaque tokens with introspection over JWTs?
 
-### In an enterprise microservice mesh, why should you use asymmetric cryptography (RS256/ES256) rather than symmetric signing (HS256) for OAuth2 tokens?
+Choose opaque tokens when immediate revocation is mandatory, when you cannot expose internal roles or user metadata to untrusted frontend clients, or when your Authorization Server sits on the same low-latency internal network and can absorb introspection traffic (often aided by a short-lived cache). Choose JWTs when minimizing per-request latency and decoupling microservice availability from the IdP matter most, and pair them with short expirations.
 
-Symmetric signing (`HS256`) uses the exact same secret key to both create (sign) and verify tokens. If a microservice mesh consists of 30 services, all 30 services must possess the shared secret key. If a single microservice is compromised or an engineer accidentally logs the secret, an attacker can use that secret to forge arbitrary administrative tokens for any service in the mesh.
+### How do OAuth2 scopes and RBAC roles complement each other in a Resource Server?
 
-Asymmetric cryptography (`RS256` or `ES256`) uses a Public/Private key pair. The private signing key resides strictly within the secured boundaries of the centralized Authorization Server. Microservices only possess the public verification key. Even if all 30 microservices are completely compromised, an attacker cannot forge new tokens because the private key was never distributed.
-
----
-
-### If JWTs are completely stateless and self-contained, how do you handle instantaneous user revocation or forced logout before the token expires?
-
-There are three architectural patterns to handle revocation of stateless JWTs:
-
-1. **Short-Lived Access Tokens + Refresh Token Rotation:** Keep Access Token lifetimes extremely short (e.g., 5 to 15 minutes). When an account is terminated, revoke the long-lived Refresh Token on the Authorization Server. The user is locked out as soon as their current 5-minute access token expires.
-2. **Distributed Redis Deny-List (Blacklist):** Every JWT is issued with a unique `jti` (JWT ID). Upon logout or revocation, an event is published to write the `jti` to a distributed Redis cache with a TTL equal to the token's remaining lifespan. Resource Servers check Redis before completing authorization. Once the token reaches its original expiration date, Redis evicts the key automatically.
-3. **OAuth2 Token Introspection (RFC 7662):** Instead of validating JWTs locally, the Resource Server makes an HTTP back-channel call to the Authorization Server's `/introspect` endpoint for every request. This provides instantaneous revocation at the cost of high network latency and significant load on the Authorization Server.
-
----
-
-### Walk through the difference between OAuth 2.0 Scopes and Role-Based Access Control (RBAC) permissions. How should a Spring Security Resource Server handle both?
-
-- **OAuth 2.0 Scopes (`scope` / `scp` claim):** Scopes represent **delegated permissions granted to a client application**. For example, when a user allows a third-party reporting tool to access their data, the user delegates `read:reports` scope. Scopes restrict what the *client application* is permitted to do on behalf of the user, regardless of how much power the user actually possesses.
-- **RBAC Roles (`realm_access.roles` / `roles` claim):** Roles represent the **business permissions assigned to the human user** (e.g., `ROLE_ADMIN`, `ROLE_AUDITOR`).
-
-In enterprise systems, authorization must enforce the intersection of both. Spring Security should map scopes to `SCOPE_<name>` and roles to `ROLE_<name>` using a custom `Converter<Jwt, AbstractAuthenticationToken>`. Critical operations can then require both using compound method security expressions:
-
-```java
-@PreAuthorize("hasAuthority('SCOPE_orders.write') and hasRole('FINANCE_MANAGER')")
-```
-
-This guarantees that an action only executes if the client application is authorized to perform it *and* the authenticated human user has the organizational authority to do so.
-
+Scopes represent what the **client application** is authorized to do (for example, a read-only analytics integration only gets `SCOPE_orders.read`). Roles represent what the **human user** is authorized to do within the business (for example, `ROLE_FINANCE_MANAGER`). Enforcing both on sensitive endpoints ensures that neither a compromised low-privilege client nor an under-privileged user can execute restricted operations.

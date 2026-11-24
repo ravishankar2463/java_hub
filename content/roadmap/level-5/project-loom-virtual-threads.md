@@ -1,399 +1,343 @@
 ---
 title: "Project Loom (Virtual Threads)"
-description: "Master Java 21 virtual threads, M:N carrier mounting internals, continuation stack mechanics, thread pinning diagnosis, structured concurrency, and scoped values."
+description: "Understand how Java 21 virtual threads decouple Java threads from OS threads using carrier pools and heap continuations, how to avoid thread pinning and pooling antipatterns, and how structured concurrency and scoped values fit in."
 category: "level-5"
 date: "2026-10-29T10:00:00Z"
 ---
 
-For more than twenty-five years, Java developers were caught in an architectural dilemma:
+For decades, scaling a Java backend under high I/O concurrency meant picking between two awkward trade-offs.
 
-1. **The Thread-per-Request Model**: Each incoming HTTP request is assigned to a dedicated Java platform thread. This model is intuitive, sequential, and easy to debug. Your stack traces accurately tell you where an error occurred, and your local variables retain state naturally. However, because each platform thread maps 1:1 to an operating system kernel thread (consuming ~1MB of off-heap stack memory), a server collapses under OS thread exhaustion when concurrent connections exceed a few thousand.
-2. **The Reactive / Asynchronous Model**: Frameworks like Netty, WebFlux, and RxJava solved the scalability problem by running non-blocking event loops. They can easily handle 500,000 concurrent socket connections on a handful of OS threads. But the price was brutal: you were forced to abandon standard control flow (`for` loops, `try-catch`, sequential logic) and rewrite your application into complex callback pipelines. Stack traces became incomprehensible, debugging in an IDE became painful, and every existing blocking library (including traditional JDBC drivers) threatened to stall the event loop.
+With the classic **thread-per-request** model, each incoming HTTP request runs on its own Java platform thread. The code is straightforward to write and debug: loops, `try-catch` blocks, and stack traces all behave the way you expect. The catch is that each platform thread wraps a dedicated operating system (OS) kernel thread. Because OS threads are limited and typically reserve around 1 MB of native stack space (configurable via `-Xss`), a server runs out of memory or stalls on context-switching overhead once concurrent blocking requests climb into the thousands.
 
-Project Loom, delivered as a production-ready feature in **Java 21 (JEP 444)**, shattered this dilemma.
+The alternative was the **reactive / asynchronous** model (Netty, Project Reactor, WebFlux, RxJava). Non-blocking event loops can serve tens or hundreds of thousands of open sockets using only a handful of OS threads, but you pay for it in complexity. Standard control flow turns into operator chains, stack traces lose their call context, debugging takes more effort, and any accidental blocking call (such as a traditional JDBC driver) can stall an entire event-loop thread.
 
-Virtual threads restore the simplicity of the sequential thread-per-request model while delivering the extreme throughput of reactive event loops.
+Project Loom addresses this trade-off directly inside the JVM. Its headline feature, **Virtual Threads**, was finalized in **Java 21 (JEP 444)**. Virtual threads let you write sequential, blocking thread-per-request code while allowing the JVM to multiplex huge numbers of waiting tasks onto a small pool of OS threads.
+
+## Platform Threads vs OS Threads vs Virtual Threads
+
+Before looking at scheduling internals, it helps to separate the three kinds of threads involved when a Java program runs:
+
+| Characteristic | OS Kernel Thread | Java Platform Thread | Java Virtual Thread |
+| :--- | :--- | :--- | :--- |
+| **Managed by** | Operating system kernel | JVM (1:1 wrapper around an OS thread) | JVM user-mode scheduler (M:N over carrier threads) |
+| **Stack memory** | Fixed native stack (often ~1 MB) | Mirrors OS thread native stack (`-Xss`) | Grows/shrinks dynamically as chunks on the Java heap |
+| **Creation cost** | High (kernel syscall + stack allocation) | High (allocates an OS thread) | Low (ordinary heap object allocation) |
+| **Typical concurrent scale** | Hundreds to a few thousand | Hundreds to a few thousand | Tens of thousands to millions (memory permitting) |
+| **Blocking I/O impact** | Kernel parks the OS thread | Blocks the underlying OS thread | Unmounts from carrier; OS thread runs another virtual thread |
+| **Daemon / Priority** | OS-controlled | Configurable daemon flag and priority | Always daemon; fixed `Thread.NORM_PRIORITY` |
+
+Virtual threads are still regular instances of `java.lang.Thread`. Existing libraries, debuggers, profilers, and stack traces continue to work with them, and you can check whether a thread is virtual via `Thread.currentThread().isVirtual()`.
 
 ```mermaid
 flowchart TD
-    subgraph "Java Virtual Machine (M:N Scheduling)"
-        subgraph "Virtual Threads (Millions in Heap Memory)"
-            VT1["VT 1: Processing Order #101"]
-            VT2["VT 2: Sleeping on I/O (Parked)"]
-            VT3["VT 3: Processing Payment"]
-            VT4["VT 4: Waiting on DB (Parked)"]
+    subgraph jvm["Java Virtual Machine (M:N Scheduling)"]
+        subgraph vts["Virtual Threads (Heap Objects)"]
+            vt1["VT 1: Running Order Logic"]
+            vt2["VT 2: Parked on Socket Read"]
+            vt3["VT 3: Running Payment Logic"]
+            vt4["VT 4: Parked on DB Query"]
         end
 
-        subgraph "Carrier Threads (ForkJoinPool = CPU Core Count)"
-            CT1["Carrier Platform Thread 1"]
-            CT2["Carrier Platform Thread 2"]
+        subgraph carriers["Carrier Thread Pool (Dedicated ForkJoinPool)"]
+            ct1["Carrier Platform Thread 1"]
+            ct2["Carrier Platform Thread 2"]
         end
     end
 
-    subgraph "Operating System Kernel"
-        OS1["OS Kernel Thread 1"]
-        OS2["OS Kernel Thread 2"]
-        Poller["Linux epoll / macOS kqueue"]
+    subgraph os["Operating System Kernel"]
+        os1["OS Kernel Thread 1"]
+        os2["OS Kernel Thread 2"]
+        poller["I/O Multiplexer (epoll / kqueue / IOCP)"]
     end
 
-    VT1 -->|Mounted| CT1
-    VT3 -->|Mounted| CT2
-    CT1 --> OS1
-    CT2 --> OS2
-    
-    VT2 -.->|Stack saved to Heap| Poller
-    VT4 -.->|Stack saved to Heap| Poller
-    Poller -.->|Network Packet Ready| VT2
+    vt1 -->|"Mounted"| ct1
+    vt3 -->|"Mounted"| ct2
+    ct1 --> os1
+    ct2 --> os2
+
+    vt2 -.->|"Continuation parked on heap"| poller
+    vt4 -.->|"Continuation parked on heap"| poller
+    poller -.->|"I/O ready event"| vt2
 ```
 
----
+## How the JVM Parks and Unparks Virtual Threads
 
-## How Virtual Threads Work: Continuations and Carrier Mounting
+Virtual threads are scheduled by the JVM rather than the operating system kernel. In HotSpot (OpenJDK's JVM), the runtime maintains a dedicated internal `ForkJoinPool` running in FIFO mode to supply **carrier threads** (regular platform threads that execute virtual thread bytecode). Note that this carrier pool is separate from `ForkJoinPool.commonPool()`.
 
-To master virtual threads, you must understand how the JVM schedules them onto hardware.
+By default, the carrier pool's parallelism equals `Runtime.getRuntime().availableProcessors()`, and it can be tuned if needed via system properties such as `jdk.virtualThreadScheduler.parallelism` and `jdk.virtualThreadScheduler.maxPoolSize`.
 
-A platform thread is an expensive 1:1 wrapper around an operating system thread. In contrast, a virtual thread is a lightweight user-mode entity managed entirely by the JVM runtime using an **M:N scheduling model**: millions of virtual threads (M) are multiplexed over a tiny pool of platform threads (N).
+### Continuations and Carrier Mounting
 
-### The Carrier Thread Pool
+When a virtual thread is runnable, the JVM **mounts** it onto an available carrier platform thread. While mounted, the virtual thread's stack frames execute on the carrier thread just like normal Java code.
 
-Under the hood, the JVM maintains a dedicated `ForkJoinPool` as its **carrier thread pool**. The number of carrier threads defaults to `Runtime.getRuntime().availableProcessors()`. 
+The key mechanism underneath is an internal JVM primitive called a **continuation** (currently an internal JDK implementation detail, not a public API). Unlike a platform thread's contiguous native stack, a virtual thread's paused call stack is stored as compact stack chunk objects on the garbage-collected Java heap. A freshly created or lightly stacked virtual thread uses only a few hundred bytes to a few kilobytes of heap memory, growing only as deep as its actual call stack requires.
 
-When a virtual thread executes CPU instructions, the JVM scheduler **mounts** it onto an available carrier platform thread. To the CPU and the OS kernel, the carrier thread is just running ordinary Java bytecode.
+### What Happens During Blocking I/O
 
-### Stack Frames on the Heap (Continuations)
-
-In a traditional platform thread, the call stack is a contiguous block of native memory (typically 1MB) allocated by the OS kernel. 
-
-A virtual thread does not have a fixed native call stack. Instead, its execution state is managed as a **Continuation** object stored on the JVM heap:
-- When a virtual thread starts, its stack begins tiny—only a few hundred bytes.
-- As methods call deeper methods, the JVM allocates continuation frames dynamically on the garbage-collected heap.
-- When stack frames return, memory is reclaimed immediately.
-
-### The Mount / Unmount Lifecycle
-
-What happens when a virtual thread encounters a blocking operation (such as `Socket.read()`, `Thread.sleep()`, or acquiring a `ReentrantLock`)?
+Almost every blocking operation in the standard JDK (`java.net`, `java.io`, `java.nio`, `Thread.sleep`, `LockSupport.park`, `ReentrantLock`, `Semaphore`, `BlockingQueue`) was updated for Project Loom so it cooperates with the virtual thread scheduler.
 
 ```mermaid
 sequenceDiagram
     participant VT as Virtual Thread
     participant CT as Carrier Platform Thread
-    participant OS as OS Kernel (epoll)
+    participant OS as OS Kernel (epoll/kqueue)
 
-    VT->>CT: Executes business logic
-    VT->>CT: Calls socket.read() (Blocking I/O)
-    Note over VT,CT: JVM intercepts blocking call!
-    CT->>VT: Freezes continuation & copies stack to Heap
-    CT->>OS: Registers socket with epoll
-    Note over CT: Virtual Thread is UNMOUNTED!
-    CT->>CT: Carrier picks up VT-99 (Never blocks!)
-    
-    OS-->>CT: Network packet arrives for VT
-    Note over CT: Carrier resumes VT
-    CT->>VT: Restores continuation from Heap
+    VT->>CT: Runs Java bytecode
+    VT->>CT: Calls socket.read()
+    Note over VT,CT: JDK detects virtual thread and non-ready socket
+    CT->>VT: Copies stack frames to heap continuation
+    CT->>OS: Registers socket FD with non-blocking poller
+    Note over CT: VT unmounts and carrier is free
+    CT->>CT: Mounts and runs another ready VT
+    OS-->>CT: Socket becomes readable
+    Note over CT: Scheduler marks VT runnable
+    CT->>VT: Restores continuation frames onto a carrier
     VT->>CT: Resumes execution after socket.read()
 ```
 
-1. **Interception**: In Java 21, almost every blocking I/O operation in the JDK (`java.net`, `java.io`, `java.nio.channels`, `LockSupport`) was refactored. When a blocking call is made, the JVM catches it at the runtime boundary.
-2. **Unmounting (Yield)**: The JVM saves the virtual thread's current stack frames into its heap continuation object and **unmounts** the virtual thread from the carrier thread.
-3. **OS Handoff**: The JVM registers the underlying network file descriptor with the operating system's non-blocking I/O multiplexer (such as `epoll` on Linux or `kqueue` on macOS).
-4. **Carrier Freedom**: The carrier platform thread does not sleep! It immediately picks up another ready virtual thread from its queue and executes it.
-5. **Wakeup and Remount**: When the OS kernel signals that data has arrived on the socket, the virtual thread transitions back to the runnable queue. An available carrier thread picks it up, reloads its stack frames from the heap, and execution resumes seamlessly right after the blocking call.
+Step by step:
 
-To your Java application code, `socket.read()` looked like a simple, blocking, synchronous method call. But underneath, the JVM executed a fully non-blocking, asynchronous event-driven I/O routine!
+1. **Interception**: Your code calls a standard blocking method like `socket.getInputStream().read()`. Inside the JDK implementation, the socket is configured non-blocking under the hood.
+2. **Park and unmount**: If no bytes are ready yet, the JDK registers the file descriptor with the OS event poller (`epoll` on Linux, `kqueue` on macOS, or `IOCP` / `WEPoll` on Windows) and parks the virtual thread. The JVM copies the active stack frames into the virtual thread's heap continuation and **unmounts** it from the carrier thread.
+3. **Carrier reuse**: The carrier platform thread never enters a kernel wait state. It returns to the carrier `ForkJoinPool` and immediately mounts another runnable virtual thread.
+4. **Unpark and remount**: When the OS reports that data has arrived on the socket, an internal poller thread unparks the virtual thread and places it back onto the scheduler's runnable queue. The next available carrier thread (not necessarily the same one) mounts the continuation and resumes execution right after the `read()` call.
 
----
+From your application's perspective, you wrote plain synchronous code. At the OS level, the JVM executed non-blocking multiplexed I/O.
 
 ## Creating and Running Virtual Threads
 
-Java 21 makes launching virtual threads trivial:
+Java 21 provides both direct `Thread` builders and an `ExecutorService` factory tailored for virtual threads:
 
 ```java
+import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class VirtualThreadBasics {
-    public static void main(String[] args) throws Exception {
-        // Pattern 1: Create an ad-hoc unstarted virtual thread builder
-        Thread vt1 = Thread.ofVirtual()
-            .name("order-worker-", 1)
-            .start(() -> {
-                System.out.println("Running on: " + Thread.currentThread());
-            });
-        vt1.join();
+    public static void main(String[] args) throws InterruptedException {
+        // 1. Quickest way to launch a single virtual thread
+        Thread quick = Thread.startVirtualThread(() ->
+            System.out.println("Quick task on: " + Thread.currentThread())
+        );
+        quick.join();
 
-        // Pattern 2: The canonical ExecutorService pattern (AutoCloseable!)
+        // 2. Named virtual thread via builder
+        Thread named = Thread.ofVirtual()
+            .name("order-worker-", 1)
+            .start(() -> System.out.println("Named task on: " + Thread.currentThread()));
+        named.join();
+
+        // 3. Recommended pattern for concurrent tasks: one virtual thread per task
         try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            for (int i = 0; i < 100_000; i++) {
+            for (int i = 0; i < 50_000; i++) {
                 final int taskId = i;
                 executor.submit(() -> {
-                    // Simulates 100ms network round-trip to database
-                    Thread.sleep(100); 
-                    return "Task " + taskId + " completed";
+                    Thread.sleep(Duration.ofMillis(100));
+                    return "Completed task " + taskId;
                 });
             }
-        } // try-with-resources automatically waits for all 100,000 tasks to finish!
-        
-        System.out.println("All 100,000 virtual threads executed successfully.");
+        } // ExecutorService is AutoCloseable since Java 19; waits for all submitted tasks
+
+        System.out.println("All 50,000 tasks finished.");
     }
 }
 ```
 
-Running the code above with 100,000 platform threads would instantly crash any standard machine with out-of-memory errors. With virtual threads, it runs smoothly in a few seconds while using a negligible footprint of system memory.
+Attempting to spawn 50,000 platform threads on a typical workstation or container would exhaust OS thread limits or memory almost immediately. With `newVirtualThreadPerTaskExecutor()`, the JVM handles all 50,000 sleeping tasks using only a handful of carrier threads and modest heap usage.
 
----
+> [!NOTE]
+> Virtual threads improve **throughput for I/O-bound workloads** where threads spend most of their lifetime waiting on networks, databases, or locks. They do not speed up CPU-bound computation. If 1,000 virtual threads are all crunching numbers on an 8-core machine, only 8 can run at once, and a bounded platform thread pool sized to core count remains appropriate for pure CPU work.
 
-## The Thread Pinning Trap
+## Thread Pinning in Java 21 (and How Java 24 Changes It)
 
-Virtual threads are not magic; they are subject to strict runtime constraints. The most critical hazard in Java 21 is **Thread Pinning**.
+Virtual threads rely on being able to unmount from their carrier thread whenever they block. **Thread pinning** happens when a virtual thread is blocked *and* the JVM cannot unmount it from its carrier. While pinned, the underlying OS carrier thread sits blocked as well. If enough carriers are pinned simultaneously, the carrier pool starves and other virtual threads stall waiting for a carrier.
 
-When a virtual thread is pinned to its carrier thread, it **cannot be unmounted**. If a pinned virtual thread blocks on I/O or sleep, the underlying carrier platform thread is forced to block along with it.
+In **Java 21 LTS**, a virtual thread is pinned to its carrier in two situations:
 
-If all carrier platform threads become pinned simultaneously, your carrier pool is exhausted, and **no other virtual thread in the entire JVM can make progress**.
+1. It blocks while inside a `synchronized` block or `synchronized` method.
+2. It executes native code via JNI or the Foreign Function & Memory (FFM) API.
 
-### What Causes Pinning in Java 21?
-
-In Java 21 LTS, a virtual thread is pinned to its carrier in two specific scenarios:
-1. When it executes a blocking operation inside a `synchronized` block or method.
-2. When it executes native code via JNI or the Foreign Function & Memory (FFM) API.
+Short, in-memory `synchronized` blocks (like updating a counter or a small cache map) are rarely an issue because they hold the monitor for nanoseconds and do not block on I/O. The real hazard in Java 21 is performing network I/O, disk I/O, or waiting on a lock inside a `synchronized` block:
 
 ```java
-// PINNING HAZARD IN JAVA 21:
-public class LegacyPaymentGateway {
+// Pinning hazard on Java 21: blocking HTTP call inside synchronized
+public class LegacyPaymentClient {
     private final Object lock = new Object();
 
-    public void processPayment() {
-        synchronized (lock) { // Intrinsic monitor causes PINNING!
-            // If this socket call blocks for 500ms, the CARRIER thread is trapped!
-            callExternalPaymentApiOverHttp(); 
+    public String charge(String orderId) {
+        synchronized (lock) {
+            return callRemotePaymentApi(orderId); // Pins carrier thread on Java 21!
         }
+    }
+
+    private String callRemotePaymentApi(String orderId) {
+        return "charged-" + orderId;
     }
 }
 ```
 
-### The Remediation: ReentrantLock
+### Avoiding Pinning on Java 21 with ReentrantLock
 
-To prevent thread pinning around blocking I/O, replace intrinsic `synchronized` blocks with `java.util.concurrent.locks.ReentrantLock`. 
-
-`ReentrantLock` uses `LockSupport.park()` internally, which the JVM virtual thread scheduler can unmount without pinning the carrier:
+On Java 21, replace `synchronized` around blocking operations with `java.util.concurrent.locks.ReentrantLock`. Because `ReentrantLock` parks via `LockSupport`, the virtual thread unmounts cleanly both while waiting to acquire the lock and while running blocking I/O inside the critical section:
 
 ```java
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class NonPinnedPaymentGateway {
+public class VirtualFriendlyPaymentClient {
     private final Lock lock = new ReentrantLock();
 
-    public void processPayment() {
-        lock.lock(); // Virtual thread safely unmounts if forced to wait!
+    public String charge(String orderId) {
+        lock.lock();
         try {
-            callExternalPaymentApiOverHttp(); // Carrier thread remains unpinned
+            return callRemotePaymentApi(orderId); // Carrier remains free to unmount
         } finally {
             lock.unlock();
         }
     }
 
-    private void callExternalPaymentApiOverHttp() {
-        // Network I/O
+    private String callRemotePaymentApi(String orderId) {
+        return "charged-" + orderId;
     }
 }
 ```
 
-> [!TIP]
-> **How to Detect Pinning in Production**:
-> Run your application with the JVM diagnostic flag:
-> `-Djdk.tracePinnedThreads=full`
-> Whenever a virtual thread blocks while pinned, the JVM will print a complete stack trace highlighting the exact `synchronized` block responsible.
+### Detecting Pinning
 
-*(Note: In Java 24+, JEP 491 redesigns object monitors to eliminate pinning for `synchronized` blocks. However, for all systems running on Java 21 LTS, avoiding `synchronized` around blocking operations remains an essential architectural rule).*
+On Java 21, you have two ways to spot pinning:
 
----
+- **Java Flight Recorder (preferred in production)**: Monitor the `jdk.VirtualThreadPinned` JFR event (by default recorded when a thread stays pinned longer than 20ms). It captures the stack trace with minimal overhead.
+- **JVM trace flag (useful in local or staging tests)**: Pass `-Djdk.tracePinnedThreads=full` (or `short`) to print stack traces to standard output whenever a virtual thread blocks while pinned.
+
+### What Changed in Java 24 (JEP 491)
+
+**Java 24 delivered JEP 491 ("Synchronize Virtual Threads without Pinning")**, which redesigned JVM object monitors so virtual threads can acquire, hold, and release `synchronized` monitors independently of their carrier platform threads. Starting in Java 24, blocking inside a `synchronized` block or calling `Object.wait()` no longer pins the carrier thread. Native frames (JNI/FFM) can still pin, and if your production services run on Java 21 LTS, avoiding blocking I/O inside `synchronized` (and keeping JDBC drivers updated to Loom-friendly versions) remains important.
 
 ## Never Pool Virtual Threads
 
-A common mistake made by senior engineers transitioning to Java 21 is attempting to pool virtual threads:
+Platform threads were pooled because creating an OS thread was expensive. With virtual threads, that assumption no longer holds.
 
 ```java
-// HORRIBLE ANTIPATTERN:
-ExecutorService badPool = new ThreadPoolExecutor(
-    100, 100, 0L, TimeUnit.MILLISECONDS,
-    new LinkedBlockingQueue<>(),
-    Thread.ofVirtual().factory()
-);
+// Antipattern: wrapping virtual threads in a fixed-size thread pool
+ExecutorService badPool = Executors.newFixedThreadPool(100, Thread.ofVirtual().factory());
 ```
 
-**Never pool virtual threads.**
+Pooling virtual threads adds queue contention, encourages stale `ThreadLocal` state to linger across unrelated tasks, and caps concurrency to the pool size without saving meaningful memory or CPU. Treat a virtual thread like a short-lived task: create one per concurrent unit of work via `Executors.newVirtualThreadPerTaskExecutor()`, let it finish, and let the garbage collector reclaim it.
 
-We pooled platform threads because creating an OS thread took 1MB of memory and milliseconds of CPU kernel time. Virtual threads, however, cost less than 1KB and take nanoseconds to construct. 
+### Limiting Concurrency with a Semaphore
 
-Pooling virtual threads introduces lock contention inside the thread pool queue, adds management overhead, and defeats the entire purpose of Project Loom. Create a new virtual thread for every distinct task, run the task, and let the thread be garbage collected when it finishes.
+Engineers often used a fixed thread pool of size 20 for a second, implicit reason: to prevent a service from opening 10,000 simultaneous connections to a database or rate-limited API.
 
-### How to Protect Scarce Downstream Resources
-
-"If we don't pool threads, won't 100,000 virtual threads overwhelm our Postgres database connection pool?"
-
-Yes! If 100,000 virtual threads attempt to query Postgres simultaneously, they will crush the database. 
-
-In the past, developers used platform thread pools as an accidental **bulkhead** (e.g., setting the pool size to 20 so only 20 queries could run at once). With virtual threads, you decouple concurrency control from thread creation using a `Semaphore`:
+With virtual threads, separate **thread creation** from **concurrency limiting**. Use a `Semaphore` (or an existing resource pool such as HikariCP for JDBC connections) to cap how many virtual threads access a scarce resource at the same time:
 
 ```java
 import java.util.concurrent.Semaphore;
 
-public class DatabaseThrottler {
-    // Only permit 20 concurrent queries to protect our HikariCP connection pool
-    private final Semaphore dbSemaphore = new Semaphore(20);
+public class RateLimitedRepository {
+    // Allow at most 20 concurrent database queries
+    private final Semaphore permits = new Semaphore(20);
 
-    public String queryCustomer(String id) throws InterruptedException {
-        dbSemaphore.acquire(); // Virtual thread safely unmounts if all 20 permits are taken!
+    public String findCustomer(String customerId) throws InterruptedException {
+        permits.acquire(); // Waiting virtual threads unmount cleanly
         try {
-            return executeJdbcQuery(id);
+            return runJdbcQuery(customerId);
         } finally {
-            dbSemaphore.release();
+            permits.release();
         }
     }
 
-    private String executeJdbcQuery(String id) {
-        return "Customer-" + id;
+    private String runJdbcQuery(String customerId) {
+        return "Customer(" + customerId + ")";
     }
 }
 ```
 
----
+When all 20 permits are in use, the 21st virtual thread parks on `permits.acquire()`, unmounts from its carrier, and consumes only a small amount of heap memory until a permit is released.
 
-## Structured Concurrency (Preview in Java 21)
+## Structured Concurrency API (Preview in Java 21)
 
-Unstructured concurrency with raw threads or `CompletableFuture` frequently causes **thread leaks** and **orphaned tasks**.
+When spawning threads becomes nearly free, applications naturally fan out far more concurrent subtasks. Without guardrails, fan-out creates a subtle operational problem: if a parent request fails or times out, child tasks submitted to an ordinary `ExecutorService` keep running in the background as orphan threads, burning CPU and holding database connections.
 
-Consider this scenario: Task A forks Task B (fetching user details) and Task C (fetching user credit). If Task B throws an exception, Task C continues running in the background, wasting CPU, memory, and database sockets.
+Project Loom addresses this with **Structured Concurrency** (`java.util.concurrent.StructuredTaskScope`), introduced as a **preview feature in Java 21 (JEP 453)**. To compile and run preview APIs on Java 21, pass `--enable-preview` to `javac` and `java`.
 
-Java 21 introduces `StructuredTaskScope` (Preview JEP 453) to enforce **Structured Concurrency**. It ensures that subtasks are lexically bounded to their parent scope:
+`StructuredTaskScope` ties the lifetime of forked child virtual threads to a `try`-with-resources block. In Java 21, two built-in policies cover the most common fan-out patterns:
 
-```mermaid
-flowchart TD
-    subgraph "Structured Scope Boundary"
-        Parent["Parent Task (StructuredTaskScope)"]
-        Parent -->|"fork()"| Child1["Child Task 1: Fetch Orders"]
-        Parent -->|"fork()"| Child2["Child Task 2: Fetch Profile"]
-        
-        Child1 -.->|"Fails with Exception!"| Cancel["Shutdown Triggered"]
-        Cancel -->|"Interrupt Signal"| Child2
-        Cancel -->|"Cleanup & Abort"| ParentOut["Parent rethrows exception - zero leaked threads!"]
-    end
-```
-
-### ShutdownOnFailure: All Subtasks Must Succeed
+- `ShutdownOnFailure`: If any subtask throws an exception, the scope cancels all remaining sibling subtasks via thread interruption.
+- `ShutdownOnSuccess`: As soon as the first subtask succeeds, the scope captures that result and cancels the slower siblings.
 
 ```java
 import java.util.concurrent.StructuredTaskScope;
 import java.util.concurrent.StructuredTaskScope.Subtask;
 
-public class OrderService {
+public class OrderLoader {
     record OrderSummary(String user, String inventory) {}
 
-    public OrderSummary loadOrderDetails(String orderId) throws Exception {
+    // Java 21 preview API (compile and run with --enable-preview)
+    public OrderSummary loadOrder(String orderId) throws Exception {
         try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
-            // Fork child tasks as virtual threads inside the lexical scope
             Subtask<String> userTask = scope.fork(() -> fetchUser(orderId));
-            Subtask<String> inventoryTask = scope.fork(() -> fetchInventory(orderId));
+            Subtask<String> stockTask = scope.fork(() -> fetchInventory(orderId));
 
-            // Wait for all subtasks to complete OR the first failure
-            scope.join();
-            scope.throwIfFailed(); // If either task failed, rethrows the failure
+            scope.join();          // Wait for both tasks, or until one fails
+            scope.throwIfFailed(); // Propagate the first failure if any occurred
 
-            // Both guaranteed to be complete and successful here
-            return new OrderSummary(userTask.get(), inventoryTask.get());
-        } // The closing brace guarantees all child tasks are completed or cancelled!
+            return new OrderSummary(userTask.get(), stockTask.get());
+        } // Guaranteed: no forked subtask outlives this try block
     }
 
-    private String fetchUser(String id) { return "User-Alice"; }
-    private String fetchInventory(String id) { return "In-Stock"; }
+    private String fetchUser(String id) { return "Alice"; }
+    private String fetchInventory(String id) { return "InStock"; }
 }
 ```
 
-### ShutdownOnSuccess: First Successful Result Wins
+*(Note: Structured Concurrency continued evolving across Java 22 to 25 previews; in Java 25 JEP 505, the API moved toward static `StructuredTaskScope.open(...)` factory methods and `Joiner` policies. The next lesson covers Structured Concurrency and its lifecycle in depth.)*
 
-When querying redundant mirrors or racing across multiple replicas, use `ShutdownOnSuccess`:
+## Scoped Values: The Modern Alternative to ThreadLocal (Preview in Java 21)
 
-```java
-import java.util.concurrent.StructuredTaskScope;
+`ThreadLocal` was designed when JVMs ran a few hundred pooled platform threads. With virtual threads, `ThreadLocal` introduces two practical problems:
 
-public class QuorumFetcher {
-    public String fetchFromFastestServer(String query) throws Exception {
-        try (var scope = new StructuredTaskScope.ShutdownOnSuccess<String>()) {
-            scope.fork(() -> queryServer("https://replica-1.internal", query));
-            scope.fork(() -> queryServer("https://replica-2.internal", query));
-            scope.fork(() -> queryServer("https://replica-3.internal", query));
+1. **Memory footprint at scale**: If you create 500,000 virtual threads and each caches heavy objects (or copies a `ThreadLocalMap` via `InheritableThreadLocal`), heap usage climbs rapidly.
+2. **Mutability and leaks**: Any method down the call stack can call `set()` unexpectedly, and forgetting `remove()` on long-lived threads leaks references across requests.
 
-            scope.join(); // Waits until the FIRST subtask finishes successfully!
-            
-            // Returns the fastest result; cancels all other redundant requests automatically!
-            return scope.result();
-        }
-    }
-
-    private String queryServer(String host, String q) {
-        return "Response from " + host;
-    }
-}
-```
-
----
-
-## Scoped Values: Replacing ThreadLocal (Preview in Java 21)
-
-While `ThreadLocal` works with virtual threads, running 1,000,000 virtual threads each holding a `ThreadLocal` map can cause severe memory bloat and retention leaks. Furthermore, `ThreadLocal` values are mutable and can be modified unexpectedly by deep library code.
-
-Java 21 introduces `ScopedValue` (Preview JEP 446) as a modern, lightweight alternative:
+**Scoped Values** (`java.lang.ScopedValue`), introduced as a **preview feature in Java 21 (JEP 446)** and **finalized in Java 25 (JEP 506)**, provide an immutable, lexically bounded way to share context down a call stack and across structured child virtual threads:
 
 ```java
 import java.lang.ScopedValue;
 
-public class SecurityContextPipeline {
-    // Immutable scoped value
+public class TenantContext {
     public static final ScopedValue<String> CURRENT_TENANT = ScopedValue.newInstance();
 
     public void handleRequest(String tenantId) {
-        // Bind the tenant ID strictly for the duration of this execution block
+        // Bound only while this lambda executes
         ScopedValue.where(CURRENT_TENANT, tenantId).run(() -> {
-            executeDatabaseOperation();
+            runBusinessLogic();
         });
-        
-        // Outside the lambda, CURRENT_TENANT is completely unbound; zero memory leak!
+        // Automatically unbound here; no remove() call required
     }
 
-    private void executeDatabaseOperation() {
-        // Read context safely
+    private void runBusinessLogic() {
         String tenant = CURRENT_TENANT.get();
-        System.out.println("Executing query for tenant: " + tenant);
+        System.out.println("Processing request for tenant: " + tenant);
     }
 }
 ```
 
-- **Immutability**: Once bound via `where()`, a `ScopedValue` cannot be modified.
-- **Bounded Lifetime**: The binding is strictly bound to the execution scope of the lambda. When the block exits, the binding ceases to exist. There is no risk of context bleeding into recycled threads.
-- **Zero Memory Overhead**: Scoped values are automatically inherited by child virtual threads spawned inside a `StructuredTaskScope` without allocating individual `ThreadLocal` map entries.
+Because a `ScopedValue` binding is immutable and strictly tied to the execution of the `run()` or `call()` lambda, child virtual threads forked inside a `StructuredTaskScope` can share the parent's binding directly without copying a per-thread map.
 
----
+## Practical Questions
 
-## Senior Engineer Interview Crucible
+### How does a virtual thread handle blocking socket I/O without blocking an OS thread?
 
-### How does the JVM park a virtual thread during blocking socket I/O without blocking the underlying OS thread?
-In Java 21, JDK network socket classes were rewritten to interface with the virtual thread scheduler. When a virtual thread calls `socket.read()`, the JVM intercepts the call. If data is not immediately available, the JVM saves the virtual thread's stack frames into its heap-allocated Continuation object and unmounts it from the carrier platform thread. 
+When a virtual thread invokes a refactored JDK blocking call such as `socket.read()` and data is not immediately ready, the JDK registers the socket with the OS non-blocking I/O poller (`epoll`, `kqueue`, or Windows `IOCP`) and parks the virtual thread. The JVM copies the virtual thread's stack frames into a heap-allocated continuation and unmounts it from its carrier platform thread. The carrier thread immediately picks up another runnable virtual thread. When the OS signals that bytes are ready, the scheduler marks the virtual thread runnable and mounts its continuation back onto an available carrier thread.
 
-The JVM registers the socket's file descriptor with the operating system's non-blocking I/O notification system (`epoll` on Linux, `kqueue` on macOS). The carrier platform thread is immediately freed to execute other virtual threads. When the OS signals that data has arrived, an available carrier thread is assigned to restore the continuation frames from the heap and resume the virtual thread.
+### What causes virtual thread pinning in Java 21, and what changed in Java 24?
 
-### What is thread pinning in Java 21, what causes it, and how do you remediate it?
-Thread pinning occurs when a virtual thread cannot be unmounted from its carrier platform thread. If a pinned virtual thread blocks on I/O or sleep, the underlying carrier thread is forced to block as well, starving the carrier pool.
+In Java 21, a virtual thread is pinned to its carrier platform thread when it blocks inside a `synchronized` block or method, or while native JNI/FFM frames are on the stack. Pinning prevents unmounting, which forces the carrier OS thread to block too. On Java 21, you mitigate this by replacing `synchronized` around blocking I/O with `ReentrantLock` and monitoring pinning via JFR's `jdk.VirtualThreadPinned` event or `-Djdk.tracePinnedThreads=full`. In Java 24, JEP 491 reimplemented JVM object monitors so virtual threads can unmount inside `synchronized` blocks and `Object.wait()`, eliminating `synchronized` pinning (though native frames still pin).
 
-In Java 21 LTS, pinning is triggered when a virtual thread blocks inside a `synchronized` block/method or while executing native code (JNI / FFM). 
+### Why should you avoid pooling virtual threads, and how do you throttle downstream calls instead?
 
-To remediate pinning, replace `synchronized` blocks around blocking calls with `java.util.concurrent.locks.ReentrantLock`, which uses `LockSupport.park()` and allows clean unmounting. Pinning can be diagnosed using the `-Djdk.tracePinnedThreads=full` JVM argument.
+Pooling exists to amortize the cost of scarce, expensive objects like OS threads. Virtual threads are cheap heap objects meant to be created per task via `Executors.newVirtualThreadPerTaskExecutor()` and discarded when done. Pooling them adds synchronization overhead and risk of leaking thread-local state. To protect scarce downstream resources like a database or rate-limited API, decouple concurrency limits from thread counts by using a `Semaphore` or a dedicated connection pool.
 
-### Why should you never pool virtual threads, and how do you implement rate limiting without thread pools?
-Platform threads were pooled because creating OS threads carries heavy overhead (~1MB native stack memory and kernel context allocation). In contrast, virtual threads are lightweight heap objects that cost less than 1KB and take nanoseconds to instantiate. Pooling virtual threads reintroduces queue contention and state leakage without providing any resource savings.
+### When are virtual threads not the right tool?
 
-To throttle access to scarce downstream resources (such as a database connection pool or an external rate-limited API), you should decouple concurrency limits from thread counts by using a `Semaphore`. Virtual threads waiting for a semaphore permit will safely unmount without consuming CPU or carrier threads.
-
-### How does Structured Concurrency solve the orphaned thread problem inherent in standard thread pools and CompletableFuture?
-In unstructured concurrency (e.g., submitting tasks to an `ExecutorService` or chaining `CompletableFuture`), subtasks have no defined relationship with the caller's lexical scope. If a parent operation fails or times out, running subtasks continue executing in background threads indefinitely, leaking memory, CPU, and connections.
-
-Structured Concurrency via `StructuredTaskScope` enforces that the lifetimes of concurrent subtasks are strictly bounded to the parent code block. Using policies like `ShutdownOnFailure`, if any child task fails, the scope automatically triggers cancellation and sends interruption signals to all sibling tasks before the scope exits, guaranteeing that zero orphaned threads escape into the system.
+Virtual threads do not accelerate CPU-bound workloads (video encoding, cryptographic hashing, heavy matrix math) because they still execute on the same finite number of CPU cores and carrier threads. For purely compute-bound work, a bounded platform thread pool sized close to the available CPU core count avoids unnecessary scheduling overhead and remains the better fit.

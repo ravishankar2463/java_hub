@@ -1,200 +1,250 @@
 ---
 title: "Aspect-Oriented Programming (AOP)"
-description: "Master Spring AOP internals: runtime proxy weaving, CGLIB vs JDK dynamic proxies, the self-invocation trap, custom annotation advice, and aspect ordering."
+description: "How Spring AOP isolates cross-cutting concerns using JDK and CGLIB proxies, pointcut expressions, custom @Loggable annotations, and explicit aspect ordering."
 category: "level-8"
 date: "2026-10-29T10:00:00Z"
 ---
 
-Consider what it takes to write a clean, secure financial transfer method in enterprise Java:
+Look at what happens when every infrastructural requirement around a financial transfer is written inline inside a service method:
 
 ```java
 public void transferMoney(String fromId, String toId, BigDecimal amount) {
-    // 1. Security Check: Does the user have TRANSFER_FUNDS permission?
-    // 2. Distributed Tracing: Start OpenTelemetry span & propagate traceparent
-    // 3. Metrics: Start Prometheus micrometer timer
-    // 4. Rate Limiting: Check Redis token bucket for caller IP
-    // 5. Transaction: Begin JDBC transaction & set isolation level
-    
-    // --- ACTUAL CORE BUSINESS LOGIC (3 LINES) ---
-    Account from = accountRepo.findById(fromId);
+    // 1. Authorization check
+    // 2. OpenTelemetry span start
+    // 3. Micrometer timer start
+    // 4. Begin database transaction
+
+    // Core business logic (3 lines)
+    Account from = accountRepo.findById(fromId).orElseThrow();
+    Account to = accountRepo.findById(toId).orElseThrow();
     from.debit(amount);
     to.credit(amount);
-    // --------------------------------------------
-    
-    // 6. Transaction: Commit or Rollback
-    // 7. Audit Logging: Record immutable event to Kafka audit log
-    // 8. Metrics: Record execution latency and error tags
-    // 9. Tracing: Close span
+
+    // 5. Commit or roll back transaction
+    // 6. Emit audit log
+    // 7. Stop timer and close span
 }
 ```
 
-If you implement these infrastructural requirements imperatively, **80% of your codebase is noisy boilerplate**, completely obscuring your actual business domain logic. Even worse, if a developer forgets to copy-paste the audit log into a new endpoint, you have an undetectable security compliance breach.
+Most of the method has nothing to do with transferring money. Logging, metrics, authorization, caching, retries, and transaction boundaries repeat across dozens of services. When they are copy-pasted manually, domain logic gets buried in boilerplate and a single missed copy-paste leaves an endpoint un-audited or non-transactional.
 
-These pervasive, horizontal concerns are known as **Cross-Cutting Concerns**. 
-
-**Aspect-Oriented Programming (AOP)** provides an elegant architectural paradigm to extract cross-cutting concerns into modular, reusable components called **Aspects**, applying them declaratively across your entire system without altering a single line of business domain code.
+These horizontal requirements are **cross-cutting concerns**. **Aspect-Oriented Programming (AOP)** extracts them into dedicated classes called **Aspects** and applies them declaratively around business methods without cluttering the domain code itself.
 
 ```mermaid
 flowchart TD
-    subgraph "Cross-Cutting Concerns (Aspects)"
-        Sec["Security & Authorization Aspect"]
-        Tx["Transaction Management Aspect (@Transactional)"]
-        Log["Metrics & Tracing Aspect (@Loggable)"]
+    subgraph Aspects["Cross-Cutting Concerns (Aspects)"]
+        Sec["Security Aspect"]
+        Tx["Transaction Aspect (@Transactional)"]
+        Log["Logging and Timing Aspect (@Loggable)"]
     end
 
-    subgraph "Core Business Services"
+    subgraph Services["Domain Services"]
         OrderSvc["OrderService"]
         PaySvc["PaymentService"]
         UserSvc["UserService"]
     end
 
-    Sec -.->|Cuts Across| OrderSvc & PaySvc & UserSvc
-    Tx -.->|Cuts Across| OrderSvc & PaySvc & UserSvc
-    Log -.->|Cuts Across| OrderSvc & PaySvc & UserSvc
+    Sec -.->|"advises"| OrderSvc
+    Sec -.->|"advises"| PaySvc
+    Sec -.->|"advises"| UserSvc
+    Tx -.->|"advises"| OrderSvc
+    Tx -.->|"advises"| PaySvc
+    Tx -.->|"advises"| UserSvc
+    Log -.->|"advises"| OrderSvc
+    Log -.->|"advises"| PaySvc
+    Log -.->|"advises"| UserSvc
 ```
 
 ---
 
-## The AOP Lexicon and Mental Model
+## Core AOP Concepts and Pointcut Expressions
 
-To master AOP, you must internalize its formal vocabulary:
+Spring AOP uses AspectJ's annotation and pointcut syntax, so it helps to be precise about the vocabulary:
 
-| Concept | Formal Definition | Real-World Analogy |
+| Term | Definition | Example in Spring |
 | :--- | :--- | :--- |
-| **Join Point** | A specific point in program execution where an aspect can be plugged in. In Spring AOP, this is **always a method execution on a Spring bean**. | A specific street intersection on a city map. |
-| **Pointcut** | A predicate expression that selects one or more Join Points matching specific criteria (packages, method names, annotations). | A traffic rule: *"All intersections within the financial district."* |
-| **Advice** | The concrete action executed at a Join Point (Before, After, or Around). | The police officer stationed at the intersection checking badges. |
-| **Aspect** | A modular class combining Pointcuts and Advice together (annotated with `@Aspect`). | The security department operating the traffic checkpoints. |
-| **Target Object** | The raw Spring bean whose methods are being intercepted. | The delivery driver passing through the checkpoint. |
-| **Weaving** | The process of linking aspects with target beans to create an advised proxy. | Equipping the vehicle with a GPS tracker before dispatch. |
+| **Join Point** | A point during execution where behavior can be inserted. In Spring AOP, a join point is always a **method execution on a Spring bean**. | Calling `OrderService.placeOrder(...)` |
+| **Pointcut** | A predicate expression that matches one or more join points. | `@annotation(com.example.aop.Loggable)` |
+| **Advice** | The code that runs at a matched join point (`@Before`, `@After`, `@AfterReturning`, `@AfterThrowing`, `@Around`). | Measuring elapsed time and writing a log entry |
+| **Aspect** | A class annotated with `@Aspect` that groups pointcuts and advice. | `LoggingAspect` |
+| **Target Object** | The underlying Spring bean being advised. | The raw `OrderService` instance |
+| **Weaving** | Linking aspects with target objects to produce advised behavior. | Wrapping the bean in a runtime proxy during `BeanPostProcessor.postProcessAfterInitialization` |
+
+### Common Pointcut Designators
+
+Pointcuts can match by method signature, package, bean type, or annotation, and you can combine them with `&&`, `||`, and `!`:
+
+```java
+@Aspect
+@Component
+public class CommonPointcuts {
+
+    // Every public method in the service package and its sub-packages
+    @Pointcut("execution(public * com.example.order.service..*(..))")
+    public void serviceLayer() {}
+
+    // Every method inside classes annotated with @RestController
+    @Pointcut("within(@org.springframework.web.bind.annotation.RestController *)")
+    public void restControllers() {}
+
+    // Any method carrying a specific custom annotation
+    @Pointcut("@annotation(com.example.aop.Loggable)")
+    public void loggableMethod() {}
+
+    // Composing pointcuts: service methods that are not simple getters
+    @Pointcut("serviceLayer() && !execution(* get*(..))")
+    public void mutatingServiceOperation() {}
+}
+```
+
+In `execution(public * com.example.order.service..*(..))`, the first `*` matches any return type, `..` after the package matches sub-packages, the second `*` matches any class and method name, and `(..)` matches zero or more parameters of any type.
 
 ---
 
-## Spring AOP vs Full AspectJ: The Proxy Reality
+## Proxy Mechanics: JDK Dynamic Proxy vs. CGLIB
 
-There is a profound architectural difference between **Spring AOP** and **AspectJ**:
-
-- **AspectJ**: A full-fledged language extension created by Xerox PARC. It modifies compiled `.class` files directly using **Bytecode Weaving** (Compile-Time Weaving or Load-Time Weaving via a JVM `-javaagent`). AspectJ can intercept private methods, field reads/writes, static initializers, and direct constructor invocations (`new`).
-- **Spring AOP**: A lightweight, **pure Java runtime proxy framework**. It requires no special compiler or JVM agent. It creates dynamic wrapper proxies around Spring beans.
-
-Because Spring AOP is proxy-based, it has strict operational boundaries:
-1. **It can ONLY intercept public method calls on Spring-managed beans.** It cannot intercept private, protected, or package-private methods.
-2. **It CANNOT intercept calls on objects created with `new`** outside the Spring container.
-3. **It CANNOT intercept `final` methods or methods in `final` classes** when using CGLIB subclassing.
+Spring AOP does not rewrite your `.class` files on disk. Instead, it creates **runtime proxies** around Spring beans. Every external call hits the proxy first, passes through the matching interceptor chain, and then delegates to the target object.
 
 ```mermaid
 flowchart LR
-    Caller["Client / Controller"] --> Proxy["Spring AOP Proxy (CGLIB / ByteBuddy)"]
-    
-    subgraph "Advised Interceptor Chain"
-        Proxy --> Advice1["1. Security Advice (Pre-Check)"]
-        Advice1 --> Advice2["2. Metrics Timer (Start)"]
-        Advice2 --> Target["3. Real Target Bean (Business Logic)"]
-        Target --> Advice2End["4. Metrics Timer (Stop)"]
-        Advice2End --> Advice1End["5. Security Audit Complete"]
+    Caller["Caller (Controller or Bean)"] --> Proxy["Spring AOP Proxy (CGLIB or JDK)"]
+    subgraph Chain["Interceptor Chain"]
+        Proxy --> A1["Before / Around Entry"]
+        A1 --> Target["Target Bean Method"]
+        Target --> A2["Around Exit / After Advice"]
     end
-    
-    Advice1End --> Caller
+    A2 --> Caller
 ```
+
+Spring creates proxies using one of two mechanisms:
+
+### JDK Dynamic Proxy (Interface-Based)
+- Built into the JDK (`java.lang.reflect.Proxy`).
+- Generates a proxy class at runtime that implements the **same Java interfaces** as the target bean.
+- Only methods declared on those interfaces can be intercepted, and you must inject the bean by its interface type (injecting the concrete class fails because the proxy is not a subclass of it).
+
+### CGLIB Proxy (Subclass-Based)
+- Embedded inside `spring-core` (Spring repackages CGLIB internally).
+- Generates a runtime **subclass** of the target bean and overrides non-final methods to delegate through the interceptor chain.
+- Works on classes that do not implement any interface and allows injecting by concrete class type.
+- **Limitations**: Cannot subclass a `final` class, and cannot override `final`, `private`, or `static` methods.
+
+In **Spring Boot**, `spring.aop.proxy-target-class` defaults to `true`, meaning Spring Boot uses **CGLIB proxies by default** even when a bean implements an interface. You can switch back to JDK proxies for interface-backed beans by setting `spring.aop.proxy-target-class=false` in `application.properties`.
+
+### Spring AOP vs. Full AspectJ Weaving
+
+Because Spring AOP relies on runtime proxies, it covers the vast majority of enterprise use cases (`@Transactional`, `@Cacheable`, `@Async`, logging, metrics) with minimal setup. However, it has structural boundaries compared to full AspectJ:
+
+| Capability | Spring AOP (Runtime Proxies) | Full AspectJ (Bytecode Weaving) |
+| :--- | :--- | :--- |
+| **Weaving mechanism** | Runtime JDK or CGLIB proxies | Compile-time (`ajc`), post-compile, or load-time (`-javaagent`) bytecode modification |
+| **Supported join points** | Method execution on Spring-managed beans only | Methods, constructors, field reads/writes, static initializers, exception handlers |
+| **Private / `final` methods** | Not intercepted | Intercepted |
+| **Objects created with `new`** | Not intercepted (not managed by Spring) | Intercepted (useful for domain entities, e.g. `@Configurable`) |
+| **Self-invocation (`this.foo()`)** | Bypasses proxy | Works, because advice is woven directly into the method bytecode |
+| **Build and runtime setup** | Just add `spring-boot-starter-aop` | Requires `aspectj-maven-plugin` or JVM load-time weaving agent |
+
+Stick with Spring AOP unless you specifically need to advise domain objects created with `new`, private helpers, or field access.
 
 ---
 
 ## The Self-Invocation Trap
 
-The single most common bug in Spring enterprise applications is the **Self-Invocation Trap**.
-
-Consider this service:
+Because Spring AOP wraps the target bean in an outer proxy, calling another method on `this` inside the same class **bypasses the proxy completely**:
 
 ```java
 @Service
 public class OrderProcessingService {
 
-    public void processBatchOrders(List<Order> orders) {
+    public void processBatch(List<Order> orders) {
         for (Order order : orders) {
-            // CALLING INTERNAL METHOD ON 'this':
-            this.executeSingleOrder(order); 
+            // Calls the raw target instance via 'this', bypassing the proxy
+            this.executeSingleOrder(order);
         }
     }
 
-    @Transactional // THIS ANNOTATION DOES NOT RUN!
-    @Auditable
+    @Transactional
+    @Loggable
     public void executeSingleOrder(Order order) {
-        // Database queries execute WITHOUT a transaction!
-        // No audit logs are emitted!
+        // Neither @Transactional nor @Loggable runs when called from processBatch()
+        orderRepository.save(order);
     }
 }
 ```
 
-### Why It Fails Under the Hood
-
-When an external controller calls `orderProcessingService.processBatchOrders(orders)`:
-1. The call passes through the outer **Spring AOP Proxy**.
-2. The proxy delegates execution to the real target object's `processBatchOrders()` method.
-3. Inside `processBatchOrders()`, the method invokes `this.executeSingleOrder(order)`.
-4. In Java, **`this` points directly to the raw, unproxied target instance on the JVM thread stack!**
-5. The call bypasses the Spring proxy completely. The interceptor chain is never invoked, meaning `@Transactional`, `@Async`, `@Cacheable`, and custom aspects **silently fail to execute**!
+When a controller invokes `orderProcessingService.processBatch(orders)`, the call enters the CGLIB proxy, which delegates to the raw `OrderProcessingService` instance. Inside `processBatch`, `this` refers to that raw target object, not the proxy. As a result, `this.executeSingleOrder(order)` jumps straight to the method body without entering the transaction or logging interceptors.
 
 ```mermaid
 sequenceDiagram
-    participant Controller as HTTP Controller
+    participant Controller as OrderController
     participant Proxy as Spring CGLIB Proxy
-    participant Target as OrderProcessingService (Target)
+    participant Target as OrderProcessingService (Raw Target)
 
-    Controller->>Proxy: processBatchOrders()
-    Proxy->>Target: processBatchOrders()
-    Note over Target: Target calls this.executeSingleOrder() DIRECTLY!
-    Note over Target: PROXY IS BYPASSED! @Transactional & @Auditable IGNORED!
-    Target-->>Proxy: Returns
-    Proxy-->>Controller: Completed without transactional safety!
+    Controller->>Proxy: processBatch(orders)
+    Proxy->>Target: processBatch(orders)
+    Note over Target: Calls this.executeSingleOrder(order) directly
+    Note over Target: Proxy bypassed, so @Transactional and @Loggable do not run
+    Target-->>Proxy: returns
+    Proxy-->>Controller: returns
 ```
 
-### How to Fix the Self-Invocation Trap
+### Practical Ways to Fix Self-Invocation
 
-1. **Refactoring into Separate Beans (Best Practice)**: Extract `executeSingleOrder()` into a dedicated `OrderExecutionService` and inject it. This preserves clean Single Responsibility principles.
-2. **Self-Injection via ObjectProvider**:
-   ```java
-   @Service
-   public class OrderProcessingService {
-       private final ObjectProvider<OrderProcessingService> selfProvider;
-
-       public OrderProcessingService(ObjectProvider<OrderProcessingService> selfProvider) {
-           this.selfProvider = selfProvider;
-       }
-
-       public void processBatchOrders(List<Order> orders) {
-           // Invokes through the proxy!
-           OrderProcessingService proxy = selfProvider.getObject();
-           for (Order order : orders) {
-               proxy.executeSingleOrder(order); // Interceptors run successfully!
-           }
-       }
-   }
-   ```
-
----
-
-## The 5 Advice Types in Spring AOP
-
-Spring AOP provides five specialized advice types. Always choose the least powerful advice that satisfies your requirement:
-
-| Advice | Annotation | Execution Timing | Primary Use Case |
-| :--- | :--- | :--- | :--- |
-| **Before** | `@Before` | Runs before the target method executes. Cannot prevent execution unless it throws an exception. | Input validation, permission authorization checks. |
-| **After Returning** | `@AfterReturning` | Runs **only if** the target method returns normally (no unhandled exception). | Emitting success events, caching returned results. |
-| **After Throwing** | `@AfterThrowing` | Runs **only if** the target method exits by throwing an exception. | Alerting, error metric logging, error notification. |
-| **After (Finally)** | `@After` | Runs regardless of whether the target returned normally or threw an exception. | Resource cleanup, telemetry finalize. |
-| **Around** | `@Around` | **The most powerful advice**. Wraps the entire invocation. Controls whether, when, and how many times `proceed()` is called. | Performance profiling, retries, distributed tracing, transaction demarcations. |
-
----
-
-## Building a Production Distributed Tracing & Audit Aspect
-
-Here is an industrial-grade AOP aspect implementing a custom `@AuditExecution` annotation that logs method latency, captures user identity, masks sensitive parameters, and records metrics.
-
-### Step 1: Define the Marker Annotation
+1. **Extract a dedicated collaborator (recommended)**: Move `executeSingleOrder` into a separate `SingleOrderExecutor` bean and inject it into `OrderProcessingService`. Calls from `OrderProcessingService` to `SingleOrderExecutor` go through `SingleOrderExecutor`'s proxy naturally, and each class stays focused.
+2. **Self-lookup with `ObjectProvider<T>`**: When splitting the class is not practical, inject an `ObjectProvider` for the bean itself so you fetch the proxy without creating a circular constructor dependency:
 
 ```java
-package com.enterprise.audit;
+@Service
+public class OrderProcessingService {
+    private final ObjectProvider<OrderProcessingService> selfProvider;
+
+    public OrderProcessingService(ObjectProvider<OrderProcessingService> selfProvider) {
+        this.selfProvider = selfProvider;
+    }
+
+    public void processBatch(List<Order> orders) {
+        OrderProcessingService proxy = selfProvider.getObject();
+        for (Order order : orders) {
+            proxy.executeSingleOrder(order); // Goes through the proxy
+        }
+    }
+
+    @Transactional
+    @Loggable
+    public void executeSingleOrder(Order order) {
+        orderRepository.save(order);
+    }
+}
+```
+
+3. **`AopContext.currentProxy()`**: With `@EnableAspectJAutoProxy(exposeProxy = true)`, you can cast `AopContext.currentProxy()` to your service type. Most teams avoid this because it couples business logic directly to Spring AOP's thread-local proxy holder and fails in plain unit tests.
+
+---
+
+## The Five Advice Types
+
+Choose the narrowest advice type that solves the problem instead of defaulting to `@Around` for everything:
+
+| Advice | Annotation | When It Runs | Typical Use Case |
+| :--- | :--- | :--- | :--- |
+| **Before** | `@Before` | Before target method execution. Cannot stop execution except by throwing an exception. | Permission checks, argument validation |
+| **After Returning** | `@AfterReturning` | Only if the target method completes normally. Can inspect the return value via `returning = "result"`. | Emitting domain events, logging successful outcomes |
+| **After Throwing** | `@AfterThrowing` | Only if the target method throws an exception. Can inspect via `throwing = "ex"`. | Error counters, alerting (does not swallow the exception) |
+| **After (Finally)** | `@After` | Always runs after method exit, whether normal or exceptional. | Cleanup, MDC context clearing |
+| **Around** | `@Around` | Wraps the invocation completely. Decides whether, when, and with what arguments `proceed()` runs. | Latency profiling, retries, caching, transactions |
+
+---
+
+## Creating a Custom `@Loggable` Annotation
+
+A common real-world use of Spring AOP is a declarative `@Loggable` annotation that records method execution time, optionally logs arguments, flags slow calls, and logs failures without touching business code.
+
+First, add `spring-boot-starter-aop` to your build (in Spring Boot, `AopAutoConfiguration` automatically activates AspectJ proxying as soon as `spring-boot-starter-aop` is on the classpath, so you do not need to add `@EnableAspectJAutoProxy` manually).
+
+### Defining the `@Loggable` Annotation
+
+```java
+package com.example.aop;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -203,16 +253,18 @@ import java.lang.annotation.Target;
 
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
-public @interface AuditExecution {
-    String action();
-    boolean maskSensitiveData() default false;
+public @interface Loggable {
+    boolean includeArgs() default false;
+    long slowThresholdMs() default 500;
 }
 ```
 
-### Step 2: Implement the Aspect
+Using `RetentionPolicy.RUNTIME` is required because Spring AOP inspects annotations at runtime via reflection.
+
+### Implementing `LoggingAspect` with `@Pointcut` and `@Around`
 
 ```java
-package com.enterprise.audit;
+package com.example.aop;
 
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -224,128 +276,103 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
-import java.lang.reflect.Method;
+import java.util.Arrays;
 
 @Aspect
 @Component
-@Order(10) // Explicit precedence in the aspect chain
-public class AuditAspect {
-    private static final Logger log = LoggerFactory.getLogger(AuditAspect.class);
+@Order(10)
+public class LoggingAspect {
+    private static final Logger log = LoggerFactory.getLogger(LoggingAspect.class);
 
-    // Named Pointcut: Selects any method carrying our custom annotation
-    @Pointcut("@annotation(auditAnnotation)")
-    public void auditableMethod(AuditExecution auditAnnotation) {}
+    @Pointcut("@annotation(loggable)")
+    public void annotatedWithLoggable(Loggable loggable) {}
 
-    @Around(value = "auditableMethod(auditAnnotation)", argNames = "joinPoint,auditAnnotation")
-    public Object profileAndAudit(ProceedingJoinPoint joinPoint, AuditExecution auditAnnotation) throws Throwable {
-        long startTime = System.nanoTime();
-        String actionName = auditAnnotation.action();
+    @Around(value = "annotatedWithLoggable(loggable)", argNames = "joinPoint,loggable")
+    public Object logExecution(ProceedingJoinPoint joinPoint, Loggable loggable) throws Throwable {
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
-        Method method = signature.getMethod();
-        String className = method.getDeclaringClass().getSimpleName();
+        String methodLabel = signature.getDeclaringType().getSimpleName() + "." + signature.getName();
 
-        log.info("[AUDIT-START] Action={} Method={}.{}", actionName, className, method.getName());
-
-        Object result;
-        try {
-            // CRUCIAL: Must call proceed() to let the real business logic execute!
-            result = joinPoint.proceed();
-        } catch (Throwable ex) {
-            long durationMs = (System.nanoTime() - startTime) / 1_000_000;
-            log.error("[AUDIT-FAILURE] Action={} Duration={}ms Error={}", 
-                actionName, durationMs, ex.getMessage());
-            
-            // Mandatory: Never swallow exceptions in transparent instrumentation aspects!
-            throw ex; 
+        if (loggable.includeArgs()) {
+            log.info("Entering {} args={}", methodLabel, Arrays.toString(joinPoint.getArgs()));
+        } else {
+            log.debug("Entering {}", methodLabel);
         }
 
-        long durationMs = (System.nanoTime() - startTime) / 1_000_000;
-        log.info("[AUDIT-SUCCESS] Action={} Duration={}ms", actionName, durationMs);
-        
-        return result;
+        long startNanos = System.nanoTime();
+        try {
+            // Invoke the next interceptor or the real target method
+            Object result = joinPoint.proceed();
+            long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
+
+            if (elapsedMs >= loggable.slowThresholdMs()) {
+                log.warn("Slow execution: {} completed in {} ms", methodLabel, elapsedMs);
+            } else {
+                log.info("Completed {} in {} ms", methodLabel, elapsedMs);
+            }
+            return result;
+        } catch (Throwable ex) {
+            long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
+            log.error("Failed {} after {} ms: {}", methodLabel, elapsedMs, ex.getMessage());
+            // Always rethrow in observational aspects so callers and transactions react properly
+            throw ex;
+        }
     }
 }
 ```
 
-### Step 3: Enable AspectJ Auto-Proxying
-
-In your Spring configuration:
+### Applying `@Loggable` to a Service
 
 ```java
-@Configuration
-@EnableAspectJAutoProxy(exposeProxy = true)
-public class AopConfig {
+@Service
+public class PaymentService {
+
+    @Loggable(includeArgs = false, slowThresholdMs = 300)
+    public PaymentReceipt charge(String orderId, BigDecimal amount) {
+        // Sensitive arguments stay out of logs because includeArgs = false
+        return gateway.authorize(orderId, amount);
+    }
 }
 ```
 
+> [!WARNING]
+> Be careful with `includeArgs = true` on methods accepting passwords, payment tokens, or PII. Defaulting `includeArgs` to `false` prevents sensitive data from leaking into log aggregators by accident.
+
 ---
 
-## Aspect Ordering and the Onion Precedence Model
+## Aspect Ordering
 
-In enterprise applications, a single method is often targeted by multiple aspects simultaneously:
-- A Security Aspect checking JWT roles.
-- A Transaction Aspect (`@Transactional`) managing the database connection.
-- An Audit Logging Aspect recording metrics.
+When multiple aspects advise the same method (for example, security checks, timing logs, and `@Transactional`), execution order matters.
 
-**What order do they execute in?**
+If `@Transactional` runs *before* your security check, Spring checks out a database connection from HikariCP and opens a transaction before discovering that the caller lacks permission. Under load or a burst of unauthorized traffic, that wastes database connections.
 
-If the Transaction Aspect runs before the Security Aspect, the application **opens an expensive database connection from the HikariCP pool before verifying whether the user is even authorized!** If the user is unauthenticated, a database connection was wasted.
-
-Spring models the execution order as an **Onion**:
+Spring executes multiple aspects like concentric layers of an onion, controlled by `@Order(int)` (or implementing `Ordered`):
+- **Lower numbers have higher precedence**: `@Order(1)` runs **first** on the way in, and **last** on the way out.
+- By default, `@EnableTransactionManagement` uses `Ordered.LOWEST_PRECEDENCE` (`Integer.MAX_VALUE`), so custom aspects with small positive orders (like `@Order(1)` or `@Order(10)`) automatically wrap transactions on the outside.
 
 ```mermaid
 flowchart TD
-    subgraph "Aspect Ordering Chain (Inbound vs Outbound)"
-        In["Incoming Request"] --> A1["@Order(1): SecurityAspect (Before)"]
-        A1 --> A2["@Order(2): MetricsAspect (Before)"]
-        A2 --> A3["@Order(3): TransactionAspect (Begin TX)"]
-        
-        A3 --> Target["Target Service Method"]
-        
-        Target --> A3Out["@Order(3): TransactionAspect (Commit/Rollback)"]
-        A3Out --> A2Out["@Order(2): MetricsAspect (Stop Timer)"]
-        A2Out --> A1Out["@Order(1): SecurityAspect (Audit Log)"]
-        A1Out --> Ret["Return to Caller"]
-    end
+    In["Incoming Call"] --> SecIn["@Order(1) SecurityAspect: Check Permissions"]
+    SecIn --> LogIn["@Order(10) LoggingAspect: Start Timer"]
+    LogIn --> TxIn["TransactionInterceptor: Begin TX"]
+    TxIn --> Target["Target Service Method"]
+    Target --> TxOut["TransactionInterceptor: Commit or Rollback"]
+    TxOut --> LogOut["@Order(10) LoggingAspect: Log Elapsed Time"]
+    LogOut --> SecOut["@Order(1) SecurityAspect: Exit"]
+    SecOut --> Ret["Return to Caller"]
 ```
-
-To enforce execution order, annotate your aspect classes with Spring's **`@Order(N)`**:
-- **Lowest value runs FIRST on the way in** (`@Order(1)` executes before `@Order(2)`).
-- **Lowest value runs LAST on the way out** (the outer layer of the onion wraps everything).
-
-> [!IMPORTANT]
-> Always enforce `@Order` on custom aspects. Ensure that **Security Aspects run first (`@Order(1)`)**, **Telemetry/Profiling Aspects run second (`@Order(10)`)**, and **Transaction Aspects run innermost (`@Order(100)`)**.
 
 ---
 
-## Senior Engineer Interview Crucible
+## Interview Questions
 
-### What is the fundamental operational difference between Spring AOP and full AspectJ?
-Spring AOP is a runtime proxy framework implemented in pure Java. It creates dynamic CGLIB or JDK dynamic proxies that wrap Spring beans in the `ApplicationContext`. It can only intercept public method executions on managed beans, cannot advise self-invocations, and requires no custom compiler.
+### What is the difference between a JDK Dynamic Proxy and a CGLIB proxy in Spring AOP?
+A JDK Dynamic Proxy implements the target bean's Java interfaces at runtime using `java.lang.reflect.Proxy`, so it only intercepts interface methods and requires callers to inject the interface type. A CGLIB proxy generates a runtime subclass of the target class, so it works without interfaces and supports concrete class injection, but it cannot proxy `final` classes or intercept `final`, `private`, or `static` methods. Spring Boot defaults to CGLIB (`spring.aop.proxy-target-class=true`).
 
-AspectJ is a full language extension that performs bytecode weaving (Compile-Time Weaving, Post-Compile Weaving, or Load-Time Weaving via a JVM `-javaagent`). It modifies bytecode directly, allowing it to advise private methods, constructors, field accesses, static initializers, and arbitrary objects created with `new`, with zero runtime proxy overhead.
+### Why does self-invocation break `@Transactional` and custom aspects in Spring AOP, and how should you fix it?
+Spring AOP intercepts calls through a proxy wrapping the target bean. When method A inside the bean calls `this.methodB()`, `this` references the raw target object rather than the proxy, so the interceptor chain never runs. The cleanest fix is moving `methodB()` into a separate collaborating service bean so the call crosses a proxy boundary. If refactoring is not feasible, inject `ObjectProvider<MyService>` and invoke `selfProvider.getObject().methodB()`.
 
-### Explain the "Self-Invocation Problem" in Spring AOP, why it silently breaks @Transactional, and how to solve it architecturally.
-Spring AOP intercepts calls by wrapping the target bean in a dynamic proxy. When an external caller invokes a method on the bean, the invocation passes through the proxy, executing transaction advice before delegating to the target.
+### When would you need full AspectJ instead of Spring AOP?
+Use Spring AOP for normal method interception on Spring beans (transactions, logging, security, caching). Consider full AspectJ bytecode weaving only when you must advise join points Spring proxies cannot reach: objects instantiated directly with `new` (such as JPA entities), `private` or `final` methods, constructors, or field reads and writes, or when you must advise self-invocations without refactoring.
 
-When Method A inside a target bean invokes Method B on `this` (`this.methodB()`), the invocation is executed directly on the raw memory reference of the target instance on the thread stack. It completely bypasses the outer Spring proxy. Because the proxy is bypassed, Method B's `@Transactional` annotation is never detected, and its SQL statements run without a transactional context.
-
-To solve it:
-1. **Refactor**: Extract Method B into a separate Spring service bean and inject it into the caller (Recommended).
-2. **Self-Injection**: Inject an `ObjectProvider<Self>` into the bean and call `selfProvider.getObject().methodB()`, forcing the call through the proxy.
-
-### Compare the 5 advice types in Spring AOP: when would you choose @AfterReturning over @Around?
-- `@Before`: Runs before target execution; cannot stop execution unless it throws an exception.
-- `@AfterReturning`: Runs only after the target method returns normally; receives the returned value.
-- `@AfterThrowing`: Runs only when the target throws an unhandled exception.
-- `@After`: Runs finally, regardless of normal or exceptional completion.
-- `@Around`: Surrounds method execution; controls if and when `proceed()` is called.
-
-You should choose `@AfterReturning` over `@Around` when your aspect only needs to **passively observe or inspect a successful return value** (such as publishing a domain event or auditing an order completion). `@AfterReturning` is less error-prone because it cannot accidentally swallow exceptions, does not require handling `ProceedingJoinPoint.proceed()`, and makes the single-direction intent explicit.
-
-### If both a Security Aspect and a Transaction Aspect advise the same service method, how do you enforce that Security executes before the Transaction opens, and why is this critical for performance?
-You enforce execution order by applying the **`@Order(N)`** annotation to the aspect classes (or having them implement `Ordered`). Lower numerical values have higher precedence on the inbound request.
-
-You should assign the Security Aspect a lower order value (e.g., `@Order(1)`) than the Transaction Aspect (e.g., `@Order(100)`).
-
-This is critical for performance because if the Transaction Aspect ran first, the application would acquire a physical database connection from the HikariCP pool and begin a database transaction before the caller's credentials or roles were evaluated. If the Security Aspect subsequently threw an `AccessDeniedException`, an expensive database connection was checked out and held pointlessly. Running Security first rejects unauthorized requests immediately at zero database cost.
+### When should you choose `@AfterReturning` instead of `@Around`?
+Choose `@AfterReturning` when you only need to observe a successful return value (for instance, publishing an event or recording a success metric). With `@Around`, you are responsible for calling `joinPoint.proceed()`, returning its result, and rethrowing exceptions correctly. Using `@AfterReturning` eliminates those failure modes and makes the aspect's read-only intent immediately obvious.

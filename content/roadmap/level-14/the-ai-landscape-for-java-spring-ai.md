@@ -1,125 +1,198 @@
-# The AI Landscape for Java: Spring AI
+---
+title: "The AI Landscape for Java: Spring AI"
+description: "How Spring AI brings portable model abstractions, prompt templates, structured output converters, and multi-provider integration to Spring Boot 3 applications."
+category: "level-14"
+date: "2026-10-29T10:00:00Z"
+---
 
-For the past decade, the machine learning and generative AI landscape has been dominated by Python. Data scientists and AI researchers train weights, publish checkpoints, and build proof-of-concept prototypes in Jupyter notebooks using PyTorch and Hugging Face.
+Most model training, fine-tuning, and research tooling lives in Python. PyTorch, Hugging Face Transformers, and notebook workflows dominate that side of the stack, and for good reason.
 
-However, in the enterprise, **production systems run on Java**.
+Production business systems are a different story. Core banking ledgers, order management pipelines, insurance underwriting engines, and healthcare platforms mostly run on the JVM, with Spring Boot at the center of many of them. When a team needs to summarize support tickets, extract line items from supplier invoices, or answer questions over internal runbooks, rewriting the backend in Python or standing up a fragile Python sidecar for every LLM call rarely makes sense. You want LLM orchestration sitting right next to your existing domain services, database transactions, Spring Security filters, and Micrometer metrics.
 
-Core banking engines, high-frequency trading platforms, healthcare records, ERP systems, and e-commerce checkout pipelines are built on Java and Spring Boot. When an enterprise wants to incorporate Large Language Models (LLMs) into production workflows—automating loan decisions, summarizing customer support tickets, or triaging insurance claims—rewriting entire backends in Python is out of the question.
+Early Java integrations meant hand-rolling HTTP requests with `RestClient` or `WebClient`, pasting JSON payloads together, and parsing provider-specific response formats. Every vendor used slightly different schemas for messages, streaming chunks, tool definitions, and token counts.
 
-Historically, Java developers were forced to interact with LLMs by constructing raw HTTP requests, manually formatting JSON strings, and parsing unstructured text responses.
-
-The modern cloud-native solution is **Spring AI**. Designed with the same architectural philosophy that made Spring ubiquitous, Spring AI provides portable, idiomatic abstractions that bring foundation models, vector databases, and semantic search directly into the Java enterprise ecosystem.
+**Spring AI** solves that integration problem using the same pattern Spring has applied to databases and messaging for two decades: put clean, portable Java interfaces in front of vendor-specific APIs, and let Spring Boot auto-configuration handle the plumbing.
 
 ---
 
-## The Core Philosophy of Spring AI
+## The GenAI Shift for Java Engineers
 
-Spring's greatest strength has always been its ability to **abstract infrastructure behind portable interfaces**:
-- `PlatformTransactionManager` abstracts Hibernate, JPA, and JDBC transactions.
-- Spring Data abstracts MongoDB, PostgreSQL, and Cassandra under common repository interfaces.
+Integrating a Large Language Model into a Spring Boot service does not require becoming a machine learning researcher. In most enterprise teams, the split of responsibilities is straightforward:
 
-**Spring AI applies this exact same philosophy to Generative AI:**
+- **Model providers and ML teams** train foundation models, host GPU inference clusters, and expose HTTP or gRPC endpoints.
+- **Java backend engineers** own everything around the model call: prompt assembly, context retrieval, structured deserialization, authorization, audit logging, retries, latency budgets, and cost controls.
+
+That second layer is where most real-world AI projects succeed or fail. Calling an LLM endpoint takes ten lines of code; making that call reliable, observable, secure against prompt injection, and bounded in cost under production traffic is standard backend engineering. Java 21 (especially records, pattern matching, and virtual threads for blocking I/O) and Spring Boot 3 fit this workload well.
+
+---
+
+## Spring AI Architecture: Models, Prompts, and Output Converters
+
+Spring AI mirrors the design of Spring Data and Spring Integration. Your application code talks to vendor-neutral abstractions, while provider starters handle serialization, authentication, and HTTP transport behind the scenes.
 
 ```mermaid
 flowchart TD
-    AppCode["Your Spring Boot Application"] --> ChatClient["Spring AI ChatClient (Fluent Abstraction)"]
-    ChatClient --> ChatModel["ChatModel Interface"]
+    App["Spring Boot Service"] --> Client["ChatClient (Fluent API + Advisors)"]
+    Client --> Model["ChatModel / StreamingChatModel"]
 
-    subgraph Providers["Pluggable Foundation Model Adapters"]
-        OpenAI["OpenAI (GPT-4o)"]
-        Anthropic["Anthropic (Claude 3.5 Sonnet)"]
-        Gemini["Google (Gemini 1.5 Pro)"]
-        Ollama["Local Ollama (Llama 3 / Mistral)"]
-        Bedrock["AWS Bedrock (Amazon Titan)"]
+    subgraph Providers["Provider Starters (Spring AI 1.0 GA)"]
+        OpenAI["OpenAI (GPT-4o / GPT-4o-mini)"]
+        Anthropic["Anthropic (Claude Sonnet)"]
+        Gemini["Vertex AI Gemini"]
+        Ollama["Ollama (Local Llama / Qwen / Mistral)"]
     end
 
-    ChatModel --> OpenAI
-    ChatModel --> Anthropic
-    ChatModel --> Gemini
-    ChatModel --> Ollama
-    ChatModel --> Bedrock
+    Model --> OpenAI
+    Model --> Anthropic
+    Model --> Gemini
+    Model --> Ollama
 ```
 
-### The Architectural Advantage
+### Models: `ChatModel`, `StreamingChatModel`, and `EmbeddingModel`
 
-By coding against Spring AI's `ChatClient` and `ChatModel` interfaces:
-- Your application logic remains completely decoupled from any single proprietary AI vendor.
-- You can develop locally for free using open-source models (like Llama 3 running on **Ollama** in Docker), deploy to staging using **OpenAI**, and run in production using **Azure OpenAI** or **AWS Bedrock** simply by changing a dependency in `pom.xml` and an endpoint in `application.yml`.
-- Zero lines of Java business logic need to be rewritten when switching model providers.
+At the lowest portable layer sit the model interfaces:
 
----
+- `ChatModel` executes synchronous request-response prompts (`ChatResponse call(Prompt prompt)`).
+- `StreamingChatModel` returns a reactive `Flux<ChatResponse>` so tokens can be forwarded to clients as they arrive.
+- `EmbeddingModel` turns text into float arrays (vectors) for semantic search and retrieval-augmented generation (RAG).
+- Image, audio transcription, and text-to-speech models follow the same `Model<TReq, TRes>` contract.
 
-## Anatomy of the Spring AI Abstraction Layer
+You can inject `ChatModel` directly when you want low-level control, though most application code works through the higher-level fluent **`ChatClient`**. `ChatClient` wraps a `ChatModel`, supports reusable defaults (system instructions, options, tools), and lets you plug in **Advisors**, which are interceptors that wrap every prompt and response for cross-cutting concerns such as conversation memory, RAG context injection, or structured logging.
 
-Spring AI models conversations using standardized object-oriented domain classes:
+### Prompts, Messages, and Options
+
+A `Prompt` bundles an ordered list of typed `Message` objects together with optional runtime `ChatOptions` (model override, `temperature`, `maxTokens`, `topP`, stop sequences):
+
+- `SystemMessage` defines the role, constraints, and output rules that govern the assistant's behavior.
+- `UserMessage` holds the current user request or input payload (and optional binary media such as images or PDFs for multimodal models).
+- `AssistantMessage` represents prior model replies when replaying multi-turn conversation history.
+- `ToolResponseMessage` feeds the result of a Java tool/function execution back to the model during tool-calling loops.
+
+Because LLM HTTP APIs are stateless, multi-turn chat works by sending the message sequence (`SystemMessage`, `UserMessage`, `AssistantMessage`, `UserMessage`, ...) on every request.
 
 ```mermaid
 flowchart LR
-    subgraph PromptConstruct["Prompt Assembly"]
-        SysMsg["SystemMessage: Sets AI Persona & Behavioral Guardrails"]
-        UserMsg["UserMessage: The end-user query or input payload"]
-        Prompt["Prompt: Encapsulates Messages & ChatOptions"]
-        
-        SysMsg --> Prompt
-        UserMsg --> Prompt
+    subgraph Input["Prompt Assembly"]
+        Sys["SystemMessage (Rules & Persona)"]
+        Usr["UserMessage (Input & Template Vars)"]
+        Opts["ChatOptions (Model, Temp, MaxTokens)"]
+        Prompt["Prompt"]
+        Sys --> Prompt
+        Usr --> Prompt
+        Opts --> Prompt
     end
 
-    subgraph Execution["Model Execution"]
-        Prompt --> ChatModelExec["ChatModel.call(prompt)"]
+    subgraph Execution["Model Call"]
+        Prompt --> Call["ChatClient / ChatModel"]
+        Call --> Resp["ChatResponse (Generation + Usage)"]
     end
 
-    subgraph ResponseStructure["ChatResponse Structure"]
-        ChatModelExec --> ChatResp["ChatResponse"]
-        ChatResp --> Gen["Generation: The Assistant Response Text"]
-        ChatResp --> Meta["Usage Metadata: Prompt Tokens, Completion Tokens, Cost"]
+    subgraph Output["Structured Output Conversion"]
+        Resp --> Conv["StructuredOutputConverter"]
+        Conv --> Record["Java Record / List / Map"]
     end
 ```
 
-### The Core Message Types
+### From Output Parsers to Structured Output Converters
 
-- **`SystemMessage`:** Defines the AI's persona, operational boundaries, security guardrails, and expected output format. The system message is invisible to standard end-users but guides the LLM's reasoning:
-  ```java
-  new SystemMessage("You are a senior compliance auditor for a multinational bank. Answer strictly in JSON.")
-  ```
-- **`UserMessage`:** The actual prompt, question, or payload provided by the customer or client application.
-- **`AssistantMessage`:** Historical responses generated by the model. Used when constructing multi-turn conversational memory.
-- **`ChatOptions`:** Runtime execution parameters:
-  - `temperature` (0.0 to 1.0): Controls creativity. Set to `0.0` for deterministic structured facts; set to `0.7` for creative writing.
-  - `maxTokens`: Caps response length to prevent runaway billing.
+If you read older tutorials or early Spring AI milestone docs, you will see references to `OutputParser` (`BeanOutputParser`, `MapOutputParser`, `ListOutputParser`). Before the 1.0 GA release, the Spring AI team renamed this abstraction to **`StructuredOutputConverter<T>`** to reflect that it handles both directions of the contract: generating format instructions before the call and converting the model's text into Java objects afterward.
+
+Spring AI ships three built-in converters:
+
+- `BeanOutputConverter<T>` generates a JSON Schema from a Java `record` or POJO using Jackson and deserializes the response into an instance of `T` (or a generic collection via `ParameterizedTypeReference<List<T>>`).
+- `MapOutputConverter` converts a JSON object into `Map<String, Object>`.
+- `ListOutputConverter` asks for a comma-separated list and converts it into `List<String>`.
+
+With `ChatClient`, you rarely instantiate `BeanOutputConverter` by hand; calling `.entity(MyRecord.class)` wires it automatically:
+
+```java
+public record TicketSummary(
+        String category,
+        String severity,
+        String conciseSummary
+) {}
+```
+
+```java
+TicketSummary summary = chatClient.prompt()
+        .system("Classify incoming customer support tickets accurately.")
+        .user(u -> u.text("Analyze this ticket:\n{body}").param("body", rawTicket))
+        .call()
+        .entity(TicketSummary.class);
+```
+
+We dig deeper into record schemas, validation, and provider-level constrained decoding in the next lesson.
 
 ---
 
-## Setting Up Spring AI in Spring Boot 3
+## Comparing Spring AI vs. LangChain4j
 
-Spring AI is supported on Spring Boot 3.2+ and Java 17+.
+Spring AI is not the only serious Java framework for LLM applications. **LangChain4j** is widely adopted in the JVM ecosystem and has been in active production use even longer. Picking between them comes down to your stack, your team's style, and how tightly you want to couple to Spring Boot.
 
-### Step 1: Add the Spring Milestone Repository and Starters
+| Dimension | Spring AI (1.0 GA+) | LangChain4j |
+| :--- | :--- | :--- |
+| **Framework coupling** | Designed for Spring Boot 3; relies heavily on Spring auto-configuration, `RestClient`/`WebClient`, and Spring properties. | Framework-agnostic core Java library; works in plain Java, Quarkus (`quarkus-langchain4j`), Helidon, Micronaut, and Spring Boot. |
+| **Primary API style** | Fluent `ChatClient` builder with `Advisor` chains, modeled after Spring's `RestClient` and `JdbcClient`. | Declarative `@AiService` Java interfaces backed by dynamic proxies, plus lower-level `ChatModel` APIs. |
+| **Observability** | First-class Micrometer metrics and OpenTelemetry tracing out of the box via Spring Boot Actuator. | Supports listeners and metrics integration, though Spring Boot Actuator integration requires extra wiring unless using Quarkus. |
+| **Model & Vector Store breadth** | Strong coverage of major enterprise providers (OpenAI, Anthropic, Azure OpenAI, AWS Bedrock, Vertex AI, Ollama, pgvector, Milvus, Chroma, Redis, Qdrant). | Very broad community ecosystem; often adds niche providers, agent patterns, and experimental features quickly. |
+| **Enterprise alignment** | Maintained under the official Spring portfolio (`org.springframework.ai`), aligned with Spring Boot release cycles and support policies. | Open-source community project with strong Quarkus/Red Hat backing and rapid iteration. |
 
-In your `pom.xml`:
+To feel the difference in developer ergonomics, compare how LangChain4j models a typed AI service using a declarative interface:
 
-```xml
-<dependencies>
-    <!-- Modern Spring AI OpenAI Starter -->
-    <dependency>
-        <groupId>org.springframework.ai</groupId>
-        <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
-        <version>1.0.0-M1</version>
-    </dependency>
-</dependencies>
+```java
+// LangChain4j declarative AiService style
+interface TicketClassifier {
+    @SystemMessage("Classify incoming customer support tickets accurately.")
+    TicketSummary classify(@UserMessage String rawTicket);
+}
 
-<repositories>
-    <repository>
-        <id>spring-milestones</id>
-        <name>Spring Milestones</name>
-        <url>https://repo.spring.io/milestone</url>
-        <snapshots>
-            <enabled>false</enabled>
-        </snapshots>
-    </repository>
-</repositories>
+TicketClassifier classifier = AiServices.builder(TicketClassifier.class)
+        .chatModel(openAiChatModel)
+        .build();
+
+TicketSummary result = classifier.classify(rawTicket);
 ```
 
-### Step 2: Configure Provider Credentials (`application.yml`)
+LangChain4j's interface-proxy approach feels similar to Spring Data repositories or Feign clients: concise and readable for straightforward service contracts. Spring AI's fluent `ChatClient` feels closer to `JdbcClient` or `RestClient`, giving you explicit per-call control over advisors, options, and templates while inheriting Spring Boot's property binding, SSL bundles, observability, and test slices without extra glue code.
+
+A practical rule of thumb: if your organization already standardizes on Spring Boot 3 and Actuator/Micrometer, **Spring AI** keeps the architecture consistent and minimizes dependency sprawl. If you run Quarkus, Micronaut, or plain Java services (or strongly prefer declarative `AiServices` interfaces), **LangChain4j** is an equally solid choice.
+
+---
+
+## Connecting to OpenAI, Anthropic, Gemini, and Local Ollama
+
+As of Spring AI 1.0.0 GA, all artifacts are published directly to Maven Central. You no longer need milestone repositories or `-M1` starter names. Start by importing the Spring AI BOM (Bill of Materials) in `pom.xml` so all model and vector-store starters stay on matching versions.
+
+### Maven BOM Setup
+
+```xml
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-bom</artifactId>
+            <version>1.0.0</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
+
+From there, add the starter for whichever provider you want to connect to. Notice that Spring AI 1.0 GA uses the `spring-ai-starter-model-*` naming convention.
+
+### OpenAI
+
+Add the starter:
+
+```xml
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-model-openai</artifactId>
+</dependency>
+```
+
+Configure `application.yml`:
 
 ```yaml
 spring:
@@ -128,18 +201,110 @@ spring:
       api-key: ${OPENAI_API_KEY}
       chat:
         options:
-          model: gpt-4o
+          model: gpt-4o-mini
           temperature: 0.2
-          max-tokens: 2000
+          max-tokens: 1500
 ```
+
+### Anthropic (Claude)
+
+Add the starter:
+
+```xml
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-model-anthropic</artifactId>
+</dependency>
+```
+
+Configure `application.yml`:
+
+```yaml
+spring:
+  ai:
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY}
+      chat:
+        options:
+          model: claude-3-7-sonnet-latest
+          temperature: 0.2
+          max-tokens: 1500
+```
+
+### Google Vertex AI Gemini
+
+For Google Cloud workloads using Vertex AI authentication (Application Default Credentials via `gcloud auth application-default login` or a Workload Identity service account), add the Vertex AI Gemini starter:
+
+```xml
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-model-vertex-ai-gemini</artifactId>
+</dependency>
+```
+
+Configure `application.yml`:
+
+```yaml
+spring:
+  ai:
+    vertex:
+      ai:
+        gemini:
+          project-id: ${GCP_PROJECT_ID}
+          location: us-central1
+          chat:
+            options:
+              model: gemini-2.0-flash
+              temperature: 0.2
+              max-output-tokens: 1500
+```
+
+### Local Models with Ollama
+
+Calling hosted cloud APIs on every local test run burns money, depends on internet connectivity, and raises compliance issues if developers paste proprietary source code or sample customer records into prompts. **Ollama** runs quantized open-weight models (such as Llama 3.2, Qwen 2.5, or Mistral) locally over a simple HTTP API.
+
+Start Ollama in Docker and pull a model:
+
+```bash
+docker run -d -v ollama_data:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
+docker exec -it ollama ollama pull llama3.2
+```
+
+Add the Ollama starter:
+
+```xml
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-starter-model-ollama</artifactId>
+</dependency>
+```
+
+Configure `application-local.yml`:
+
+```yaml
+spring:
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      init:
+        pull-model-strategy: when_missing
+      chat:
+        options:
+          model: llama3.2
+          temperature: 0.1
+          num-predict: 1024
+```
+
+Setting `pull-model-strategy: when_missing` lets Spring AI ask Ollama to pull the configured model automatically on startup during local development or Testcontainers integration tests if it is not already cached.
+
+> [!IMPORTANT]
+> If you put **multiple** model starters (for example, both OpenAI and Ollama) on the classpath at the same time, Spring Boot creates multiple `ChatModel` beans and cannot auto-configure a single default `ChatClient.Builder`. Set `spring.ai.chat.client.enabled=false` and declare explicit `@Bean` `ChatClient` instances injecting `@Qualifier("openAiChatModel")` and `@Qualifier("ollamaChatModel")` as needed (for example, to route cheap tasks to a fast model and complex reasoning to a frontier model).
 
 ---
 
-## The Modern Fluent `ChatClient` API
+## Building a Spring Boot Service with `ChatClient`
 
-In Spring AI 1.0+, the primary interface used by developers is the fluent **`ChatClient`**.
-
-You configure a `ChatClient` bean using the auto-configured `ChatClient.Builder`:
+Once a starter is configured, Spring Boot provides a `ChatClient.Builder` bean. Register a shared `ChatClient` configuration with sensible defaults, or inject `ChatClient.Builder` directly into services that need different system instructions.
 
 ```java
 package com.javahub.ai.config;
@@ -149,261 +314,106 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-public class AIConfiguration {
+public class AiConfig {
 
     @Bean
-    public ChatClient chatClient(ChatClient.Builder builder) {
+    public ChatClient codeReviewChatClient(ChatClient.Builder builder) {
         return builder
-                // Set global enterprise system prompt guardrails
                 .defaultSystem("""
-                    You are JavaHub Assistant, an expert enterprise software engineering mentor.
-                    Explain architectural concepts with focus on memory safety, concurrency, and performance.
-                    Never output code containing unescaped raw LaTeX symbols or hardcoded secrets.
-                """)
+                    You are a senior Java code reviewer.
+                    Identify concrete bugs, concurrency hazards, SQL injection risks, and resource leaks.
+                    Be concise, cite the exact line or construct at fault, and avoid stylistic nitpicks.
+                    """)
                 .build();
     }
 }
 ```
 
-### Executing Synchronous Prompt Calls
-
-Here is a Spring service analyzing code for security vulnerabilities:
+Here is a service that invokes `ChatClient`, logs the response metadata, and records prompt and completion tokens via Micrometer. Notice that in Spring AI 1.0 GA, the `Usage` interface exposes `getPromptTokens()`, `getCompletionTokens()`, and `getTotalTokens()`.
 
 ```java
 package com.javahub.ai.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.metadata.Usage;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.stereotype.Service;
 
 @Service
-public class SecurityAuditService {
+public class SecurityReviewService {
 
-    private static final Logger log = LoggerFactory.getLogger(SecurityAuditService.class);
+    private static final Logger log = LoggerFactory.getLogger(SecurityReviewService.class);
+
     private final ChatClient chatClient;
+    private final MeterRegistry meterRegistry;
 
-    public SecurityAuditService(ChatClient chatClient) {
-        this.chatClient = chatClient;
+    public SecurityReviewService(ChatClient codeReviewChatClient, MeterRegistry meterRegistry) {
+        this.chatClient = codeReviewChatClient;
+        this.meterRegistry = meterRegistry;
     }
 
-    public String auditJavaCodeSnippet(String javaSourceCode) {
-        log.info("Submitting code snippet to LLM for static security vulnerability analysis");
-
-        return chatClient.prompt()
+    public String reviewSnippet(String javaSource) {
+        ChatResponse response = chatClient.prompt()
                 .user(u -> u.text("""
-                    Review the following Java code for OWASP Top 10 vulnerabilities,
-                    SQL injection, or concurrency race conditions.
-                    
-                    Code snippet:
-                    ```java
-                    {code}
-                    ```
-                """).param("code", javaSourceCode))
+                        Review the following Java code for security vulnerabilities and concurrency bugs:
+
+                        ```java
+                        {code}
+                        ```
+                        """).param("code", javaSource))
                 .call()
-                .content();
+                .chatResponse();
+
+        if (response == null || response.getResult() == null) {
+            throw new IllegalStateException("LLM returned an empty response");
+        }
+
+        Usage usage = response.getMetadata().getUsage();
+        if (usage != null) {
+            int promptTokens = usage.getPromptTokens() != null ? usage.getPromptTokens() : 0;
+            int completionTokens = usage.getCompletionTokens() != null ? usage.getCompletionTokens() : 0;
+            int totalTokens = usage.getTotalTokens() != null ? usage.getTotalTokens() : 0;
+
+            log.info("Security review completed: promptTokens={}, completionTokens={}, totalTokens={}",
+                    promptTokens, completionTokens, totalTokens);
+
+            meterRegistry.counter("app.ai.tokens", "type", "prompt").increment(promptTokens);
+            meterRegistry.counter("app.ai.tokens", "type", "completion").increment(completionTokens);
+        }
+
+        return response.getResult().getOutput().getText();
     }
 }
 ```
 
----
+### Practical Production Guardrails
 
-## Real-Time Token Streaming with Server-Sent Events (SSE)
+Even before introducing RAG or agents, four habits prevent most early production incidents with LLM APIs:
 
-Generating large responses from LLMs can take anywhere from 5 to 20 seconds. If an enterprise web application forces a user to stare at a blank loading spinner for 15 seconds, the user assumes the application is broken.
-
-Modern AI applications stream tokens to the frontend in real time as they are generated by the foundation model.
-
-In Spring AI, streaming integrates natively with **Reactive Streams** and **Server-Sent Events (SSE)**:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Browser as Client Browser (EventSource)
-    participant Spring as Spring Boot Controller (Flux)
-    participant OpenAI as Foundation Model API (OpenAI Stream)
-
-    Browser->>Spring: GET /api/v1/ai/stream?query=Explain+Virtual+Threads
-    Spring->>OpenAI: Initiate Streaming API Call
-    
-    loop Real-Time Token Emission (every 30ms)
-        OpenAI-->>Spring: Token: "Virtual "
-        Spring-->>Browser: SSE data: "Virtual "
-        OpenAI-->>Spring: Token: "Threads "
-        Spring-->>Browser: SSE data: "Threads "
-        OpenAI-->>Spring: Token: "are "
-        Spring-->>Browser: SSE data: "are "
-    end
-    
-    OpenAI-->>Spring: Stream Completed
-    Spring-->>Browser: Complete SSE Connection
-```
-
-### Implementing the Streaming Controller
-
-```java
-package com.javahub.ai.controller;
-
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Flux;
-
-@RestController
-@RequestMapping("/api/v1/ai")
-public class StreamingAIController {
-
-    private final ChatClient chatClient;
-
-    public StreamingAIController(ChatClient chatClient) {
-        this.chatClient = chatClient;
-    }
-
-    @GetMapping(path = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> streamAIResponse(@RequestParam String prompt) {
-        // chatClient.prompt().stream() returns a reactive Flux emitting tokens as they arrive!
-        return chatClient.prompt()
-                .user(prompt)
-                .stream()
-                .content();
-    }
-}
-```
+1. **Always bound output tokens:** Configure `max-tokens` (or the provider equivalent) in `application.yml`. Unbounded generation lets a stuck repetition loop burn tokens and tie up HTTP connections.
+2. **Set explicit HTTP client timeouts:** Model APIs occasionally stall under load. Configure connect and read timeouts on the underlying `RestClient`/`WebClient` so slow upstream calls fail fast instead of exhausting your servlet or virtual thread budget.
+3. **Keep secrets and PII out of prompts unless approved:** Treat external LLM APIs like any third-party data processor. Strip secrets, redact sensitive fields where possible, or use private endpoints (Azure OpenAI, AWS Bedrock, Vertex AI, or self-hosted Ollama/vLLM) when compliance requires data residency.
+4. **Watch portability limits:** Switching providers via Spring AI keeps your Java interfaces intact, yet prompts themselves are not 100% portable. A prompt tuned for GPT-4o may behave slightly differently on Claude or Llama 3.2. Keep a small regression evaluation suite of real test inputs whenever you switch or upgrade models.
 
 ---
 
-## Local Development with Ollama (Zero API Costs)
+## Interview Questions
 
-Calling cloud LLMs (OpenAI, Anthropic) during local development and automated CI integration tests introduces challenges:
-- Monthly API billing costs accumulate rapidly.
-- Network latency slows down automated unit test suites.
-- Sending proprietary internal code or test data over public internet APIs may violate corporate compliance policies.
+### How does Spring AI let a Spring Boot service switch between OpenAI, Anthropic, Gemini, and Ollama without rewriting business logic?
 
-The enterprise solution is **Ollama**, which runs open-source foundation models (such as Meta's Llama 3 or Mistral) locally on your workstation or container cluster.
+Spring AI separates application code from provider wire protocols through the `ChatModel` and fluent `ChatClient` abstractions. Your services build vendor-neutral `Prompt` objects (composed of `SystemMessage`, `UserMessage`, and `ChatOptions`) and consume normalized `ChatResponse` objects or converted Java records. Each starter (`spring-ai-starter-model-openai`, `spring-ai-starter-model-anthropic`, `spring-ai-starter-model-vertex-ai-gemini`, `spring-ai-starter-model-ollama`) supplies a `ChatModel` implementation that translates between Spring AI's model types and that vendor's REST/gRPC API. Changing providers means swapping the starter and updating `application.yml`. In practice, you should still re-run prompt quality tests because different models respond differently to the same wording.
 
-### Step 1: Run Ollama via Docker
+### How would you decide between Spring AI and LangChain4j for a new Java project?
 
-```bash
-docker run -d -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
-docker exec -it ollama ollama run llama3
-```
+Look at the surrounding runtime and team conventions first. If the project is already built on Spring Boot 3 and uses Spring configuration properties, Actuator, Micrometer, and `RestClient`, Spring AI fits naturally with less boilerplate and first-party observability. If the team runs Quarkus, Micronaut, or lightweight non-Spring Java services, or prefers declarative interface proxies (`@AiService`), LangChain4j is often cleaner. It is also worth checking whether a specific provider, vector store, or agent feature you depend on is already mature in one library before committing.
 
-### Step 2: Use the Spring AI Ollama Starter
+### What is the role of `SystemMessage`, `UserMessage`, `AssistantMessage`, and `ToolResponseMessage` in a multi-turn conversation?
 
-```xml
-<dependency>
-    <groupId>org.springframework.ai</groupId>
-    <artifactId>spring-ai-ollama-spring-boot-starter</artifactId>
-    <version>1.0.0-M1</version>
-</dependency>
-```
+LLMs are stateless over HTTP, so every turn sends the conversation context as an ordered list of messages. `SystemMessage` sets persistent instructions, persona, and constraints. `UserMessage` carries the caller's request or data. `AssistantMessage` contains previous model responses so the model can follow what it already said. `ToolResponseMessage` carries the output of a local Java function invoked at the model's request so the model can continue reasoning with fresh data.
 
-In `application-local.yml`:
+### Why did Spring AI rename `OutputParser` to `StructuredOutputConverter`, and what does `BeanOutputConverter` actually do?
 
-```yaml
-spring:
-  ai:
-    ollama:
-      base-url: http://localhost:11434
-      chat:
-        options:
-          model: llama3
-          temperature: 0.1
-```
-
-Now your entire Spring Boot AI service runs completely offline on your developer laptop with **zero cloud API costs**.
-
----
-
-## Production Governance: Token Budgets and Cost Control
-
-Integrating LLMs into high-volume microservices introduces significant financial and operational risk:
-- An uncontrolled loop in code could fire 100,000 queries to GPT-4o, resulting in thousands of dollars in surprise cloud API charges.
-- Excessive context windows inflate latency, degrading user experience.
-
-### Tracking Token Usage Telemetry
-
-Every `ChatResponse` in Spring AI includes usage statistics:
-
-```java
-ChatResponse response = chatClient.prompt()
-        .user("Summarize enterprise security policy")
-        .call()
-        .chatResponse();
-
-if (response != null && response.getMetadata() != null) {
-    Usage usage = response.getMetadata().getUsage();
-    long promptTokens = usage.getPromptTokens();
-    long completionTokens = usage.getGenerationTokens();
-    long totalTokens = usage.getTotalTokens();
-
-    log.info("LLM Invocation Metrics: PromptTokens={}, CompletionTokens={}, TotalTokens={}",
-            promptTokens, completionTokens, totalTokens);
-
-    // Export token usage directly to Prometheus via Micrometer!
-    meterRegistry.counter("ai.tokens.prompt.total").increment(promptTokens);
-    meterRegistry.counter("ai.tokens.completion.total").increment(completionTokens);
-}
-```
-
-### Production Guardrails:
-1. **Set Hard Limits on `maxTokens`:** Never leave maximum token generation unbounded. Constrain output to the minimum necessary for the domain.
-2. **Implement Semantic Caching:** Many user queries are identical or semantically similar. Cache previous LLM answers in Redis using semantic vector similarity; return cached answers in 2 milliseconds rather than paying 2,000 milliseconds and API fees for repeat queries.
-3. **Circuit Breakers and Fallbacks:** Wrap LLM invocations in Resilience4j circuit breakers. If OpenAI or Anthropic experiences an outage, fall back to a cached rule-based response or local Ollama model.
-
----
-
-## Senior Engineer Interview Crucible
-
-### How does Spring AI abstract foundation model providers (OpenAI, Anthropic, Gemini, Ollama) to allow seamless model swapping without rewriting business code?
-
-Spring AI models interactions using standard object-oriented contracts centered around the **`ChatModel`** and **`ChatClient`** interfaces. 
-
-When your application code invokes `chatClient.prompt().user("...").call().content()`, it writes purely against framework-agnostic representations (`Prompt`, `Message`, `ChatResponse`).
-
-Under the hood, Spring AI provides dedicated provider starters (`spring-ai-openai`, `spring-ai-anthropic`, `spring-ai-ollama`, `spring-ai-bedrock`). Each starter implements `ChatModel`, translating Spring's generic `Prompt` into that specific vendor's proprietary JSON wire format and mapping vendor responses back into normalized `ChatResponse` objects. 
-
-To swap providers—for example, switching from OpenAI GPT-4o in the cloud to a self-hosted Llama 3 model on Ollama—you simply change the Maven starter dependency and update connection credentials in `application.yml`. The Java service code remains completely untouched.
-
----
-
-### Explain the purpose and interaction between SystemMessage, UserMessage, and AssistantMessage in a multi-turn chat prompt.
-
-Modern conversational LLMs operate over an array of structured message roles:
-
-- **`SystemMessage` (The Guardrails):** Establishes the model's persona, capabilities, boundaries, and formatting instructions (e.g., *"You are a senior banking advisor. Never provide legal advice. Respond only in valid JSON"*). It provides static guidance across the entire session.
-- **`UserMessage` (The Input):** Contains the dynamic request, query, or payload submitted by the human user or calling microservice.
-- **`AssistantMessage` (The Model's Output / Memory):** Contains the text previously returned by the model.
-
-**How They Interact in Multi-Turn Dialogues:**
-Because LLM APIs are stateless HTTP endpoints, they retain no internal memory of previous requests. To maintain a conversational dialogue, the application must maintain conversational state and pass the complete conversation history array on every request:
-```text
-[SystemMessage, UserMessage_1, AssistantMessage_1, UserMessage_2, AssistantMessage_2, UserMessage_3]
-```
-The model reads the interleaved sequence of user inputs and assistant replies to understand conversational context before generating the next response.
-
----
-
-### How do you stream LLM tokens to an end-user web client in real time using Spring AI and Server-Sent Events (SSE)?
-
-Generating long textual completions from foundation models can take several seconds. To deliver a responsive user experience, Spring AI supports **streaming token evaluation**:
-
-1. In the service layer, invoke `.stream()` on the fluent `ChatClient` instead of `.call()`. This calls the provider's streaming API (which transmits chunked HTTP payloads using Server-Sent Events under the hood).
-2. The method returns a reactive **`Flux<String>`** (Project Reactor), which emits discrete string tokens as soon as they are generated by the model.
-3. In the Spring WebFlux or Spring MVC `@RestController`, expose an endpoint returning `Flux<String>` with `produces = MediaType.TEXT_EVENT_STREAM_VALUE`.
-4. The client browser connects to the endpoint using the HTML5 `EventSource` API or `fetch` with a `ReadableStream`. The browser receives and renders each token in real time with minimal initial latency.
-
----
-
-### What architectural safeguards should an enterprise implement to protect against runaway API costs and high token latency when integrating LLMs into Spring Boot microservices?
-
-To govern cloud AI integration responsibly, an enterprise architecture should enforce four layers of protection:
-
-1. **Token Quotas & Strict Max Token Caps:** Never leave `max_tokens` unconfigured in `application.yml`. Bound maximum generation lengths tightly according to the use case.
-2. **Telemetry & Budget Alerting via Micrometer:** Instrument every LLM call using `Usage` metadata (`prompt_tokens`, `completion_tokens`). Export token counts to Prometheus and configure Grafana alerting thresholds to detect runaway query loops before monthly billing cycles spike.
-3. **Semantic Caching with Redis:** Deploy an in-memory vector cache. Before making an external API call, generate an embedding for the user prompt and check if a semantically identical query was answered recently. Serving answers from cache drops response time from 3,000ms to 5ms and eliminates API fees.
-4. **Timeouts and Circuit Breakers (Resilience4j):** Set explicit HTTP client timeouts (e.g., 10 seconds) on LLM calls to prevent thread starvation. Wrap calls in a circuit breaker so that if the external AI vendor suffers an outage or severe degradation, requests fail fast and fall back to local rule-based responses or cached states.
-
+The older `OutputParser` name suggested it only parsed text after a call. In reality, `StructuredOutputConverter<T>` participates both before and after the LLM request. Before the call, `BeanOutputConverter<T>` reflects over your Java class or record with Jackson to build a JSON Schema and appends formatting instructions to the prompt. After the call, it parses the returned JSON text into a strongly typed Java object using Jackson's `ObjectMapper`.

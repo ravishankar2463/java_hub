@@ -1,53 +1,36 @@
 ---
 title: "Kubernetes (K8s) for Java Devs"
-description: "Master Kubernetes for Java developers: Pods and Deployments, ClusterIP and Ingress, Spring Boot Actuator Liveness/Readiness/Startup probes, and Helm charts."
-category: "level-10"
+description: "Deploy and operate Java and Spring Boot services on Kubernetes with Deployments, Services, Ingress, ConfigMaps, Secrets, Actuator probes, graceful shutdown, CPU sizing, and Helm."
+category: "level-12"
 date: "2026-10-29T10:00:00Z"
 ---
 
-Kubernetes has become the undisputed operating system of the modern cloud. Yet to many Java engineers, Kubernetes feels like an intimidating wall of YAML indentation, esoteric networking acronyms, and frustrating deployment failures.
+Running a single Spring Boot container with `docker run` is straightforward. Running twelve microservices across dozens of nodes with rolling deployments, automatic restarts, service discovery, and secret management is where **Kubernetes (K8s)** enters the picture.
 
-Worse, blindly applying generic Kubernetes tutorials to Spring Boot applications creates severe production disasters. When developers configure probes incorrectly, Kubernetes routinely kills healthy Java pods during normal startup sequences. When rolling updates are misconfigured, zero-downtime deployments drop customer traffic. And when database health checks are placed in the wrong probe, a momentary database blip triggers cluster-wide suicide.
-
-In this guide, we will translate Kubernetes architecture into clear, senior-level Java mental models. We will master Deployments and Ingress, configure **Spring Boot Actuator Probes** properly, package scalable microservices with **Helm**, and design bulletproof zero-downtime rolling updates.
+Most Kubernetes problems that bite Java teams do not come from Kubernetes itself. They come from applying generic YAML templates to the JVM without accounting for how Java starts up, manages memory, runs parallel garbage collection, and drains HTTP connections. Understanding the core Kubernetes primitives alongside those JVM behaviors prevents the majority of production deployment outages.
 
 ---
 
 ## Core Workloads: Pods, ReplicaSets, and Deployments
 
-In Kubernetes, you never deploy standalone containers directly. You deploy through a hierarchy of declarative controllers:
+In Kubernetes, you rarely run a standalone container directly. Instead, you declare desired state through a three-layer workload hierarchy:
 
 ```mermaid
 flowchart TD
-    Deployment["Deployment (e.g., 'order-service')
-- Manages declarative rolling updates & rollbacks
-- Configures maxSurge & maxUnavailable"]
-    
-    Deployment --> RS1["ReplicaSet (Revision 1 - Old)
-(Desired Replicas: 0)"]
-    Deployment --> RS2["ReplicaSet (Revision 2 - Active)
-(Desired Replicas: 3)"]
+    Deployment["Deployment (order-service) - Rolling updates, maxSurge, maxUnavailable, rollbacks"]
+    Deployment --> RS1["ReplicaSet Revision 1 (Old) - Desired Replicas: 0"]
+    Deployment --> RS2["ReplicaSet Revision 2 (Active) - Desired Replicas: 3"]
 
-    RS2 --> Pod1["Pod 1 (10.244.1.14)
-[App Container + Optional Sidecars]"]
-    RS2 --> Pod2["Pod 2 (10.244.2.88)
-[App Container + Optional Sidecars]"]
-    RS2 --> Pod3["Pod 3 (10.244.3.42)
-[App Container + Optional Sidecars]"]
+    RS2 --> Pod1["Pod 1 (10.244.1.14) - Spring Boot Container"]
+    RS2 --> Pod2["Pod 2 (10.244.2.88) - Spring Boot Container"]
+    RS2 --> Pod3["Pod 3 (10.244.3.42) - Spring Boot Container"]
 ```
 
-### The Pod
-A Pod is the smallest deployable execution unit in Kubernetes. It encapsulates one or more tightly coupled containers sharing the same **Network Namespace** (same IP address and `localhost`) and **Storage Volumes**. In modern Java architectures, a pod typically runs a single Spring Boot application container, optionally accompanied by a lightweight sidecar (e.g., an Envoy service mesh proxy or an OpenTelemetry log shipper).
+- **Pod**: The smallest deployable unit in Kubernetes. A Pod wraps one or more tightly coupled containers that share a network namespace (one IP address, communicating over `localhost`) and shared storage volumes. For a Spring Boot service, a Pod usually contains one application container plus an optional sidecar such as an Envoy proxy or an OpenTelemetry collector. Pods are ephemeral: if a node fails, the Pod is not repaired in place; a new Pod is scheduled elsewhere with a new IP.
+- **ReplicaSet**: A controller whose job is to keep a fixed number of identical Pod replicas running. If one Pod crashes or a node goes offline, the ReplicaSet schedules a replacement.
+- **Deployment**: The declarative controller you actually write in YAML. A Deployment manages ReplicaSets for you, orchestrating rolling updates (bringing up new Revision 2 Pods before terminating Revision 1 Pods) and storing revision history so you can roll back immediately with `kubectl rollout undo deployment/order-service`.
 
-### The ReplicaSet
-Ensures that a specified number of identical pod replicas are running at all times. If a worker node crashes, the ReplicaSet controller detects the deficit and schedules replacement pods on surviving nodes.
-
-### The Deployment
-You almost never create ReplicaSets manually. A **Deployment** manages ReplicaSets declaratively, orchestrating automated rolling updates (deploying Version 2 while gradually terminating Version 1) and supporting instant rollbacks (`kubectl rollout undo`).
-
----
-
-## Production Deployment Manifest for Spring Boot
+### A Production-Ready Spring Boot Deployment Manifest
 
 ```yaml
 apiVersion: apps/v1
@@ -64,8 +47,8 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 1        # Allow 1 extra pod above desired count during update
-      maxUnavailable: 0  # Never drop below 3 operational pods during update!
+      maxSurge: 1        # Spin up 1 extra Pod during rollout
+      maxUnavailable: 0  # Keep all 3 existing Pods serving until new ones are Ready
   selector:
     matchLabels:
       app: order-service
@@ -74,15 +57,19 @@ spec:
       labels:
         app: order-service
     spec:
-      terminationGracePeriodSeconds: 45 # Allows in-flight HTTP requests to drain
+      terminationGracePeriodSeconds: 45
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
         fsGroup: 10001
       containers:
         - name: order-service
-          image: registry.company.com/ecommerce/order-service:2.1.0
+          image: ghcr.io/my-org/order-service:2.1.0
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           ports:
             - name: http
               containerPort: 8080
@@ -90,14 +77,13 @@ spec:
               containerPort: 8081
           resources:
             requests:
-              cpu: "500m"      # 0.5 CPU core guaranteed
-              memory: "1536Mi"  # 1.5 GB RAM guaranteed
+              cpu: "500m"
+              memory: "2048Mi"
             limits:
-              cpu: "2000m"     # Throttle ceiling at 2 CPU cores
-              memory: "2048Mi"  # Hard cgroup memory ceiling (Triggers OOMKill if exceeded)
+              memory: "2048Mi"
           env:
             - name: JAVA_TOOL_OPTIONS
-              value: "-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC -XX:+ExitOnOutOfMemoryError"
+              value: "-XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError"
             - name: SPRING_PROFILES_ACTIVE
               value: "production"
           envFrom:
@@ -107,27 +93,27 @@ spec:
                 name: order-service-secrets
 ```
 
+Notice two intentional choices in this manifest: Actuator runs on a dedicated internal port (`8081`) so management endpoints are never exposed through the public router, and `requests.memory` matches `limits.memory` (`2048Mi`) while `limits.cpu` is deliberately omitted (explained in the CPU throttling section below).
+
 ---
 
-## Service Networking and Ingress Routing
+## Services, Ingress, and the Gateway API
 
-Pods have ephemeral private IP addresses that change every time a pod restarts. A **Service** provides a stable, persistent virtual IP (ClusterIP) and internal DNS entry that automatically load-balances traffic across all healthy matching pods.
+Because Pod IP addresses change on every restart or rollout, other services cannot hardcode them. A Kubernetes **Service** provides a stable virtual IP (`ClusterIP`) and an internal DNS name (`order-service.production.svc.cluster.local`). Behind the scenes, Kubernetes maintains `EndpointSlice` records listing only the **Ready** Pod IPs matching the Service selector, and `kube-proxy` (via iptables/IPVS) or an eBPF dataplane (such as Cilium) load-balances connections across them.
 
 ```mermaid
 flowchart TD
-    Internet["Public Client Traffic"] --> IngressController["Ingress Controller (NGINX / AWS ALB)
-- TLS Termination (*.company.com)
-- Path-Based Routing"]
-
-    IngressController -->|Path: /api/v1/orders/**| K8sService["Kubernetes Service (ClusterIP: 10.96.0.45)
-DNS: order-service.production.svc.cluster.local"]
-
-    K8sService -->|IPTables / IPVS Load Balancing| P1["Pod 1 (10.244.1.14:8080)"]
-    K8sService -->|IPTables / IPVS Load Balancing| P2["Pod 2 (10.244.2.88:8080)"]
-    K8sService -->|IPTables / IPVS Load Balancing| P3["Pod 3 (10.244.3.42:8080)"]
+    Client["External HTTPS Client"] --> Router["Ingress Controller or Gateway (TLS Termination, Path Routing)"]
+    Router -->|"/api/v1/orders"| Svc["Service: order-service (ClusterIP 10.96.0.45)"]
+    Svc -->|"Ready Endpoints Only"| P1["Pod 1 (10.244.1.14:8080)"]
+    Svc -->|"Ready Endpoints Only"| P2["Pod 2 (10.244.2.88:8080)"]
+    Svc -->|"Ready Endpoints Only"| P3["Pod 3 (10.244.3.42:8080)"]
 ```
 
-### ClusterIP Service Definition
+### ClusterIP Service
+
+For internal microservice-to-microservice traffic, `ClusterIP` is the default and most common Service type (other types include `NodePort` for static node ports and `LoadBalancer` for provisioning cloud L4 load balancers):
+
 ```yaml
 apiVersion: v1
 kind: Service
@@ -141,10 +127,13 @@ spec:
   ports:
     - name: http
       port: 80
-      targetPort: http # Matches containerPort name 'http' (8080)
+      targetPort: http # Routes to containerPort 8080 only; port 8081 stays internal
 ```
 
-### Ingress Manifest (Edge Routing)
+### Ingress for HTTP/HTTPS Edge Routing
+
+An **Ingress** exposes HTTP and HTTPS routes from outside the cluster to internal Services, letting a single Ingress controller (such as NGINX, Envoy, Traefik, or AWS Load Balancer Controller) handle TLS termination and host/path routing:
+
 ```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -152,9 +141,9 @@ metadata:
   name: ecommerce-ingress
   namespace: production
   annotations:
-    kubernetes.io/ingress.class: nginx
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
+  ingressClassName: nginx
   tls:
     - hosts:
         - api.company.com
@@ -172,107 +161,22 @@ spec:
                   number: 80
 ```
 
----
+Use `spec.ingressClassName` rather than the deprecated `kubernetes.io/ingress.class` annotation.
 
-## Spring Boot Actuator Probes: The Triad of Survival
+### Moving Beyond Ingress: Kubernetes Gateway API
 
-The single most common source of outages in Kubernetes-hosted Java is misconfigured health probes. Kubernetes provides three distinct probe types, and confusing their purposes is fatal:
+The original `Ingress` API was intentionally minimal, so real-world features like weighted canary traffic splitting, header-based routing, request timeouts, and cross-namespace routing ended up buried in vendor-specific annotations that break when switching controllers.
 
-```mermaid
-flowchart TD
-    PodStart["Pod Container Starts"] --> StartupProbe{"Startup Probe Passing?<br/>/actuator/health/startup"}
-    StartupProbe -->|"No / Waiting"| WaitStart["Wait (Holds Liveness & Readiness Disabled)"]
-    WaitStart --> StartupProbe
-    
-    StartupProbe -->|"Passed!"| RunProbes["Activate Liveness and Readiness Probes"]
-
-    subgraph ActiveProbes ["Continuous Pod Lifecycle Monitoring"]
-        LivenessProbe{"Liveness Probe<br/>/actuator/health/liveness"}
-        ReadinessProbe{"Readiness Probe<br/>/actuator/health/readiness"}
-    end
-
-    RunProbes --> LivenessProbe
-    RunProbes --> ReadinessProbe
-
-    LivenessProbe -->|"Fails! (Deadlock)"| Restart["KUBERNETES KILLS POD! (Container Restart)"]
-    ReadinessProbe -->|"Fails! (Cache warming)"| Unroute["Remove Pod from Service Endpoints (No Traffic Sent)"]
-    ReadinessProbe -->|"Passes!"| Route["Forward Incoming HTTP Requests"]
-```
-
-### The Startup Probe: Protecting Slow JVM Boot Times
-Spring Boot applications can take 15 to 30 seconds to start up (loading classes, running Flyway migrations, initializing Hibernate). 
-If you only configure a `livenessProbe` with a 10-second initial delay, Kubernetes checks the liveness endpoint before Spring Boot is ready, concludes the pod is frozen, and kills it! The pod enters a permanent **CrashLoopBackOff**.
-
-The **Startup Probe** disables liveness and readiness checks until the application has fully initialized:
-```yaml
-startupProbe:
-  httpGet:
-    path: /actuator/health/liveness
-    port: 8081
-  failureThreshold: 30 # 30 attempts x 2 seconds = 60 seconds total startup window!
-  periodSeconds: 2
-```
-
-### The Liveness Probe: Detecting Deadlocks
-Answers: *"Is the JVM deadlocked or in an unrecoverable state?"*
-If the liveness probe fails, Kubernetes **kills and restarts the container**.
-- **Rule of Thumb**: Liveness checks should ONLY verify internal JVM health (threads, memory). 
-- **CRITICAL**: **Never check external databases or message brokers in a liveness probe!** If PostgreSQL is down, restarting your Spring Boot pod will not fix PostgreSQL!
-
-### The Readiness Probe: Traffic Flow Control
-Answers: *"Is this pod ready to accept live customer traffic right now?"*
-If the readiness probe fails, Kubernetes **does NOT kill the pod**. It simply removes the pod's IP from the Service endpoints list, preventing traffic from reaching it until it recovers.
-- Ideal for temporary saturation: warming up local caches, running a heavy GC cycle, or waiting for a transient database reconnect.
-
-### Configuring Spring Boot Actuator for Kubernetes Probes
-In `application.yml`:
-```yaml
-management:
-  server:
-    port: 8081 # Isolate actuator metrics/health to an internal management port!
-  endpoints:
-    web:
-      exposure:
-        include: health,info,prometheus
-  endpoint:
-    health:
-      probes:
-        enabled: true # Automatically configures /actuator/health/liveness and /readiness
-      group:
-        readiness:
-          include: readinessState,db # Database check belongs in READINESS, never liveness!
-        liveness:
-          include: livenessState
-```
-
-And attach them to your Kubernetes Deployment spec:
-```yaml
-livenessProbe:
-  httpGet:
-    path: /actuator/health/liveness
-    port: 8081
-  initialDelaySeconds: 0 # Safe because startupProbe protects startup!
-  periodSeconds: 10
-  timeoutSeconds: 3
-  failureThreshold: 3
-
-readinessProbe:
-  httpGet:
-    path: /actuator/health/readiness
-    port: 8081
-  initialDelaySeconds: 0
-  periodSeconds: 5
-  timeoutSeconds: 3
-  failureThreshold: 2
-```
+The **Kubernetes Gateway API** is the modern successor. It splits responsibilities into role-oriented resources: cluster operators manage `GatewayClass` and `Gateway` (listeners, TLS certificates, ports), while application teams attach `HTTPRoute` (or `GRPCRoute`) resources that declaratively express path matching, header filters, and percentage-based traffic splits without relying on proprietary annotations. If you are standing up a new Kubernetes platform today, Gateway API is worth adopting over Ingress; if you work on an existing cluster, you will still encounter plenty of Ingress manifests.
 
 ---
 
-## Decoupling Configuration: ConfigMaps and Secrets
+## ConfigMaps and Secrets
 
-Never hardcode database URLs or API keys inside container images. Use Kubernetes ConfigMaps for environment configuration and Secrets for sensitive credentials.
+Container images should be built once and promoted unchanged across Dev, Staging, and Production. Environment-specific settings belong outside the image in **ConfigMaps** (non-sensitive configuration) and **Secrets** (credentials, certificates, API keys).
 
-### ConfigMap Definition
+### ConfigMap
+
 ```yaml
 apiVersion: v1
 kind: ConfigMap
@@ -281,10 +185,11 @@ metadata:
   namespace: production
 data:
   SPRING_KAFKA_BOOTSTRAP_SERVERS: "kafka.production.svc.cluster.local:9092"
-  APP_FEATURE_FLAG_VIP_DISCOUNT: "true"
+  APP_FEATURE_VIP_DISCOUNT: "true"
 ```
 
-### Secret Definition (Base64 Encoded)
+### Secret
+
 ```yaml
 apiVersion: v1
 kind: Secret
@@ -293,135 +198,239 @@ metadata:
   namespace: production
 type: Opaque
 data:
-  # Base64 encoded values: echo -n 'my_db_password' | base64
+  # Base64-encoded values (NOT encrypted!)
   SPRING_DATASOURCE_PASSWORD: bXlfZGJfcGFzc3dvcmQ=
   STRIPE_API_SECRET_KEY: c2tfbGl2ZV85OTk4ODg3NzY2NTU=
 ```
 
+> [!WARNING]
+> **Kubernetes Secrets are base64-encoded, not encrypted.** Anyone who can read the YAML file or run `kubectl get secret order-service-secrets -o yaml` can decode the plaintext password in one second with `base64 --decode`. Never commit raw `Secret` manifests to Git.
+
+For production clusters, layer four defenses around Secrets:
+
+1. **Enable Encryption at Rest in `etcd`** so Secrets stored in the cluster control plane are encrypted with a KMS key rather than sitting as plaintext in etcd snapshots.
+2. **Sync secrets from an external vault** using the **External Secrets Operator (ESO)** or the **Secrets Store CSI Driver**, pulling credentials dynamically from AWS Secrets Manager, GCP Secret Manager, Azure Key Vault, or HashiCorp Vault. (If you store encrypted manifests in Git for GitOps, use tools like SOPS or Sealed Secrets.)
+3. **Restrict RBAC** so developers and CI pipelines cannot list or read production Secrets unnecessarily.
+4. **Understand env vars vs volume mounts**: Injecting keys via `envFrom` populates process environment variables only at container startup, so rotating a Secret or ConfigMap requires restarting the Pods. Mounting a ConfigMap or Secret as a volume updates the files on disk automatically (typically within a minute), and Spring Boot natively reads mounted directories via `spring.config.import=optional:configtree:/etc/config/`.
+
 ---
 
-## Packaging Microservices with Helm Charts
+## Startup, Liveness, and Readiness Probes for Spring Boot
 
-Managing dozens of raw YAML files across Dev, Staging, and Production environments results in massive copy-paste errors. **Helm** is the package manager for Kubernetes, enabling parameterization and templated releases.
+Health probes are where Java applications most often clash with Kubernetes defaults. Kubernetes supports three probe types, each answering a different question and taking a different action on failure.
 
-### Standard Helm Chart Structure
-```text
-order-service-chart/
-├── Chart.yaml          # Metadata (name, version, appVersion)
-├── values.yaml         # Default configuration values
-├── values-dev.yaml     # Dev environment overrides
-├── values-prod.yaml    # Production overrides
-└── templates/
-    ├── deployment.yaml # Parameterized Deployment manifest
-    ├── service.yaml    # Parameterized Service manifest
-    ├── ingress.yaml    # Parameterized Ingress manifest
-    └── hpa.yaml        # HorizontalPodAutoscaler
+```mermaid
+flowchart TD
+    Start["Container Starts"] --> Startup{"Startup Probe: /actuator/health/liveness"}
+    Startup -->|"Not ready yet"| Wait["Keep waiting (Liveness and Readiness paused)"]
+    Wait --> Startup
+    Startup -->|"Exhausts failureThreshold"| KillStart["Kubelet kills container (CrashLoopBackOff)"]
+
+    Startup -->|"Passes"| Active["Enable Liveness and Readiness Probes"]
+    Active --> Live{"Liveness Probe: /actuator/health/liveness"}
+    Active --> Ready{"Readiness Probe: /actuator/health/readiness"}
+
+    Live -->|"Fails repeatedly"| Restart["Kubelet restarts container"]
+    Ready -->|"Fails"| Remove["Remove Pod IP from Service Endpoints (No traffic)"]
+    Ready -->|"Passes"| Serve["Route live HTTP traffic to Pod"]
 ```
 
-### Parameterized `values.yaml`
+### Configuring Spring Boot Actuator Probes
+
+Spring Boot Actuator (2.3+ and Spring Boot 3.x) exposes dedicated Kubernetes probe endpoints backed by internal `LivenessState` and `ReadinessState` indicators. They activate automatically when Spring Boot detects it is running in Kubernetes, and you can also enable them explicitly in `application.yml`:
+
+```yaml
+management:
+  server:
+    port: 8081
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState
+```
+
+And wire the three probes into the Deployment container spec:
+
+```yaml
+startupProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: actuator
+  periodSeconds: 2
+  failureThreshold: 30 # Up to 60 seconds for JVM boot, Hibernate, and Flyway
+
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: actuator
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: actuator
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 2
+```
+
+### Why Putting Database Checks in Liveness Triggers Restart Loops
+
+Pointing `livenessProbe` to the generic `/actuator/health` endpoint (or adding `db` or `redis` to the `liveness` health group) is one of the fastest ways to turn a minor database hiccup into a prolonged outage.
+
+Suppose your PostgreSQL primary performs a 15-second failover. If Liveness checks database connectivity, every single Spring Boot Pod across the cluster fails its liveness probe at the same time. Kubelet kills and restarts all of them. When PostgreSQL finishes failing over, dozens of cold JVMs boot simultaneously, all compiling bytecode with JIT, running Flyway schema checks, and opening HikariCP connection pools at once. That thundering herd saturates CPU and database connections, causing Startup probes to time out and trapping the fleet in a `CrashLoopBackOff` cycle long after the database itself recovered.
+
+Keep these rules in mind:
+
+- **Startup Probe**: Protects slow JVM boot times (class loading, Spring context initialization, Flyway migrations). While Startup is running, Liveness and Readiness stay disabled so Kubelet does not kill a healthy booting JVM.
+- **Liveness Probe**: Should check *only* whether the JVM process itself is broken or unrecoverable (`livenessState`). Restarting your container cannot fix an external database, Redis cluster, or downstream API.
+- **Readiness Probe**: Controls whether traffic is sent to the Pod. Use `readinessState` (which automatically flips to `REFUSING_TRAFFIC` during graceful shutdown) and local readiness conditions like cache warm-up. Think carefully before adding external databases to Readiness too: if PostgreSQL drops briefly and *every* Pod fails Readiness, the Service has zero endpoints and Ingress returns generic 503s instead of letting your application return graceful fallback responses or cached data.
+
+---
+
+## Zero-Downtime Graceful Termination
+
+Setting `maxUnavailable: 0` on a Deployment and enabling `server.shutdown: graceful` in Spring Boot is still not enough to eliminate HTTP 502 errors during rolling updates.
+
+When Kubernetes terminates a Pod, two operations happen **in parallel**:
+
+1. Kubelet starts stopping the container (running the `preStop` hook and then sending `SIGTERM`).
+2. The control plane removes the Pod IP from `EndpointSlice`, and every node's `kube-proxy` and Ingress controller asynchronously updates its routing tables.
+
+Updating routing tables across a cluster takes anywhere from a few hundred milliseconds to several seconds. If the JVM receives `SIGTERM` immediately and Spring Boot stops accepting new connections before `kube-proxy` or the Ingress controller finishes removing that Pod IP, incoming customer requests still land on the closing Pod and fail with connection resets or HTTP 502 Bad Gateway.
+
+### Adding a `preStop` Delay and Aligning Shutdown Budgets
+
+Add a `preStop` sleep hook so the container keeps serving traffic for a short propagation window while the cluster drains its endpoint from every load balancer:
+
+```yaml
+spec:
+  terminationGracePeriodSeconds: 45
+  containers:
+    - name: order-service
+      lifecycle:
+        preStop:
+          # Native sleep action (Kubernetes 1.30+ GA) - works on shell-less Distroless images!
+          sleep:
+            seconds: 10
+```
+
+If you run on an older Kubernetes cluster (prior to 1.29/1.30) and your base image includes `/bin/sh`, use `exec: { command: ["/bin/sh", "-c", "sleep 10"] }` instead.
+
+Pair that with Spring Boot's graceful shutdown settings in `application.yml`:
+
+```yaml
+server:
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 25s
+```
+
+Make sure the time budget adds up cleanly:
+
+`preStop sleep (10s) + Spring shutdown drain (25s) = 35s < terminationGracePeriodSeconds (45s)`
+
+Because `35s` fits comfortably inside the `45s` grace period, active HTTP requests and database transactions finish cleanly before Kubelet ever resorts to `SIGKILL`.
+
+---
+
+## CPU Requests vs Limits: The CFS Throttling Trap
+
+Memory and CPU behave very differently in Kubernetes, and applying identical request/limit habits to both causes severe latency spikes in Java services.
+
+- **Memory is incompressible.** If a container exceeds `limits.memory`, the Linux OOM killer kills it immediately (Exit Code 137). Setting `requests.memory` equal to `limits.memory` ensures the scheduler reserves the full amount up front and protects your Pod from being evicted first under node memory pressure.
+- **CPU is compressible.** `requests.cpu` tells the scheduler how much CPU to reserve and translates to Linux cgroup CPU weight (guaranteed share under contention). `limits.cpu` enforces a hard ceiling through the Linux Completely Fair Scheduler (CFS) bandwidth quota (typically measured in 100ms periods).
+
+Here is where the **CFS throttling trap** hits the JVM. Suppose you set `limits.cpu: "1000m"` (1 full core = 100ms of CPU time per 100ms window). A Spring Boot container is heavily multi-threaded: it runs Tomcat request threads, C2 JIT compiler threads (especially busy during startup and warm-up), and parallel G1GC threads. If 8 threads run concurrently across an 8-core node, they consume the entire 100ms CPU quota in **12.5ms of wall-clock time**. The Linux kernel then freezes *every thread in the container* for the remaining **87.5ms**, even if the worker node's other CPU cores are completely idle.
+
+That throttling manifests as slow Spring Boot startups, stretched GC pauses, and tail latency (p99) spikes that disappear the moment you inspect `container_cpu_cfs_throttled_periods_total` in Prometheus. Even worse, setting a limit like `limits.cpu: "1000m"` causes HotSpot to see `availableProcessors() == 1`, which can automatically switch the default garbage collector from G1GC to **SerialGC** unless you explicitly pass `-XX:+UseG1GC`.
+
+Practical guidance for Java services on Kubernetes:
+
+1. Always set realistic **`requests.cpu`** based on steady-state load (for example, `500m` to `1000m`) so Pods are not over-packed onto overloaded nodes.
+2. Either **omit `limits.cpu`** (letting containers burst into idle node capacity during startup and GC cycles while `requests.cpu` guarantees fairness under contention) or, if your platform team mandates CPU limits, set them generously (at least `2000m` or higher) and verify throttling metrics under load.
+3. Keep `requests.memory` equal to `limits.memory` and pair it with `-XX:MaxRAMPercentage=75.0`.
+
+---
+
+## Packaging Deployments with Helm Charts
+
+Once you maintain a `Deployment`, `Service`, `Ingress`, `ConfigMap`, and `HorizontalPodAutoscaler` for one microservice, you quickly run into a maintenance problem: keeping Dev, Staging, and Production manifests in sync without copy-paste mistakes.
+
+**Helm** is the standard package manager for Kubernetes. Instead of duplicating YAML files per environment, you bundle your manifests as parameterized Go templates inside a **Helm Chart** and supply environment-specific overrides through `values.yaml` files:
+
+```text
+order-service-chart/
+├── Chart.yaml          # Chart metadata (name, chart version, appVersion)
+├── values.yaml         # Shared defaults
+├── values-dev.yaml     # Dev overrides (1 replica, smaller memory)
+├── values-prod.yaml    # Production overrides (3+ replicas, autoscaling)
+└── templates/
+    ├── deployment.yaml
+    ├── service.yaml
+    ├── ingress.yaml
+    └── hpa.yaml
+```
+
+A trimmed `values-prod.yaml` looks clean and readable:
+
 ```yaml
 replicaCount: 3
 
 image:
-  repository: registry.company.com/ecommerce/order-service
+  repository: ghcr.io/my-org/order-service
   tag: "2.1.0"
-  pullPolicy: IfNotPresent
 
 resources:
-  limits:
-    cpu: 2000m
-    memory: 2048Mi
   requests:
-    cpu: 500m
-    memory: 1536Mi
+    cpu: "500m"
+    memory: "2048Mi"
+  limits:
+    memory: "2048Mi"
 
-autoscaling:
-  enabled: true
-  minReplicas: 3
-  maxReplicas: 15
-  targetCPUUtilizationPercentage: 75
-
-env:
-  springProfile: production
+springProfile: production
 ```
 
-### Deploying with Helm
+Inside `templates/deployment.yaml`, Helm injects those values at deploy time (for example, `replicas: {{ .Values.replicaCount }}`), and a single idempotent command installs or upgrades the release:
+
 ```bash
-# Install or upgrade chart for production
 helm upgrade --install order-service ./order-service-chart \
   --namespace production \
+  --create-namespace \
   --values ./order-service-chart/values-prod.yaml
 ```
 
----
-
-## Architectural Traps and Real-World Outages
-
-### The "Database Outage Turned Cluster Suicide" Outage
-A retail banking platform configured their Kubernetes `livenessProbe` to point to `/actuator/health`. 
-By default, Spring Boot's generic `/health` endpoint checks all registered health indicators, including the PostgreSQL database. 
-
-During a routine PostgreSQL failover, database connectivity dropped for 12 seconds. 
-The liveness probes on **all 60 Spring Boot pods failed simultaneously**. 
-Kubernetes immediately killed all 60 pods and attempted to restart them. 
-When PostgreSQL recovered, 60 cold JVM pods started at the exact same second, all trying to run Flyway database migrations and establish connection pools at once. The database connection queue backed up, startup probes timed out, and the entire platform entered an unrecoverable death spiral that lasted 2 hours.
-
-**The Fix:** Isolate probes! Liveness checks must verify *only* local JVM process health (`/actuator/health/liveness`). External dependencies belong strictly in the `readinessProbe`!
-
-### The "Zero-Downtime Deployment 502 Bad Gateway" Bug
-A company configured rolling deployments with `maxUnavailable: 0` and assumed deployments were 100% zero-downtime. 
-However, whenever a deployment rolled out, users experienced a wave of HTTP 502 Bad Gateway errors. 
-
-**Root Cause:** When Kubernetes terminates an old pod, two things happen asynchronously:
-1. The Kubelet sends `SIGTERM` to the container.
-2. The endpoint controller updates `iptables` / Ingress to remove the pod's IP.
-
-Because updating iptables takes 1 to 3 seconds across a cluster, Ingress continued routing new user traffic to the pod *after* the container had already begun shutting down!
-**The Fix:** Add a `preStop` sleep hook in the container spec:
-```yaml
-lifecycle:
-  preStop:
-    exec:
-      command: ["/bin/sh", "-c", "sleep 10"]
-```
-This forces the container to wait 10 seconds before terminating, allowing Ingress and iptables to completely remove the pod from routing tables before Spring Boot begins graceful shutdown.
+In the next lesson on **Helm Package Management in K8s**, we dive deeper into Helm template helpers, chart dependencies and subcharts, pre-upgrade hooks for database migrations, and managing fleets of Spring Boot services cleanly.
 
 ---
 
-## Senior Interview Questions
+## Interview Questions
 
-### Question 1: What is the exact sequence of events during a graceful pod termination in Kubernetes, and why is a `preStop` hook necessary for Java applications?
-**Answer:**  
-When a pod is deleted or replaced during a rolling update:
-1. The Pod status is set to `Terminating`.
-2. The Endpoint controller removes the pod's IP from the Service endpoints list.
-3. Kube-proxy and Ingress controllers asynchronously update their routing rules and iptables across all nodes.
-4. Concurrently, Kubelet executes the `preStop` lifecycle hook (if present).
-5. Kubelet sends `SIGTERM` (Signal 15) to the container's PID 1 process.
-6. The container enters its graceful shutdown phase (draining in-flight HTTP requests).
-7. If the container does not exit before `terminationGracePeriodSeconds` expires, Kubelet sends `SIGKILL` (Signal 9).
+### Walk through the exact pod termination sequence in Kubernetes and explain why Java services need a `preStop` hook.
 
-Because step 3 (updating network routing) happens asynchronously and can take a few seconds, traffic can still be routed to the pod *after* step 5 starts. A `preStop: exec: command: ["sleep", "10"]` pauses step 5, ensuring all network proxies have completely purged the pod from their load balancing tables before the JVM begins shutting down.
+When a Pod is deleted or replaced during a rollout, Kubernetes marks it `Terminating` and executes two tracks concurrently. On the networking track, the control plane removes the Pod's IP from `EndpointSlice` and notifies `kube-proxy` and Ingress controllers across all nodes to update their routing rules. On the node track, Kubelet runs the container's `preStop` hook, sends `SIGTERM` to PID 1, waits for the container to drain requests and exit, and sends `SIGKILL` if `terminationGracePeriodSeconds` expires. Because routing rule updates propagate asynchronously over a few seconds, traffic can still arrive after `SIGTERM` is sent. A `preStop` sleep hook (such as `sleep: { seconds: 10 }` in Kubernetes 1.30+) delays `SIGTERM` until load balancers finish removing the Pod, preventing 502 errors during rolling deployments.
 
-### Question 2: What is the difference between CPU Requests, CPU Limits, and the CFS Bandwidth Quota throttling trap for Java applications?
-**Answer:**  
-- **CPU Requests**: The guaranteed minimum amount of CPU allocated to the container, used by the Kubernetes scheduler to place pods on worker nodes.
-- **CPU Limits**: The maximum hard ceiling of CPU the container is permitted to consume, enforced by the Linux Completely Fair Scheduler (CFS) bandwidth quota (`cpu.cfs_quota_us` / `cpu.cfs_period_us`).
+### Why do tight CPU limits (`limits.cpu`) cause latency spikes in JVM containers even when the worker node has idle CPU cores?
 
-**The CFS Throttling Trap:** If you set a tight CPU limit (e.g., `cpu: "1000m"` = 1 core), the Linux kernel throttles the container's CPU threads as soon as it exhausts its 100ms time slice, even if the host machine has 64 idle CPU cores! 
-For Java applications running multi-threaded parallel garbage collectors (G1GC) or C2 JIT compilation during startup, CFS throttling causes massive latency spikes. Senior cloud architects recommend either setting high CPU limits or omitting CPU limits entirely while enforcing strict CPU Requests.
+Kubernetes enforces `limits.cpu` using the Linux CFS bandwidth quota over short periods (typically 100ms). Because the JVM runs multiple threads in parallel (request workers, C2 JIT compilers, parallel G1GC threads), a tight limit like `1000m` is exhausted in a fraction of the 100ms period, and the kernel throttles all threads in the container until the next period starts, regardless of idle cores on the host. Furthermore, a 1-core CPU limit causes HotSpot to see a single processor and can shift default GC ergonomics unless overridden. Setting accurate `requests.cpu` and either omitting `limits.cpu` or giving generous headroom avoids unnecessary CFS throttling.
 
-### Question 3: How does Horizontal Pod Autoscaler (HPA) determine when to scale Java applications, and why is scaling on memory metrics dangerous?
-**Answer:**  
-HPA monitors metrics (typically CPU utilization via the Metrics Server) and calculates desired replicas using the formula:
-`Desired Replicas = ceil(Current Replicas * (Current Metric Value / Target Metric Value))`
+### Why is scaling a Horizontal Pod Autoscaler (HPA) on JVM memory utilization usually a bad idea?
 
-**Why Scaling on Memory is Dangerous for Java:**  
-Java garbage collection is non-deterministic. A JVM with a 2 GB heap might retain 1.8 GB of memory simply because a GC cycle has not been triggered yet, even though 1.4 GB of that memory is dead garbage! 
-If HPA is configured to scale out at 80% memory utilization, it will see the un-collected JVM heap, assume the application is under heavy load, and scale out unnecessary pods until it reaches `maxReplicas`. 
-Java applications should scale primarily on **CPU utilization**, **HTTP request rates**, or **Kafka consumer group lag** (via KEDA).
+HPA calculates desired replicas from current versus target metric ratios. On the JVM, memory usage does not track real-time load cleanly: HotSpot allocates objects into the heap until a GC threshold is reached, so a quiet service with a 2 GiB heap can legitimately sit at 80% heap utilization full of uncollected short-lived garbage, and even after GC, HotSpot often retains committed heap pages rather than immediately returning them to the OS. An HPA targeting 75% memory will see that committed heap, assume the service is saturated, and scale out to `maxReplicas` unnecessarily. Java services scale much more reliably on CPU utilization, HTTP request concurrency/latency, or queue/Kafka consumer lag (via KEDA).
 
-### Question 4: What is the difference between ConfigMap volume mounts versus environment variable injections in terms of live configuration reloading?
-**Answer:**  
-- **Environment Variables (`envFrom`)**: The values are injected into the process environment when the container starts. Once the container is running, modifying the ConfigMap in Kubernetes **will not update** the environment variables inside the running Java process; the pod must be restarted.
-- **Volume Mounts (`volumeMounts`)**: The ConfigMap is mounted as a directory of files inside the container. When the ConfigMap is updated, Kubernetes automatically syncs and updates the underlying files on disk within a minute without restarting the pod. Libraries like Spring Cloud Kubernetes can watch these files and trigger `@RefreshScope` bean reloads dynamically at runtime.
+### What is the difference between injecting a ConfigMap via `envFrom` versus mounting it as a volume?
+
+With `envFrom`, Kubernetes reads the ConfigMap keys once at container startup and injects them as OS environment variables into the JVM process. Updating the ConfigMap later does not change the running process's environment; you must roll the Deployment to pick up changes. With `volumeMounts`, Kubernetes projects ConfigMap keys as files in a mounted directory and refreshes them automatically on disk when the ConfigMap changes (typically within a minute). Spring Boot can read those mounted files via `spring.config.import=optional:configtree:/etc/config/`, and tools like Spring Cloud Kubernetes or Reloader can either refresh beans dynamically or trigger controlled rollouts on config changes.

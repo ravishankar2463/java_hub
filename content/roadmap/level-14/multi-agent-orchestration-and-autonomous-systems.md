@@ -1,273 +1,551 @@
 ---
 title: "Multi-Agent Orchestration and Autonomous Systems"
-description: "Master autonomous AI agents in enterprise Java: the ReAct loop, supervisor-worker coordination, long-term vector memory, and human-in-the-loop safety guardrails."
+description: "How to design bounded ReAct loops, short-term and vector memory, supervisor-worker and critic topologies, and tiered human-in-the-loop controls in Java 21 and Spring AI 1.0."
+category: "level-14"
+date: "2026-10-29T10:00:00Z"
 ---
 
-Single-turn LLM completions and basic Retrieval-Augmented Generation (RAG) pipelines represent only the earliest phase of the enterprise AI revolution. In real-world enterprise operations, business goals cannot be solved by a single prompt. 
+Single-turn completions and standard RAG work well when a request can be answered in one retrieval and one generation step. Many operational tasks do not fit that shape. Consider an incident triage request:
 
-Consider an IT incident response task: *"Investigate why latency spiked on the checkout service, inspect the last three Kubernetes deployments, query Prometheus metrics, correlate with error logs in Elasticsearch, determine the root cause, draft a remediation pull request, and page the on-call SRE."*
+*"Investigate why checkout p99 latency jumped after 14:00 UTC, check recent Kubernetes rollouts and pod restarts, inspect slow PostgreSQL queries, correlate findings with past post-mortems, and draft a remediation checklist for the on-call engineer."*
 
-No single prompt or monolithic LLM call can execute this complex sequence reliably. A model presented with dozens of conflicting tools inevitably suffers from context dilution, tool-calling hallucinations, and catastrophic reasoning drift. 
+Handing one prompt 25 unrelated tools (Kubernetes, PostgreSQL, Prometheus, GitHub, Jira, Slack) rarely ends well. As the tool list grows, tool descriptions eat context tokens, the model picks the wrong tools or mixes up arguments, and debugging why step 6 went off the rails becomes miserable.
 
-To solve complex multi-step workflows, enterprise Java architectures are evolving toward **Multi-Agent Systems (MAS)**. In a multi-agent topology, tasks are decomposed and distributed across specialized autonomous agents—each equipped with its own narrow system prompt, constrained toolset, dedicated memory window, and supervisory oversight.
+**Agentic architectures** handle open-ended investigation by running a bounded loop where the model reasons, invokes a focused tool, reads the real output, and decides what to do next. **Multi-agent topologies** go one step further by splitting broad domains into narrow specialists coordinated by a supervisor or checked by an independent evaluator.
 
-In this deep dive, we explore how to build autonomous agent loops in Java, how to implement the **ReAct (Reason + Act)** pattern, how to orchestrate multi-agent collaboration with Spring AI and LangChain4j, and how to enforce strict **Human-in-the-Loop (HITL)** safeguards.
+## Autonomous Agent Architectures: Perception, Reasoning, and Action
 
----
+Stripped of hype, an enterprise AI agent is a stateful control loop wrapped around a stateless LLM API. It cycles through three responsibilities:
 
-### The Anatomy of an Autonomous Agent: The ReAct Loop
+- **Perception:** Gathering the current state of the world, including the user's objective, conversation memory, retrieved long-term facts, and concrete outputs returned by tools.
+- **Reasoning:** Deciding what information is still missing, forming a hypothesis, and choosing either the next tool call or a final answer.
+- **Action:** Invoking a local Java tool (or delegating a sub-task to another agent) and recording the real-world observation back into state.
 
-At its core, an autonomous agent is not magic; it is a stateful execution loop running on top of an LLM. The predominant cognitive architecture for enterprise agents is the **ReAct (Reasoning + Acting)** pattern, pioneered by Yao et al.:
-
-```
-The ReAct Execution Loop
-  1. Thought:     The LLM reasons about the user's current goal and historic observations.
-  2. Action:      The LLM selects a specific tool and produces structured arguments.
-  3. Observation: The Java runtime executes the tool locally and returns the real-world output.
-  4. Repeat:      The loop cycles until the LLM decides no further tools are needed.
-  5. Finish:      The LLM compiles a final natural language answer.
-```
+In practice, the **ReAct (Reason + Act)** pattern implements this loop by interleaving short reasoning steps with external tool observations. Unlike plain Chain-of-Thought prompting, where the model guesses an entire multi-step plan in one shot without verifying anything, ReAct grounds each next step in actual runtime output from your systems.
 
 ```mermaid
 flowchart TD
-    Prompt["User Objective<br/>'Audit cluster security warnings'"]
-    Thought["1. THOUGHT<br/>(LLM evaluates current state & decides next step)"]
-    Action{"2. ACTION NEEDED?"}
-    ToolExec["3. ACTION<br/>(LLM emits Tool Call e.g. getKubeEvents)"]
-    LocalRun["4. OBSERVATION<br/>(Java executes tool & records stdout)"]
-    Final["5. FINAL RESPONSE<br/>(Synthesizes findings into executive report)"]
-
-    Prompt --> Thought
-    Thought --> Action
-    Action -- "Tool required" --> ToolExec
-    ToolExec --> LocalRun
-    LocalRun -->|Appends observation to context| Thought
-    Action -- "Objective achieved" --> Final
+    Goal["User Objective + Retrieved Long-Term Memory"] --> Guard{"Within Iteration, Timeout,<br/>and Token Budget?"}
+    Guard -->|"Budget exceeded"| Abort["Circuit Breaker: Return Partial Findings / Error"]
+    Guard -->|"Budget OK"| Think["Reasoning Step (LLM evaluates state and observations)"]
+    Think --> Decide{"Tool Call Emitted?"}
+    Decide -->|"No"| Done["Final Synthesized Answer"]
+    Decide -->|"Yes"| Policy["Policy & Loop Check (Risk Tier + Duplicate Call Check)"]
+    Policy -->|"Blocked / Rejected"| FeedErr["Append Rejection Observation"]
+    Policy -->|"Allowed"| Exec["Execute Local Java Tool"]
+    Exec --> Observe["Append Tool Observation to History"]
+    FeedErr --> Guard
+    Observe --> Guard
 ```
 
-#### Implementing the ReAct Loop in Pure Java
+## Implementing a Bounded ReAct Loop in Java 21 and Spring AI 1.0
 
-Here is a resilient ReAct loop engine in Java, featuring execution depth bounding and cycle detection:
+Never ship an unbounded `while (response.hasToolCalls())` loop. A flaky downstream API or a confused model can keep retrying the same broken tool call until you hit rate limits or burn through your monthly token budget.
+
+By disabling Spring AI's internal tool loop (`internalToolExecutionEnabled(false)`) and driving execution with `ToolCallingManager`, you can enforce four deterministic safety boundaries in plain Java:
+
+1. **Maximum iterations:** Hard cap on reasoning-action turns.
+2. **Wall-clock deadline:** Stops the loop even if individual LLM or tool calls are slow.
+3. **Cumulative token budget:** Sums `response.getMetadata().getUsage().getTotalTokens()` across turns and halts before runaway billing occurs.
+4. **Duplicate-call detection:** Catches the model repeating the exact same tool and arguments without making progress.
 
 ```java
-public class AutonomousAgentEngine {
+package com.javahub.agents.core;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.metadata.Usage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
+import org.springframework.ai.model.tool.ToolCallingManager;
+import org.springframework.ai.model.tool.ToolExecutionResult;
+import org.springframework.ai.support.ToolCallbacks;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@Component
+public class BoundedReActAgent {
+
+    private static final Logger log = LoggerFactory.getLogger(BoundedReActAgent.class);
 
     private final ChatModel chatModel;
-    private final Map<String, AgentTool> registeredTools;
-    private final int maxIterations = 8; // Circuit breaker to prevent runaway infinite loops
+    private final ToolCallingManager toolCallingManager;
 
-    public AgentExecutionResult execute(String objective, List<ChatMessage> conversationHistory) {
-        List<ChatMessage> context = new ArrayList<>(conversationHistory);
-        context.add(new UserMessage("Objective: " + objective));
+    public BoundedReActAgent(ChatModel chatModel, ToolCallingManager toolCallingManager) {
+        this.chatModel = chatModel;
+        this.toolCallingManager = toolCallingManager;
+    }
 
-        int currentStep = 0;
+    public AgentRunResult run(
+            String systemPrompt,
+            String objective,
+            Object toolBean,
+            Map<String, Object> toolContext,
+            ExecutionBudget budget) {
 
-        while (currentStep < maxIterations) {
-            currentStep++;
+        Instant deadline = Instant.now().plus(budget.maxDuration());
+        ToolCallingChatOptions options = ToolCallingChatOptions.builder()
+                .toolCallbacks(ToolCallbacks.from(toolBean))
+                .toolContext(toolContext)
+                .internalToolExecutionEnabled(false)
+                .build();
 
-            // 1. Prompt the LLM with current context and tool definitions
-            ChatResponse response = chatModel.call(new Prompt(context));
-            AssistantMessage assistantMessage = response.getResult().getOutput();
-            context.add(assistantMessage);
+        List<Message> history = new ArrayList<>();
+        history.add(new SystemMessage(systemPrompt));
+        history.add(new UserMessage(objective));
 
-            // 2. Check if the LLM emitted a Tool Call (Action) or Final Text
-            if (!assistantMessage.hasToolCalls()) {
-                // LLM concluded its reasoning loop!
-                return new AgentExecutionResult(assistantMessage.getText(), currentStep, true);
+        int iterations = 0;
+        int totalTokensUsed = 0;
+        Map<String, Integer> callSignatureCounts = new HashMap<>();
+
+        while (iterations < budget.maxIterations()) {
+            if (Instant.now().isAfter(deadline)) {
+                return AgentRunResult.aborted("Exceeded wall-clock timeout", iterations, totalTokensUsed);
             }
 
-            // 3. Execute all requested tool actions locally in the JVM
-            for (ToolCall toolCall : assistantMessage.getToolCalls()) {
-                AgentTool tool = registeredTools.get(toolCall.name());
-                if (tool == null) {
-                    context.add(new ToolResponseMessage(toolCall.id(), "Error: Unknown tool " + toolCall.name()));
-                    continue;
-                }
+            iterations++;
+            Prompt prompt = new Prompt(List.copyOf(history), options);
+            ChatResponse response = chatModel.call(prompt);
 
-                try {
-                    // Execute local Java method
-                    String observation = tool.execute(toolCall.arguments());
-                    
-                    // Feed observation back into context for the next reasoning step
-                    context.add(new ToolResponseMessage(toolCall.id(), observation));
-                } catch (Exception ex) {
-                    context.add(new ToolResponseMessage(toolCall.id(), "Execution Failure: " + ex.getMessage()));
+            Usage usage = response.getMetadata() != null ? response.getMetadata().getUsage() : null;
+            if (usage != null && usage.getTotalTokens() != null) {
+                totalTokensUsed += usage.getTotalTokens();
+            }
+
+            if (totalTokensUsed > budget.maxTotalTokens()) {
+                log.warn("Token budget exceeded: used={} limit={}", totalTokensUsed, budget.maxTotalTokens());
+                return AgentRunResult.aborted("Token budget exceeded", iterations, totalTokensUsed);
+            }
+
+            if (!response.hasToolCalls()) {
+                String finalAnswer = response.getResult().getOutput().getText();
+                return AgentRunResult.completed(finalAnswer, iterations, totalTokensUsed);
+            }
+
+            // Detect stalled loops where the model repeats the same tool + arguments
+            AssistantMessage assistantOutput = response.getResult().getOutput();
+            for (AssistantMessage.ToolCall call : assistantOutput.getToolCalls()) {
+                String signature = call.name() + ":" + call.arguments();
+                int seenCount = callSignatureCounts.merge(signature, 1, Integer::sum);
+                if (seenCount >= 3) {
+                    log.warn("Detected repeated tool call loop: {}", signature);
+                    return AgentRunResult.aborted("Repeated identical tool call: " + call.name(), iterations, totalTokensUsed);
                 }
             }
+
+            ToolExecutionResult toolResult = toolCallingManager.executeToolCalls(prompt, response);
+            history = new ArrayList<>(toolResult.conversationHistory());
         }
 
-        throw new AgentMaxIterationsExceededException("Agent failed to reach goal within " + maxIterations + " steps");
+        return AgentRunResult.aborted("Reached max iterations (" + budget.maxIterations() + ")", iterations, totalTokensUsed);
+    }
+
+    public record ExecutionBudget(int maxIterations, Duration maxDuration, int maxTotalTokens) {
+        public static ExecutionBudget standard() {
+            return new ExecutionBudget(6, Duration.ofSeconds(45), 25_000);
+        }
+    }
+
+    public record AgentRunResult(boolean completed, String output, String abortReason, int steps, int tokensUsed) {
+        static AgentRunResult completed(String output, int steps, int tokensUsed) {
+            return new AgentRunResult(true, output, null, steps, tokensUsed);
+        }
+
+        static AgentRunResult aborted(String reason, int steps, int tokensUsed) {
+            return new AgentRunResult(false, null, reason, steps, tokensUsed);
+        }
     }
 }
 ```
 
----
+Returning a structured `AgentRunResult` rather than silently hanging makes it straightforward to expose metrics (steps per run, token consumption, abort reasons) in Micrometer and Grafana so you can see when an agent starts degrading.
 
-### Agent Memory Architecture: Working Memory vs Long-Term Vector Memory
+## Short-Term Working Memory vs. Long-Term Vector Memory
 
-A human software engineer does not load the entire company git history into conscious thought when writing code. They rely on **Working Memory** (current active thought) and **Long-Term Memory** (searching documentation and past incident post-mortems).
+An engineer investigating an outage uses two kinds of memory: active working notes from the last ten minutes, and searchable long-term records of previous incidents from six months ago. Agents benefit from the exact same split:
 
-Autonomous agents in enterprise Java require the identical separation:
-
-```
-Agent Memory Hierarchy
-  |-- Working Memory:      Sliding context window (Tokens in active LLM prompt)
-  |-- Short-Term Scratch:  Execution state of current ReAct loop (Tool outputs)
-  `-- Long-Term Memory:    Vector Database (Milvus/PGvector) storing historical facts
-```
-
-#### Sliding Window Context Management
-If an agent runs a 10-step investigation, intermediate tool responses (e.g., massive Kubernetes JSON manifests or raw database query results) quickly overwhelm the LLM's context window, degrading reasoning quality and wasting API tokens.
-
-**The Solution:** Periodically trigger an asynchronous **Summarization Agent** that compresses older working memory into high-density semantic bullet points:
+- **Short-Term Working Memory (`ChatMemory`):** Tracks the recent turns of the current session or investigation. In Spring AI 1.0 GA, `MessageWindowChatMemory` keeps a fixed sliding window of the most recent messages (persisted via `InMemoryChatMemoryRepository` for local tests or `JdbcChatMemoryRepository` across clustered Spring Boot instances) and attaches them automatically through `MessageChatMemoryAdvisor` keyed by `ChatMemory.CONVERSATION_ID`.
+- **Long-Term Episodic Memory (`VectorStore`):** Stores compact, distilled facts that outlive a single session, such as resolved incident summaries, user preferences, or recurring environment quirks. Before starting a new run, the agent queries this store (scoped by `tenantId` and `agentScope`) for relevant past lessons; after finishing, it writes back a short summary rather than raw multi-kilobyte log dumps.
 
 ```java
-public List<ChatMessage> compactMemory(List<ChatMessage> fullHistory, int tokenThreshold) {
-    if (tokenCounter.count(fullHistory) < tokenThreshold) {
-        return fullHistory;
+package com.javahub.agents.memory;
+
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Service
+public class HybridMemoryAgentService {
+
+    private final ChatClient chatClient;
+    private final VectorStore episodicMemoryStore;
+
+    public HybridMemoryAgentService(
+            ChatClient.Builder chatClientBuilder,
+            ChatMemoryRepository chatMemoryRepository,
+            VectorStore episodicMemoryStore) {
+
+        this.episodicMemoryStore = episodicMemoryStore;
+
+        // Short-term sliding window persisted in JDBC/Redis/In-Memory repository
+        ChatMemory workingMemory = MessageWindowChatMemory.builder()
+                .chatMemoryRepository(chatMemoryRepository)
+                .maxMessages(12)
+                .build();
+
+        this.chatClient = chatClientBuilder
+                .defaultSystem("You are an SRE triage assistant. Use past incident notes when relevant, but verify live state before concluding.")
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(workingMemory).build())
+                .build();
     }
 
-    // Extract older messages (excluding system prompt and recent 3 turns)
-    List<ChatMessage> olderMessages = fullHistory.subList(1, fullHistory.size() - 3);
-    
-    String summary = summarizerModel.call(new Prompt(
-        "Compress the following execution history into essential facts and observations:\n" + 
-        serialize(olderMessages)
-    )).getResult().getOutput().getText();
+    public String investigate(String conversationId, String tenantId, String promptText) {
+        // 1. Recall relevant long-term episodic memories scoped strictly to this tenant
+        List<Document> pastLessons = episodicMemoryStore.similaritySearch(
+                SearchRequest.builder()
+                        .query(promptText)
+                        .topK(3)
+                        .similarityThreshold(0.75)
+                        .filterExpression("tenantId == '" + tenantId + "' && memoryType == 'EPISODIC_INCIDENT'")
+                        .build()
+        );
 
-    List<ChatMessage> compacted = new ArrayList<>();
-    compacted.add(fullHistory.get(0)); // Retain original System Prompt
-    compacted.add(new SystemMessage("Historical Context Summary: " + summary));
-    compacted.addAll(fullHistory.subList(fullHistory.size() - 3, fullHistory.size())); // Keep recent turns
+        String recalledContext = pastLessons.isEmpty()
+                ? "None."
+                : pastLessons.stream()
+                        .map(doc -> "- " + doc.getText())
+                        .collect(Collectors.joining("\n"));
 
-    return compacted;
+        // 2. Combine long-term recall with short-term conversation window via CONVERSATION_ID
+        return chatClient.prompt()
+                .user("""
+                        Relevant past incident lessons:
+                        %s
+
+                        Current request:
+                        %s
+                        """.formatted(recalledContext, promptText))
+                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, conversationId))
+                .call()
+                .content();
+    }
+
+    public void recordEpisodicLesson(String tenantId, String serviceName, String distilledFinding) {
+        Document memory = new Document(
+                distilledFinding,
+                Map.of(
+                        "tenantId", tenantId,
+                        "service", serviceName,
+                        "memoryType", "EPISODIC_INCIDENT",
+                        "recordedAt", Instant.now().toString()
+                )
+        );
+        episodicMemoryStore.accept(List.of(memory));
+    }
 }
 ```
 
----
+Keep raw tool payloads out of both memory layers whenever possible. If a Kubernetes log tool returns 8,000 lines of stack traces, truncate and summarize the relevant lines inside the tool itself before handing them back to the LLM. Controlling payload size at the tool boundary prevents your working memory from filling up on step two.
 
-### Multi-Agent Orchestration Topologies
+## Multi-Agent Coordination and Supervision Patterns
 
-When building enterprise agents, monolithic agents fail. If you grant an agent 25 different tools (AWS CLI, GitHub API, SQL Executor, Slack Sender, Jira Client), the model suffers from tool hallucination.
-
-The enterprise standard is **Supervisor-Worker Orchestration**:
+When a single agent accumulates too many responsibilities, splitting it into narrow workers usually improves reliability more than switching to a bigger model. Two coordination patterns show up most often in production Java systems: **Supervisor-Worker** and **Evaluator-Optimizer (Critic)**.
 
 ```mermaid
 flowchart TD
-    UserReq["User: 'Diagnose checkout drop and notify team'"]
-    Supervisor["SUPERVISOR AGENT<br/>(Task Planning, Routing & Delegation)"]
+    Req["Incident Alert: Checkout p99 Spike"] --> Sup["Incident Supervisor<br/>(Routing & Synthesis)"]
 
-    subgraph Workers ["Specialized Worker Sub-Agents"]
-        direction TB
-        DBAgent["Database Specialist<br/>(Tools: EXPLAIN, PG_STAT, SQL)"]
-        K8sAgent["Kubernetes Specialist<br/>(Tools: Kubectl, JFR, PodLogs)"]
-        CommsAgent["Communications Agent<br/>(Tools: Slack, PagerDuty, Jira)"]
+    subgraph Workers["Narrow Worker Agents (2 to 4 Tools Each)"]
+        DB["Database Worker<br/>(pg_stat_activity, EXPLAIN)"]
+        K8s["Kubernetes Worker<br/>(Pod Status, Rollout History)"]
     end
 
-    Critic["VERIFICATION / CRITIC AGENT<br/>(Cross-examines findings & guards policy)"]
-    FinalAns["Final Audited Action Executed"]
+    Sup -->|"Read-only DB check"| DB
+    Sup -->|"Read-only K8s check"| K8s
+    DB -->|"Structured DbReport"| Sup
+    K8s -->|"Structured K8sReport"| Sup
 
-    UserReq --> Supervisor
-    Supervisor -->|Sub-task 1| DBAgent
-    Supervisor -->|Sub-task 2| K8sAgent
-    DBAgent -.->|Telemetry findings| Supervisor
-    K8sAgent -.->|CrashLoopBackoff logs| Supervisor
-    Supervisor --> Critic
-    Critic -- "Approved" --> CommsAgent
-    CommsAgent --> FinalAns
+    Sup --> Draft["Draft Remediation Plan"]
+    Draft --> Critic["Evaluator / Critic Agent<br/>(Fresh Context Window)"]
+    Critic -->|"Needs revision (max 2 rounds)"| Sup
+    Critic -->|"Approved"| Hitl["HITL Approval Gate"]
 ```
 
-#### The Supervisor Agent
-The Supervisor does **not** execute low-level tools directly. Its tools are other agents! It evaluates the objective, builds a dependency DAG of sub-tasks, delegates sub-tasks to specialized worker agents, and synthesizes their outputs.
+### Supervisor-Worker with Structured Handoffs
 
-#### The Specialized Worker Agents
-Worker agents operate in narrow domains with 2-4 focused tools. 
-- The `DatabaseAgent` has zero knowledge of Slack or Git; it only understands query plans, connection pools, and table locks.
-- The `KubernetesAgent` only understands Pod status, container restarts, and JVM GC flags.
+In a **Supervisor-Worker** topology, worker agents do not talk to each other in an open-ended mesh (which risks circular delegation). Instead, deterministic Java code or a supervisor agent dispatches focused sub-tasks to narrow workers, each holding only 2 to 4 domain tools and returning a typed Java `record` via Spring AI's `.entity(...)`.
 
-#### The Critic or Verifier Agent
-Before any consequential action is taken (e.g., executing an automated database index creation or restarting a production deployment), the supervisor routes the plan to an adversarial **Critic Agent**. 
+### Evaluator-Optimizer (Critic) Pattern
 
-The Critic is instructed: *"Your job is to find flaws, safety violations, and security risks in the proposed action. If the evidence is insufficient, reject the plan."*
-
----
-
-### Human-in-the-Loop (HITL) Safeguards & Guardrails
-
-In high-consequence enterprise environments—such as financial banking, healthcare, or core infrastructure—autonomous agents must never be allowed to execute destructive actions without explicit human approval.
-
-#### The Autonomous Action Tier Matrix
-
-| Tier | Action Type | Execution Policy | Example |
-| :--- | :--- | :--- | :--- |
-| **Tier 1: Read-Only** | Low Risk | Fully Autonomous | Querying metrics, searching vector stores, reading logs |
-| **Tier 2: Non-Destructive Write** | Medium Risk | Autonomous with Audit Log | Creating a draft Jira ticket, generating a branch PR |
-| **Tier 3: Destructive Mutation** | High Risk | **Mandatory Human-in-the-Loop** | Restarting servers, refunding payments, executing DDL |
-
-#### Implementing Human-in-the-Loop Gateways in Java
-
-When an agent triggers a Tier 3 action, the Java execution runtime halts the loop, stores the state in a durable store (or Temporal workflow), and emits an interactive approval request:
+LLMs rarely question their own first draft inside the same conversation context. In the **Evaluator-Optimizer** pattern, a second `ChatClient` call runs in a fresh context window with a strict review rubric: look for missing evidence, unsafe SQL locks, unverified rollback steps, or policy violations. If the critic rejects the plan, the supervisor revises it using the critic's concrete feedback, capped at a small number of rounds (typically 2).
 
 ```java
-public class EnterpriseToolRegistry {
+package com.javahub.agents.orchestration;
 
-    private final ApprovalGateway approvalGateway;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.stereotype.Service;
 
-    public String executeTool(String toolName, Map<String, Object> arguments, SecurityContext context) {
-        ToolDefinition tool = getTool(toolName);
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.StructuredTaskScope;
 
-        // Check if action requires Human Approval
-        if (tool.riskTier() == RiskTier.TIER_3_DESTRUCTIVE) {
-            String approvalToken = UUID.randomUUID().toString();
-            
-            // Dispatch interactive notification to Slack/Teams with approval buttons
-            approvalGateway.requestHumanApproval(new ApprovalRequest(
-                approvalToken,
-                context.authenticatedUser(),
-                toolName,
-                arguments,
-                "Agent requests permission to execute destructive action"
-            ));
+@Service
+public class IncidentOrchestrator {
 
-            // Suspend agent execution until human approval arrives
-            boolean approved = approvalGateway.waitForHumanDecision(approvalToken, Duration.ofMinutes(15));
-            
-            if (!approved) {
-                return "Action REJECTED by Human Supervisor. Do not retry this action; explore alternative paths.";
+    private static final int MAX_CRITIC_ROUNDS = 2;
+
+    private final ChatClient dbWorkerClient;
+    private final ChatClient k8sWorkerClient;
+    private final ChatClient plannerClient;
+    private final ChatClient criticClient;
+
+    public IncidentOrchestrator(
+            ChatClient.Builder builder,
+            DatabaseDiagnosticTools dbTools,
+            KubernetesDiagnosticTools k8sTools) {
+
+        this.dbWorkerClient = builder.clone()
+                .defaultSystem("You are a PostgreSQL diagnostic specialist. Only inspect read-only metrics and return concise factual findings.")
+                .defaultTools(dbTools)
+                .build();
+
+        this.k8sWorkerClient = builder.clone()
+                .defaultSystem("You are a Kubernetes diagnostic specialist. Inspect rollouts, pod restarts, and OOM events.")
+                .defaultTools(k8sTools)
+                .build();
+
+        this.plannerClient = builder.clone()
+                .defaultSystem("Synthesize worker diagnostics into a safe, minimal remediation plan with explicit rollback steps.")
+                .build();
+
+        this.criticClient = builder.clone()
+                .defaultSystem("""
+                        You are a skeptical SRE safety reviewer.
+                        Reject any remediation plan that lacks evidence from diagnostics,
+                        proposes locking DDL without CONCURRENTLY, or omits a rollback step.
+                        """)
+                .build();
+    }
+
+    public VerifiedRemediation triageIncident(String serviceName, Map<String, Object> toolContext) {
+        // 1. Run independent read-only workers in parallel (or sequentially if preferred)
+        WorkerFinding dbFinding = dbWorkerClient.prompt()
+                .user("Check active locks and slow queries affecting service: " + serviceName)
+                .toolContext(toolContext)
+                .call()
+                .entity(WorkerFinding.class);
+
+        WorkerFinding k8sFinding = k8sWorkerClient.prompt()
+                .user("Check recent rollouts, CrashLoopBackOff, and OOMKilled pods for: " + serviceName)
+                .toolContext(toolContext)
+                .call()
+                .entity(WorkerFinding.class);
+
+        // 2. Evaluator-Optimizer loop bounded to MAX_CRITIC_ROUNDS
+        String feedback = "None.";
+        RemediationPlan latestPlan = null;
+
+        for (int round = 1; round <= MAX_CRITIC_ROUNDS; round++) {
+            latestPlan = plannerClient.prompt()
+                    .user("""
+                            Service: %s
+                            Database diagnostics: %s
+                            Kubernetes diagnostics: %s
+                            Prior reviewer feedback to address: %s
+                            """.formatted(serviceName, dbFinding, k8sFinding, feedback))
+                    .call()
+                    .entity(RemediationPlan.class);
+
+            CriticVerdict verdict = criticClient.prompt()
+                    .user("""
+                            Diagnostics: DB=%s, K8s=%s
+                            Proposed plan: %s
+                            """.formatted(dbFinding, k8sFinding, latestPlan))
+                    .call()
+                    .entity(CriticVerdict.class);
+
+            if (verdict != null && verdict.approved()) {
+                return new VerifiedRemediation(latestPlan, verdict, round, true);
             }
+            feedback = verdict != null ? String.join("; ", verdict.objections()) : "Provide clearer rollback criteria.";
         }
 
-        // Execute local Java method upon verified approval
-        return tool.invoke(arguments);
+        // Did not pass critic review within cap: escalate to human without auto-execution
+        return new VerifiedRemediation(latestPlan, new CriticVerdict(false, List.of(feedback)), MAX_CRITIC_ROUNDS, false);
     }
+
+    public record WorkerFinding(String domain, String summary, List<String> evidence) {}
+    public record RemediationPlan(String rootCause, List<String> steps, String rollbackPlan, boolean requiresProductionChange) {}
+    public record CriticVerdict(boolean approved, List<String> objections) {}
+    public record VerifiedRemediation(RemediationPlan plan, CriticVerdict verdict, int rounds, boolean passedReview) {}
 }
 ```
 
----
+Notice how `builder.clone()` gives each specialist its own isolated system prompt and minimal toolset without leaking tools across agents, and how deterministic Java code enforces the Directed Acyclic Graph (DAG) of delegation so workers can never spin up circular sub-agent calls.
 
-## Senior Engineer Interview Crucible
+## Human-in-the-Loop Safeguards for Autonomous Workflows
 
-### What is the ReAct pattern, and why is it superior to naive chain-of-thought prompting for tool-calling agents?
-**Answer:** Chain-of-Thought (CoT) prompting encourages an LLM to generate an internal step-by-step reasoning plan entirely in one shot before outputting an answer. While effective for closed-world mathematical puzzles, CoT fails in dynamic real-world environments because the model cannot verify its assumptions against external truth; errors early in the thought chain compound into massive hallucinations.
+Before an agent executes any external action, classify every tool by blast radius and enforce that policy in deterministic Java code outside the LLM.
 
-The **ReAct (Reason + Act)** pattern interleaves reasoning traces (*"Thought"*) with action execution (*"Action"*) and real-world environmental feedback (*"Observation"*). The agent formulates a hypothesis, executes a tool (e.g., executing a SQL query), inspects the concrete runtime output, updates its mental model, and decides the next step based on reality. This feedback loop allows the agent to recover from unexpected exceptions, refine search queries, and verify facts dynamically.
+| Risk Tier | Action Category | Policy | Examples |
+| :--- | :--- | :--- | :--- |
+| **Tier 1: Read-Only** | Observational queries | Auto-approved with audit log | Reading Prometheus metrics, querying `EXPLAIN`, searching docs |
+| **Tier 2: High-Risk Mutation** | Reversible or financially significant writes | **Mandatory Human-in-the-Loop approval** | Rolling back a deployment, issuing a refund above threshold, updating DNS |
+| **Tier 3: Blocked Destructive** | Irreversible, high-impact actions | **Hard-blocked unconditionally** | Dropping tables, wiping production buckets, disabling IAM MFA |
 
-### How do you prevent multi-agent systems from falling into infinite recursion or circular delegation loops?
-**Answer:** In production systems, multi-agent circular delegation is mitigated through four defensive layers:
-1. **Hard Iteration Circuit Breakers:** Every agent execution context carries a deterministic counter (e.g., `maxIterations = 10`). If the agent exceeds this threshold without reaching a terminal answer, execution is forcibly terminated with an alert.
-2. **Deterministic Context Graphs (DAGs):** Rather than allowing unrestricted peer-to-peer delegation, communication is structured as a directed acyclic graph (DAG) enforced by a Supervisor. Worker agents cannot delegate back to the Supervisor or call each other circularly.
-3. **Semantic Similarity Loop Detection:** Maintain a hash set or embedding vector history of recent tool calls and arguments. If an agent calls the exact same tool with identical parameters three times consecutively, an execution hook intercepts the call and injects a warning prompt: *"System Alert: You are repeating the same action without progress. Abort this approach and try another strategy."*
-4. **Token Budget Enforcement:** Every workflow is assigned an absolute monetary/token budget cap (e.g., max 100,000 tokens). Once exhausted, the client throws a `BudgetExceededException`.
+Avoid holding an HTTP request thread open with `Thread.sleep` or blocking calls while waiting 15 minutes for a human to click a button in Slack. In real enterprise backends, persist the pending action request (or use a durable workflow engine like Temporal to pause cleanly), return a `PendingApproval` result to the caller, and execute the action only when the authenticated approver submits a signed callback to a dedicated approval endpoint.
 
-### Explain the role of an adversarial Critic Agent in a multi-agent architecture.
-**Answer:** Large Language Models are inherently predisposed to sycophancy and optimistic bias: when an agent constructs a plan, it rarely cross-examines its own flawed assumptions. 
+```java
+package com.javahub.agents.safety;
 
-A **Critic Agent** acts as an automated, adversarial auditor operating in a fresh context window. It is initialized with a cynical system prompt instructing it to identify security vulnerabilities, logical fallacies, edge-case failures, and compliance violations in the proposed output. For example, if a coding agent generates a database migration script, the Critic analyzes the SQL for missing indexes, table lock hazards, or missing foreign keys. If the Critic rejects the plan, it returns concrete objections to the generator agent, forcing an iterative refinement before code ever reaches production.
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
-### How do you maintain transactional consistency across distributed tools when an autonomous agent fails midway through a multi-step workflow?
-**Answer:** An autonomous agent cannot participate in a classic ACID two-phase commit (2PC) because tools are heterogeneous, external APIs (GitHub, AWS, Slack, Stripe). 
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
 
-The production architectural solution is orchestrating the agent within a **Durable Execution Engine (such as Temporal or Cadence)** implementing the **Saga Pattern**:
-1. Every destructive or stateful tool registered with the agent must define a corresponding **Compensating Action** (e.g., `provisionDatabase()` must have a compensating `deprovisionDatabase()`).
-2. As the agent loops, the orchestrator logs every executed action to an append-only event history.
-3. If the agent crashes, times out, or fails an unrecoverable invariant on step 4, the workflow engine automatically walks the execution history in reverse, invoking the compensating actions for steps 3, 2, and 1. This guarantees that external resources are cleanly cleaned up rather than left half-provisioned.
+@Service
+public class TieredActionGateway {
+
+    private static final Logger log = LoggerFactory.getLogger(TieredActionGateway.class);
+
+    private final PendingApprovalRepository approvalRepository;
+    private final NotificationDispatcher notifier;
+    private final Map<String, RegisteredAction> actions;
+
+    public TieredActionGateway(
+            PendingApprovalRepository approvalRepository,
+            NotificationDispatcher notifier,
+            Map<String, RegisteredAction> actions) {
+        this.approvalRepository = approvalRepository;
+        this.notifier = notifier;
+        this.actions = actions;
+    }
+
+    public ActionDecision submitAction(
+            String actionName,
+            Map<String, Object> arguments,
+            String requestedByUserId,
+            String tenantId) {
+
+        RegisteredAction action = actions.get(actionName);
+        if (action == null) {
+            return new ActionDecision.Blocked("Unknown action: " + actionName);
+        }
+
+        return switch (action.tier()) {
+            case READ_ONLY -> {
+                log.info("AUDIT tier=READ_ONLY action={} tenant={} user={}", actionName, tenantId, requestedByUserId);
+                String output = action.executor().execute(arguments);
+                yield new ActionDecision.Executed(output);
+            }
+            case HIGH_RISK_MUTATION -> {
+                String approvalId = "APR-" + UUID.randomUUID();
+                PendingApproval pending = new PendingApproval(
+                        approvalId, tenantId, requestedByUserId, actionName, arguments, Instant.now());
+                approvalRepository.save(pending);
+                notifier.sendApprovalRequest(pending);
+
+                log.info("AUDIT tier=HIGH_RISK_MUTATION status=PENDING approvalId={} action={} user={}",
+                        approvalId, actionName, requestedByUserId);
+                yield new ActionDecision.PendingHumanApproval(
+                        approvalId,
+                        "Action requires human approval before execution. Do not retry automatically."
+                );
+            }
+            case BLOCKED_DESTRUCTIVE -> {
+                log.warn("SECURITY_ALERT tier=BLOCKED_DESTRUCTIVE action={} tenant={} user={}",
+                        actionName, tenantId, requestedByUserId);
+                yield new ActionDecision.Blocked(
+                        "Action '" + actionName + "' is prohibited for autonomous execution.");
+            }
+        };
+    }
+
+    public enum RiskTier {
+        READ_ONLY,
+        HIGH_RISK_MUTATION,
+        BLOCKED_DESTRUCTIVE
+    }
+
+    public sealed interface ActionDecision
+            permits ActionDecision.Executed, ActionDecision.PendingHumanApproval, ActionDecision.Blocked {
+        record Executed(String output) implements ActionDecision {}
+        record PendingHumanApproval(String approvalId, String message) implements ActionDecision {}
+        record Blocked(String reason) implements ActionDecision {}
+    }
+
+    @FunctionalInterface
+    public interface ActionExecutor {
+        String execute(Map<String, Object> arguments);
+    }
+
+    public record RegisteredAction(String name, RiskTier tier, ActionExecutor executor) {}
+    public record PendingApproval(
+            String approvalId,
+            String tenantId,
+            String requestedByUserId,
+            String actionName,
+            Map<String, Object> arguments,
+            Instant createdAt) {}
+}
+```
+
+## When Deterministic Workflows Beat Multi-Agent Loops
+
+One of the hardest lessons teams learn after shipping their first multi-agent system is that **most business workflows do not need autonomous loops at all**.
+
+Every extra agent hop adds real cost:
+
+- **Latency:** A 5-step supervisor-worker-critic run can easily take 12 to 25 seconds of serial LLM calls, whereas deterministic orchestration calling one structured LLM step takes under 2 seconds.
+- **Token cost:** Repeating system prompts, tool schemas, and growing conversation histories across 6 iterations multiplies input token spend quickly.
+- **Predictability and testing:** A plain Java state machine or Temporal workflow takes the exact same path on every run and is trivial to unit-test. An autonomous agent can take a different sequence of tool calls tomorrow when the model provider updates weights or a log message changes wording.
+- **Debuggability:** Tracing why Agent B misinterpreted Agent A's prose summary takes far more effort than reading a stack trace in normal Java code.
+
+A good rule of thumb for senior Java engineers:
+
+- **Use plain Java or a durable workflow engine (such as Temporal)** when the sequence of steps is known ahead of time (for example: extract invoice fields -> validate against ERP -> route by dollar threshold -> write ledger entry). Put the LLM strictly inside the narrow step that needs unstructured text understanding or classification, and let deterministic Java code own control flow, retries, and compensating Saga rollbacks.
+- **Reach for ReAct or multi-agent orchestration** only when the path genuinely depends on open-ended discovery that cannot be hardcoded in advance, such as ad-hoc incident diagnosis, exploratory research across heterogeneous data sources, or complex code investigation. Even then, keep the graph shallow, cap iterations and tokens tightly, and gate mutations behind human approval.
+
+## Interview Questions
+
+### How does the ReAct loop differ from Chain-of-Thought prompting for backend agents?
+
+Chain-of-Thought asks the model to write out its entire reasoning chain in a single generation pass without interacting with external systems. If an early assumption is wrong, every downstream step builds on a fabrication. ReAct interleaves reasoning with concrete tool calls and feeds real runtime observations back into the prompt before the next decision. That allows the agent to verify live database state, react to error responses, and adjust its search strategy based on actual evidence.
+
+### How do you prevent runaway loops and surprise cloud bills in autonomous agents?
+
+Enforce deterministic guardrails in the Java orchestration layer rather than trusting the model to stop on its own. Combine four controls: a hard maximum iteration counter (for example, 6 turns), a wall-clock timeout, a cumulative token-budget check using `ChatResponse.getMetadata().getUsage().getTotalTokens()`, and duplicate tool-call detection that aborts if the agent repeats the same tool name and arguments without progress.
+
+### Why separate short-term `ChatMemory` from long-term `VectorStore` memory?
+
+Short-term working memory (`MessageWindowChatMemory`) preserves conversational continuity within a single session, but keeping every historical turn forever blows past context limits and degrades attention. Long-term vector memory stores distilled, cross-session lessons (such as resolved incident summaries) indexed by metadata like `tenantId` and `service`. Retrieving only the top 2 or 3 relevant memories keeps prompts compact while still letting the agent benefit from past operational history.
+
+### How do you handle partial failures when an autonomous workflow executes multiple external mutations?
+
+An LLM loop cannot participate in a distributed ACID two-phase commit across external APIs like Stripe, GitHub, and Kubernetes. Run stateful multi-step workflows inside a durable execution engine (such as Temporal) using the Saga pattern: every mutating action must be idempotent and paired with a compensating action (for example, `reserveInventory` paired with `releaseReservation`). If a later step fails or a human rejects an approval gate, the workflow engine reliably executes compensating actions in reverse order even if the JVM restarts midway.

@@ -1,356 +1,403 @@
 ---
 title: "JDBC and Connection Pooling"
-description: "Master raw JDBC internals in Java 21: PreparedStatement AST pre-compilation, SQL injection prevention, HikariCP ConcurrentBag mechanics, and pool sizing formulas."
+description: "Work with JDBC connections, PreparedStatement parameterization, custom ResultSet row mappers, streaming and batching, and HikariCP connection pool sizing."
 category: "level-7"
 date: "2026-10-29T10:00:00Z"
 ---
 
-Every enterprise Java framework that touches a relational database—whether it is Spring Data JPA, Hibernate, MyBatis, or jOOQ—is an abstraction layer resting upon a single foundational specification: **Java Database Connectivity (JDBC)**.
-
-When your application is healthy, ORM libraries make database access feel like manipulating ordinary Java objects. But when production begins stalling, transactions deadlock, and thread dumps show hundreds of threads blocked on `HikariPool-1 - Connection is not available`, your high-level abstractions cannot save you.
-
-To diagnose and resolve severe database bottlenecks, you must understand what happens over the physical network socket: how the database server parses SQL, how `PreparedStatement` binaries prevent injection attacks, and how high-performance connection pools like **HikariCP** manage scarce operating system sessions.
+Every database library in the Java ecosystem (Spring Data JPA, Hibernate, jOOQ, MyBatis, and Spring's `JdbcClient`) ultimately talks to the database through **Java Database Connectivity (JDBC)**. Most days, higher-level abstractions hide that layer nicely. When a service starts throwing `HikariPool-1 - Connection is not available`, a report triggers an `OutOfMemoryError` while loading rows, or a bulk import takes 40 seconds instead of 2, knowing how JDBC and connection pools actually behave makes troubleshooting straightforward.
 
 ```mermaid
 flowchart TD
-    subgraph "The JDBC Execution Topology"
-        App["Java Application Logic"] --> Pool["HikariCP Connection Pool"]
-        
-        Pool -->|Borrows Lease| Conn["JDBC Connection (java.sql.Connection)"]
-        Conn -->|Pre-compiles SQL AST| PS["PreparedStatement (java.sql.PreparedStatement)"]
-        
-        PS -->|Transmits Parameters over Wire| DB["PostgreSQL / MySQL Server"]
-        DB -->|Returns Cursor Stream| RS["ResultSet (java.sql.ResultSet)"]
-        
-        RS -->|Maps Columns| DTO["Java Domain Record / Entity"]
-        DTO --> Close["try-with-resources: Return Connection to Pool"]
-        Close --> Pool
+    subgraph "JDBC Execution Path"
+        App["Java Service"] --> Pool["HikariCP DataSource"]
+        Pool -->|"Borrow Connection"| Conn["java.sql.Connection"]
+        Conn -->|"prepareStatement(sql)"| PS["java.sql.PreparedStatement"]
+        PS -->|"Bind Typed Params"| DB["PostgreSQL / MySQL"]
+        DB -->|"Row Stream"| RS["java.sql.ResultSet"]
+        RS -->|"RowMapper"| Domain["Java Record / DTO"]
+        Domain -->|"try-with-resources close()"| Pool
     end
 ```
 
----
+## `Connection`, `Statement`, and `PreparedStatement`
 
-## The Physical Anatomy of a Database Connection
+The `java.sql` API is built around a nested chain of `AutoCloseable` resources:
 
-A database connection is not a lightweight Java heap reference. It is an expensive, stateful, resource-heavy operating system bridge:
-1. **TCP Handshake & SSL/TLS Negotiation**: Establishing the raw network socket connection between your application server and the database server.
-2. **Process Allocation**: On databases like PostgreSQL, every new connection causes the operating system to fork a brand-new backend worker process, reserving native memory for sorting buffers (`work_mem`), statement execution caches, and lock tables.
-3. **Authentication Handshake**: Exchanging cryptographic credentials, tenant schemas, and connection character encodings.
+- **`DataSource`**: The factory (usually a connection pool like HikariCP) that hands out `Connection` leases. Prefer `DataSource` over legacy `DriverManager.getConnection(...)`.
+- **`Connection`**: Represents a database session and transaction boundary. Calling `close()` on a pooled connection does not tear down the TCP socket; it resets state and returns the connection to the pool.
+- **`Statement`**: Sends a static SQL string with no parameter placeholders. Fine for fixed DDL or parameterless queries, unsafe whenever user input is involved.
+- **`PreparedStatement`**: Pre-parses SQL with `?` placeholders and binds typed parameters safely. Use this by default for all application queries and writes.
+- **`CallableStatement`**: Extends `PreparedStatement` for invoking stored procedures (`{call ...}`).
+- **`ResultSet`**: A forward cursor over rows returned by a `SELECT` (or generated keys returned by an `INSERT`).
 
-Physically establishing a single connection takes between **50 to 150 milliseconds** of latency and consumes 5 to 10MB of memory on the database host.
-
-If your web server created a new physical connection for every incoming HTTP request, your database server would collapse under CPU context switching and memory starvation within seconds.
-
----
-
-## JDBC Resource Hierarchy and the PreparedStatement Defense
-
-The core JDBC API is defined in `java.sql`. It follows a nested resource ownership model where every resource must be closed in reverse order of creation:
-
-```mermaid
-flowchart TD
-    subgraph "Nested JDBC Resource Lifecycle"
-        DS["DataSource (Pool / Factory)"] -->|"1. getConnection()"| C["Connection"]
-        C -->|"2. prepareStatement(sql)"| S["PreparedStatement"]
-        S -->|"3. executeQuery()"| R["ResultSet"]
-        
-        R -.->|AutoCloseable: Closes First| S
-        S -.->|AutoCloseable: Closes Second| C
-        C -.->|AutoCloseable: Returns Lease to Pool| DS
-    end
-```
-
-### The Physics of SQL Injection
-
-Consider the classic rookie vulnerability:
+Always open JDBC resources in `try-with-resources` so they close in strict reverse order (`ResultSet` -> `PreparedStatement` -> `Connection`), even when an exception is thrown:
 
 ```java
-// DANGEROUS CODE VULNERABLE TO SQL INJECTION:
-String sql = "SELECT * FROM users WHERE username = '" + userInput + "' AND password = '" + passInput + "'";
-Statement stmt = connection.createStatement();
-ResultSet rs = stmt.executeQuery(sql);
-```
+public long insertOrder(DataSource dataSource, long customerId, BigDecimal total) throws SQLException {
+    String sql = "INSERT INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)";
 
-If an attacker supplies `' OR '1'='1` as the username, the database's SQL Lexer and Parser parse the input as raw SQL grammar rather than literal text data. The Abstract Syntax Tree (AST) generated by the database optimizer is fundamentally altered:
-
-```sql
-SELECT * FROM users WHERE username = '' OR '1'='1' AND password = '...'
-```
-
-The `'1'='1'` condition evaluates to `true` for every row in the table, bypassing authentication completely.
-
-### Why PreparedStatement Prevents SQL Injection
-
-When you use a `PreparedStatement`, the execution lifecycle is split into two completely separate phases over the database wire protocol:
-
-```java
-String sql = "SELECT id, email, balance FROM users WHERE username = ? AND password = ?";
-try (Connection conn = dataSource.getConnection();
-     PreparedStatement ps = conn.prepareStatement(sql)) {
-    
-    ps.setString(1, userInput);
-    ps.setString(2, passInput);
-    
-    try (ResultSet rs = ps.executeQuery()) {
-        // Safe mapping
-    }
-}
-```
-
-1. **Pre-Compilation Phase**: The Java driver sends the SQL string with `?` placeholders to the database server. The database parses the SQL text, builds the Abstract Syntax Tree (AST), validates table schemas, and compiles an execution plan. **The structure of the query is permanently frozen.**
-2. **Parameter Binding Phase**: The parameter values (`userInput`, `passInput`) are transmitted separately as raw typed data over the binary protocol. 
-
-Even if the user input contains `'; DROP TABLE users; --`, the database treats those characters as a literal text value to match against the `username` column. The database engine never re-parses or re-compiles the query text, making SQL injection physically impossible!
-
----
-
-## ResultSets and the wasNull() Primitive Pitfall
-
-A `ResultSet` represents a cursor pointing to data rows returned by the query. The cursor initially points **before the first row**. Invoking `rs.next()` advances the cursor to the next record:
-
-```java
-public record UserAccount(long id, String email, Integer loyaltyPoints) {}
-
-public Optional<UserAccount> findAccount(DataSource dataSource, long accountId) throws SQLException {
-    String sql = "SELECT id, email, loyalty_points FROM users WHERE id = ?";
-    
     try (Connection conn = dataSource.getConnection();
-         PreparedStatement ps = conn.prepareStatement(sql)) {
-        
-        ps.setLong(1, accountId);
-        
-        try (ResultSet rs = ps.executeQuery()) {
-            if (!rs.next()) {
-                return Optional.empty(); // No row found
+         PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+
+        ps.setLong(1, customerId);
+        ps.setBigDecimal(2, total);
+        ps.setString(3, "PENDING");
+        ps.executeUpdate();
+
+        try (ResultSet keys = ps.getGeneratedKeys()) {
+            if (!keys.next()) {
+                throw new SQLException("Insert succeeded but no generated key was returned");
             }
-            
-            long id = rs.getLong("id");
-            String email = rs.getString("email");
-            
-            // THE FATAL TRAP:
-            int points = rs.getInt("loyalty_points");
-            Integer safePoints = rs.wasNull() ? null : points;
-            
-            return Optional.of(new UserAccount(id, email, safePoints));
+            return keys.getLong(1);
         }
     }
 }
 ```
 
-### The wasNull() Trap
+### Managing Transactions Explicitly
 
-Java primitive types (`long`, `int`, `double`, `boolean`) cannot be `null`. 
-
-When a database column contains a SQL `NULL`, the JDBC driver cannot assign `null` to a primitive `int`. By JDBC specification, **it returns default primitive zero (`0`)**!
-
-If an account has `loyalty_points = NULL` (meaning unassigned or pending), calling `rs.getInt("loyalty_points")` returns `0`. Your application business logic will mistakenly treat the user as having zero points!
-
-> [!WARNING]
-> To determine whether a column was actually `NULL` in the database, you **must invoke `rs.wasNull()` immediately after reading the primitive value**, or cast the result to an `Integer` object.
-
----
-
-## Managing Transactions Manually with JDBC
-
-By default, every JDBC connection operates in **Auto-Commit Mode**: every individual SQL statement executed is treated as its own independent transaction and committed immediately.
-
-To coordinate multi-statement atomic operations (such as transferring money from Account A to Account B), you must disable auto-commit, execute your statements, invoke `commit()`, and roll back inside a `catch` block on error:
+By default, a new JDBC `Connection` starts in **auto-commit mode** (`autoCommit = true`), meaning every single SQL statement commits in its own transaction immediately. Whenever two or more statements must succeed or fail together, disable auto-commit, call `commit()` on success, and `rollback()` in the `catch` block:
 
 ```java
-public class BankTransferService {
+public void transfer(DataSource dataSource, long fromId, long toId, BigDecimal amount) throws SQLException {
+    try (Connection conn = dataSource.getConnection()) {
+        boolean previousAutoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+
+        try (PreparedStatement debit = conn.prepareStatement(
+                 "UPDATE accounts SET balance = balance - ? WHERE id = ? AND balance >= ?");
+             PreparedStatement credit = conn.prepareStatement(
+                 "UPDATE accounts SET balance = balance + ? WHERE id = ?")) {
+
+            debit.setBigDecimal(1, amount);
+            debit.setLong(2, fromId);
+            debit.setBigDecimal(3, amount);
+            if (debit.executeUpdate() != 1) {
+                throw new SQLException("Insufficient funds or missing source account: " + fromId);
+            }
+
+            credit.setBigDecimal(1, amount);
+            credit.setLong(2, toId);
+            if (credit.executeUpdate() != 1) {
+                throw new SQLException("Missing destination account: " + toId);
+            }
+
+            conn.commit();
+        } catch (SQLException | RuntimeException ex) {
+            try {
+                conn.rollback();
+            } catch (SQLException rollbackEx) {
+                ex.addSuppressed(rollbackEx);
+            }
+            throw ex;
+        } finally {
+            conn.setAutoCommit(previousAutoCommit);
+        }
+    }
+}
+```
+
+Notice two small details that matter in real code: attaching any rollback error via `ex.addSuppressed(rollbackEx)` so the original root cause is not hidden, and restoring `autoCommit` in `finally` before returning the connection to the pool.
+
+## Preventing SQL Injection
+
+SQL injection happens when untrusted input is concatenated directly into a SQL string, allowing user-supplied characters to change the SQL grammar itself:
+
+```java
+// Vulnerable: attacker input becomes part of the SQL syntax
+String sql = "SELECT id, email FROM users WHERE username = '" + userInput + "'";
+try (Statement stmt = conn.createStatement();
+     ResultSet rs = stmt.executeQuery(sql)) {
+    // ...
+}
+```
+
+If `userInput` is `' OR '1'='1' --`, the database parses a completely different `WHERE` clause and returns every row in `users`.
+
+`PreparedStatement` eliminates this class of bug by separating the SQL template from the parameter values:
+
+```java
+// Safe: structure is fixed, input is bound strictly as a typed value
+String sql = "SELECT id, email FROM users WHERE username = ?";
+try (PreparedStatement ps = conn.prepareStatement(sql)) {
+    ps.setString(1, userInput);
+    try (ResultSet rs = ps.executeQuery()) {
+        // ...
+    }
+}
+```
+
+Over the database wire protocol (for example, PostgreSQL's extended query protocol), the driver sends the SQL with placeholders in a `Parse` message and transmits parameter values separately in a `Bind` message. Because the database parses the query structure before binding data (and reuses server-side compiled plans once a statement runs repeatedly, after 5 executions by default in PostgreSQL's JDBC driver via `prepareThreshold`), characters like `'`, `;`, or `--` inside `userInput` are always treated as literal text, never executable SQL.
+
+> [!IMPORTANT]
+> `?` placeholders only work for **values**, not SQL identifiers such as table names, column names, or `ORDER BY` directions. If an API accepts a sort column from query parameters, never concatenate it directly. Map it through an explicit allow-list (`Map<String, String>` or `switch` expression) to hardcoded column names.
+
+## ResultSets and Mappers
+
+A `ResultSet` cursor starts **before the first row**. You advance it with `while (rs.next())` (or `if (rs.next())` for single-row lookups) and read columns by column label (`rs.getString("email")`) or 1-based index (`rs.getString(1)`). Prefer column labels in application code so adding or reordering columns in a `SELECT` clause does not silently break mapping.
+
+### Handling SQL `NULL` Safely (`wasNull()` vs. `getObject`)
+
+Primitive Java types (`int`, `long`, `double`, `boolean`) cannot hold `null`. By the JDBC specification, calling `rs.getInt("loyalty_points")` on a SQL `NULL` returns `0`, and `rs.getBoolean(...)` returns `false`. Without a null check, a missing value silently turns into a real zero.
+
+You have two clean ways to read nullable numeric or boolean columns:
+
+```java
+// Approach 1: Check rs.wasNull() immediately after reading the primitive
+int rawPoints = rs.getInt("loyalty_points");
+Integer points = rs.wasNull() ? null : rawPoints;
+
+// Approach 2 (JDBC 4.1+): Pass the target wrapper or java.time class to getObject()
+Integer pointsClean = rs.getObject("loyalty_points", Integer.class);
+OffsetDateTime createdAt = rs.getObject("created_at", OffsetDateTime.class);
+```
+
+`rs.getObject(column, Integer.class)` is concise and works smoothly with PostgreSQL, MySQL Connector/J 8+, and modern JDBC drivers, returning `null` directly when the column is SQL `NULL`.
+
+### Writing a Clean `RowMapper<T>` Abstraction
+
+Repeating `try (Connection ...; PreparedStatement ...; ResultSet ...)` boilerplate across every DAO method gets tedious fast. Extracting a small functional `RowMapper<T>` (the exact pattern Spring's `JdbcTemplate` and `JdbcClient` build on) keeps query execution and row mapping cleanly separated:
+
+```java
+@FunctionalInterface
+public interface RowMapper<T> {
+    T mapRow(ResultSet rs, int rowNum) throws SQLException;
+}
+
+public record UserAccount(
+        long id,
+        String email,
+        Integer loyaltyPoints,
+        BigDecimal balance,
+        OffsetDateTime createdAt) {}
+```
+
+Now a reusable helper handles connection lifecycle and iteration while callers focus on SQL and mapping:
+
+```java
+public class JdbcQueryHelper {
     private final DataSource dataSource;
 
-    public BankTransferService(DataSource dataSource) {
+    public JdbcQueryHelper(DataSource dataSource) {
         this.dataSource = dataSource;
     }
 
-    public void transfer(long fromAccount, long toAccount, BigDecimal amount) throws SQLException {
-        try (Connection conn = dataSource.getConnection()) {
-            boolean originalAutoCommit = conn.getAutoCommit();
-            conn.setAutoCommit(false); // Begin manual transaction boundary
+    public <T> List<T> query(String sql, RowMapper<T> mapper, Object... params) throws SQLException {
+        List<T> results = new ArrayList<>();
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            try (PreparedStatement debit = conn.prepareStatement(
-                     "UPDATE accounts SET balance = balance - ? WHERE id = ? AND balance >= ?");
-                 PreparedStatement credit = conn.prepareStatement(
-                     "UPDATE accounts SET balance = balance + ? WHERE id = ?")) {
-
-                // Step 1: Debit sender
-                debit.setBigDecimal(1, amount);
-                debit.setLong(2, fromAccount);
-                debit.setBigDecimal(3, amount); // Guard against negative balances
-                
-                int debitCount = debit.executeUpdate();
-                if (debitCount != 1) {
-                    throw new SQLException("Debit failed: Insufficient balance or account missing");
-                }
-
-                // Step 2: Credit recipient
-                credit.setBigDecimal(1, amount);
-                credit.setLong(2, toAccount);
-                
-                int creditCount = credit.executeUpdate();
-                if (creditCount != 1) {
-                    throw new SQLException("Credit failed: Recipient account missing");
-                }
-
-                conn.commit(); // Commit all operations atomically
-            } catch (SQLException ex) {
-                conn.rollback(); // Rollback sender debit on any failure!
-                throw ex;
-            } finally {
-                conn.setAutoCommit(originalAutoCommit); // Restore pool state
+            for (int i = 0; i < params.length; i++) {
+                ps.setObject(i + 1, params[i]);
             }
+
+            try (ResultSet rs = ps.executeQuery()) {
+                int rowNum = 0;
+                while (rs.next()) {
+                    results.add(mapper.mapRow(rs, rowNum++));
+                }
+            }
+        }
+        return results;
+    }
+}
+
+// Usage:
+RowMapper<UserAccount> userMapper = (rs, rowNum) -> new UserAccount(
+        rs.getLong("id"),
+        rs.getString("email"),
+        rs.getObject("loyalty_points", Integer.class),
+        rs.getBigDecimal("balance"),
+        rs.getObject("created_at", OffsetDateTime.class)
+);
+
+List<UserAccount> activeUsers = jdbcHelper.query(
+        "SELECT id, email, loyalty_points, balance, created_at FROM users WHERE status = ?",
+        userMapper,
+        "ACTIVE"
+);
+```
+
+### Streaming Large Result Sets Without Running Out of Heap
+
+By default, both the PostgreSQL and MySQL JDBC drivers buffer the **entire** `ResultSet` in JVM heap memory before `executeQuery()` even returns. On a 50-row API query, that is fast and convenient. On an export job querying 2 million rows, it triggers an `OutOfMemoryError`.
+
+In PostgreSQL, enabling server-side cursor streaming requires **two** settings together: `conn.setAutoCommit(false)` and a positive `ps.setFetchSize(500)`. If `autoCommit` stays `true`, pgJDBC silently ignores `setFetchSize` and loads everything into RAM anyway:
+
+```java
+public void exportActiveUsers(DataSource dataSource, Consumer<UserAccount> sink) throws SQLException {
+    String sql = "SELECT id, email, loyalty_points, balance, created_at FROM users WHERE status = 'ACTIVE'";
+
+    try (Connection conn = dataSource.getConnection()) {
+        boolean originalAutoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false); // Required by PostgreSQL JDBC driver for cursor streaming
+        try (PreparedStatement ps = conn.prepareStatement(
+                 sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)) {
+
+            ps.setFetchSize(500); // Fetch 500 rows per network round trip
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    sink.accept(new UserAccount(
+                            rs.getLong("id"),
+                            rs.getString("email"),
+                            rs.getObject("loyalty_points", Integer.class),
+                            rs.getBigDecimal("balance"),
+                            rs.getObject("created_at", OffsetDateTime.class)
+                    ));
+                }
+            }
+            conn.commit();
+        } finally {
+            conn.setAutoCommit(originalAutoCommit);
         }
     }
 }
 ```
 
----
+(In MySQL Connector/J, streaming requires either `ps.setFetchSize(Integer.MIN_VALUE)` for row-by-row streaming or adding `useCursorFetch=true` to the JDBC URL along with a positive fetch size.)
 
-## HikariCP: The Gold Standard Connection Pool
+### Batch Inserts for High Throughput
 
-Spring Boot 2 and 3 default to **HikariCP** as their connection pool. Created by Brett Wooldridge, HikariCP is renowned for being up to 100x faster than legacy connection pools (like c3p0, Apache DBCP, and BoneCP).
+Executing 10,000 individual `INSERT` statements in a loop costs 10,000 network round trips. Batching sends chunks of rows together and commits them in a single transaction:
 
-### Why HikariCP Is So Fast: Internal Architecture
+```java
+public void bulkInsertEvents(DataSource dataSource, List<AuditEvent> events) throws SQLException {
+    String sql = "INSERT INTO audit_events (tenant_id, event_type, payload) VALUES (?, ?, ?)";
+    int batchSize = 500;
 
-1. **FastList**: Standard `ArrayList.remove(Object)` performs a linear scan from index 0 to the end of the array. When closing JDBC statements, statements are almost always closed in reverse order of creation (LIFO). HikariCP replaces `ArrayList` with `FastList`, which scans from the tail backward and removes element index bounds checking, saving millions of CPU cycles.
-2. **ConcurrentBag (Lock-Free Borrowing)**: Traditional pools use coarse-grained `ReentrantLock` or synchronized queues to hand out connections, causing massive thread contention under load. HikariCP invented `ConcurrentBag`:
-   - It maintains a `ThreadLocal` cache of connections.
-   - When a thread requests a connection, it first checks its own `ThreadLocal` list without acquiring any lock.
-   - If empty, it attempts a lock-free scan of shared connections using Compare-And-Swap (CAS).
-   - If all connections are in use, it registers on a handoff `SynchronousQueue` waiting for another thread to release a connection.
+    try (Connection conn = dataSource.getConnection()) {
+        boolean originalAutoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            int count = 0;
+            for (AuditEvent event : events) {
+                ps.setLong(1, event.tenantId());
+                ps.setString(2, event.type());
+                ps.setString(3, event.payloadJson());
+                ps.addBatch();
+
+                if (++count % batchSize == 0) {
+                    ps.executeBatch();
+                }
+            }
+            ps.executeBatch(); // Flush remaining rows
+            conn.commit();
+        } catch (SQLException ex) {
+            conn.rollback();
+            throw ex;
+        } finally {
+            conn.setAutoCommit(originalAutoCommit);
+        }
+    }
+}
+```
+
+Pair this with the driver's batch rewrite flag in your JDBC URL (`reWriteBatchedInserts=true` for PostgreSQL or `rewriteBatchedStatements=true` for MySQL) so the driver rewrites batched statements into multi-row `VALUES (...), (...), (...)` packets, cutting insert time substantially.
+
+## Connection Pooling with HikariCP
+
+Opening a raw physical database connection is expensive: TCP handshake, TLS negotiation, authentication, and backend process/thread memory allocation on the database server (in PostgreSQL, each connection forks a dedicated OS process using several megabytes of RAM). Creating and closing a physical connection on every HTTP request quickly saturates both CPU and memory on the database host.
+
+A **connection pool** keeps a bounded set of physical connections open and hands out short-lived leases to application threads. Spring Boot uses **HikariCP** by default because of its low overhead and predictable behavior under contention.
+
+### How HikariCP Minimizes Contention
+
+Two internal design choices keep HikariCP fast even when hundreds of application threads borrow and return connections concurrently:
+
+- **`ConcurrentBag`**: Instead of guarding a single global queue with a coarse lock, `ConcurrentBag` keeps a `ThreadLocal` list of recently used connections per thread. When a thread requests a connection, it checks its own `ThreadLocal` list first without locking, falls back to a lock-free Compare-And-Swap (CAS) scan of shared connections, and only parks on a handoff queue if every connection is busy.
+- **`FastList`**: JDBC statements and result sets are typically closed in reverse order of creation (LIFO). HikariCP replaces `ArrayList` with `FastList`, which scans backward from the tail on `remove(Object)` and drops redundant bounds checks.
 
 ```mermaid
 flowchart TD
-    subgraph "HikariCP ConcurrentBag Borrow Pipeline"
-        Req["Thread Requests Connection"] --> L1{"ThreadLocal Cache Hit?"}
-        
-        L1 -->|"Yes"| Borrow1["Acquire Instantly (Zero Lock Contention!)"]
-        L1 -->|"No"| L2{"Lock-Free CAS Scan of Shared Bag"}
-        
-        L2 -->|"Available"| Borrow2["Acquire via CAS"]
-        L2 -->|"All Busy"| L3["Park Thread on SynchronousQueue"]
-        
-        Release["Returning Thread Calls connection.close()"] --> Handoff{"Is a Thread Parked on Queue?"}
-        Handoff -->|"Yes"| Direct["Direct Handoff to Parked Thread"]
-        Handoff -->|"No"| Return["Return to Shared Bag"]
+    subgraph "HikariCP ConcurrentBag Borrow Path"
+        Req["Thread Calls getConnection()"] --> TL{"ThreadLocal Connection Idle?"}
+        TL -->|"Yes"| Fast["Acquire Immediately (No Lock)"]
+        TL -->|"No"| CAS{"Lock-Free CAS Scan of Shared Bag"}
+        CAS -->|"Found"| Shared["Acquire via CAS"]
+        CAS -->|"All Busy"| Wait["Wait on Handoff Queue (up to connectionTimeout)"]
+        Return["Another Thread Calls close()"] --> Handoff{"Waiter Present?"}
+        Handoff -->|"Yes"| Direct["Direct Handoff to Waiting Thread"]
+        Handoff -->|"No"| Back["Mark Idle in Bag"]
     end
 ```
 
----
+### Sizing Your Connection Pool
 
-## The Database Pool Sizing Formula
+It is tempting to match your database pool size to your web server thread count, such as 200 Tomcat threads and 200 database connections. In practice, oversized pools almost always *reduce* throughput and spike tail latency.
 
-A common misconception among developers is: *"More connections equal more throughput. We have 200 HTTP worker threads, so our database pool size should be 200."*
+A database host has fixed CPU cores, memory bandwidth, and disk I/O queues. When 200 active queries fight over 4 or 8 database CPU cores, the OS kernel burns cycles context-switching, CPU caches thrash, and row locks pile up longer because every transaction progresses more slowly.
 
-**This is completely false.** Setting your pool size to 200 on a standard database server will actively destroy performance.
+The well-known starting formula from the PostgreSQL wiki and HikariCP documentation is:
 
-A database server is governed by hardware limits: CPU cores, disk I/O channels, and RAM bus bandwidth. When 200 database threads execute queries simultaneously on an 8-core database server, the CPU cores spend more time thrashing between thread contexts and waiting for disk I/O than executing SQL.
-
-### The PostgreSQL Sizing Formula
-
-PostgreSQL core architects established the canonical connection pool sizing formula:
-
-```
-Optimal Connections = (Available CPU Cores * 2) + Effective Spindle Count (Disks)
+```text
+connections = (db_cpu_cores * 2) + effective_spindle_count
 ```
 
-For a modern cloud database running on an AWS EC2 instance with 4 vCPUs and high-speed NVMe SSD storage:
-```
-Pool Size = (4 * 2) + 1 = 9 connections!
-```
+On a 4-vCPU database with NVMe SSD storage, that formula suggests around **9 to 12 connections** total across the database. That last part is easy to forget in Kubernetes: if your database comfortably handles 40 active connections and you run 8 replicas of your Spring Boot service, each replica's `maximumPoolSize` should be around **5** (not 40), or you should place a server-side connection pooler like **PgBouncer** in transaction-pooling mode in front of PostgreSQL. Treat the formula as a baseline and verify under realistic load tests.
 
-A connection pool of **10 to 15 connections** will achieve significantly higher throughput and drastically lower query latency than a pool of 100 connections!
+### Production HikariCP Configuration and Leak Detection
 
-```mermaid
-flowchart LR
-    subgraph "Small Pool (10 Connections)"
-        P1["10 Active Connections"] --> C1["4 CPU Cores (95% Work, 5% Context Switch)"]
-        C1 --> Out1["High Throughput, Low Latency"]
-    end
-
-    subgraph "Oversized Pool (200 Connections)"
-        P2["200 Active Connections"] --> C2["4 CPU Cores (30% Work, 70% Context Thrash)"]
-        C2 --> Out2["Lock Stalls, High Latency, OOM Crashes"]
-    end
-```
-
----
-
-## Production Configuration and Leak Detection
-
-Here is a battle-tested HikariCP production configuration:
+Here is a practical HikariCP setup illustrating the settings that matter most in production:
 
 ```java
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import javax.sql.DataSource;
 
-public class ProductionDataSourceFactory {
-    public static DataSource createDataSource() {
+public final class DataSourceFactory {
+
+    public static DataSource create(String jdbcUrl, String user, String password) {
         HikariConfig config = new HikariConfig();
-        
-        config.setJdbcUrl("jdbc:postgresql://db.prod.internal:5432/orders");
-        config.setUsername(System.getenv("DB_USER"));
-        config.setPassword(System.getenv("DB_PASS"));
+        config.setPoolName("orders-pool");
+        config.setJdbcUrl(jdbcUrl);
+        config.setUsername(user);
+        config.setPassword(password);
 
-        // Pool Sizing
-        config.setMaximumPoolSize(16); // Bounded strictly according to DB core capacity
-        config.setMinimumIdle(16);     // Fixed-size pool prevents churn and latency spikes
+        // Fixed-size pool sized for this replica's share of DB capacity
+        config.setMaximumPoolSize(10);
+        config.setMinimumIdle(10);
 
-        // Timeouts
-        config.setConnectionTimeout(3000);  // Fail fast: Throw exception if pool is exhausted for 3s
-        config.setIdleTimeout(600000);      // 10 minutes
-        config.setMaxLifetime(1800000);     // 30 minutes (Must be shorter than DB server max connection life!)
+        // Fail fast instead of letting HTTP requests hang for 30s (default)
+        config.setConnectionTimeout(3_000);
 
-        // Connection Leak Detection
-        config.setLeakDetectionThreshold(5000); // Alert if connection is checked out longer than 5 seconds!
+        // Retire connections 30-60s BEFORE DB or firewall/NAT idle timeouts kill them
+        config.setMaxLifetime(1_500_000);   // 25 minutes
+        config.setKeepaliveTime(300_000);   // 5 minutes: periodically validate idle sockets
+
+        // Log stack trace if a connection stays checked out longer than 5 seconds
+        config.setLeakDetectionThreshold(5_000);
 
         return new HikariDataSource(config);
     }
 }
 ```
 
-### The leakDetectionThreshold Lifesaver
-
-If a developer forgets to close a connection inside a `try-with-resources` block, the connection is never returned to the pool. Over time, the pool slowly starves until all connections are permanently checked out.
-
-When you configure `setLeakDetectionThreshold(5000)`, HikariCP captures a stack trace when a connection is borrowed. If that connection is not closed within 5 seconds, HikariCP logs a terrifying warning with the **exact line of code where the connection was leaked**:
+`leakDetectionThreshold` is especially helpful when tracking down forgotten `close()` calls or unexpectedly long external HTTP calls sitting inside a `@Transactional` method. When a connection stays borrowed past the threshold, HikariCP logs the exact stack trace where it was acquired:
 
 ```text
-[WARN] Connection leak detection triggered for connection org.postgresql.jdbc.PgConnection@4a92c77!
-  Thread "http-nio-8080-exec-4" allocated connection at:
-    com.enterprise.service.ReportService.generateReport(ReportService.java:84)
+WARN com.zaxxer.hikari.pool.ProxyLeakTask - Connection leak detection triggered for
+  org.postgresql.jdbc.PgConnection@4a92c77 on thread http-nio-8080-exec-4, stack trace follows
+java.lang.Exception: Apparent connection leak detected
+    at com.example.orders.ReportRepository.loadMonthlyData(ReportRepository.java:64)
 ```
 
----
+Notice that `leakDetectionThreshold` does not forcefully close the connection; it warns you so you can fix the leak or move slow non-database I/O outside the transaction boundary.
 
-## Senior Engineer Interview Crucible
+## Interview Questions
 
-### How does a PreparedStatement physically prevent SQL injection at the database protocol level?
-`PreparedStatement` separates query structure from parameter data. When `prepareStatement(sql)` is executed, the SQL text containing `?` placeholders is sent to the database engine. The database parses the SQL, generates an Abstract Syntax Tree (AST), validates schema permissions, and compiles an execution plan. The query topology is permanently frozen.
+### How does `PreparedStatement` prevent SQL injection, and what is one case it cannot protect by itself?
 
-When the parameters are bound via `ps.setString(1, input)` and `executeQuery()` is called, the driver transmits the parameter values separately across the wire in a binary parameter packet. The database engine maps the values directly into the execution plan slots without re-parsing the SQL grammar, making it physically impossible for malicious input to alter query logic.
+`PreparedStatement` separates the SQL query template from parameter values. The SQL with `?` placeholders is parsed by the database first, and user input is sent separately as typed parameter data over the wire protocol, so quotes or SQL keywords inside the value cannot alter the query structure. However, `?` placeholders cannot represent SQL identifiers like table names, column names, or `ORDER BY` directions. If you allow dynamic sorting from API input, you still need an explicit allow-list mapping user input to hardcoded column names.
 
-### Why does rs.getInt() return 0 for a SQL NULL, and how do you safely map nullable numeric columns in JDBC?
-Java primitive types cannot hold `null`. By JDBC specification, when a primitive getter (`getInt`, `getLong`, `getDouble`) encounters a SQL `NULL`, it returns the default primitive zero (`0`).
+### Why can `rs.getInt("column")` cause silent bugs on nullable columns?
 
-To map nullable numeric columns safely:
-1. Immediately invoke `rs.wasNull()` after reading the column:
-   ```java
-   int points = rs.getInt("loyalty_points");
-   Integer finalPoints = rs.wasNull() ? null : points;
-   ```
-2. Or read the column as an object using `rs.getObject("loyalty_points", Integer.class)`.
+Java's primitive `int` cannot represent `null`, so the JDBC specification requires `getInt()` (and `getLong()`, `getDouble()`, `getBoolean()`) to return `0` (or `false`) whenever the database column is SQL `NULL`. Unless you immediately check `rs.wasNull()` or read the column via `rs.getObject("column", Integer.class)`, missing data is silently coerced into zero.
 
-### Why does having a connection pool of 200 connections often make a database slower than a pool of 15 connections?
-A database server has fixed physical hardware resources: CPU cores, disk I/O channels, and RAM bus bandwidth. 
+### Why does streaming a huge `ResultSet` in PostgreSQL fail to save memory if you only call `ps.setFetchSize(500)`?
 
-When 200 connections execute queries concurrently on an 8-core server, the operating system kernel is forced to time-slice and context-switch across 200 competing processes. CPU cycles are wasted on thread scheduling, L1/L2 cache lines are constantly invalidated, and memory bus contention spikes. Furthermore, transactions contend for disk buffer pages and row locks, leading to lock queuing and cascade stalls.
+By default, PostgreSQL's JDBC driver fetches the entire query result into JVM heap memory before returning from `executeQuery()`. To enable cursor-based chunked fetching, the driver requires **both** `ps.setFetchSize(500)` and `conn.setAutoCommit(false)` (a server-side cursor only lives inside an active transaction). If `autoCommit` remains `true`, the fetch size setting is ignored.
 
-A smaller pool of 15 connections keeps the 8 CPU cores fully saturated executing actual SQL without context-switching overhead, completing queries faster and achieving significantly higher overall system throughput.
+### Why must HikariCP's `maxLifetime` be shorter than the database or firewall connection timeout?
 
-### What is the purpose of HikariCP's maxLifetime setting, and why must it be set shorter than the database or firewall idle timeout?
-`maxLifetime` controls the maximum lifespan of a physical database connection in the pool. When a connection reaches its `maxLifetime`, HikariCP gracefully closes it when it is returned to the pool and replaces it with a fresh connection.
-
-It must be configured to be **at least 30 to 60 seconds shorter than the database server's connection timeout or any intermediate network firewall/load balancer idle timeout**. If a network firewall silently terminates an idle TCP socket after 30 minutes, but HikariCP believes the connection is still alive, a thread attempting to use that connection will suffer a network socket timeout or `Connection reset by peer` error. Setting `maxLifetime` shorter ensures that HikariCP retires the connection before network intermediaries terminate it.
+Network firewalls, cloud NAT gateways, and database servers (such as MySQL's `wait_timeout`) silently drop idle TCP connections after a configured window. If `maxLifetime` is longer than that timeout, HikariCP can hand out a dead socket that fails mid-request with `Connection reset by peer` or broken pipe errors. Setting `maxLifetime` 30 to 60 seconds shorter than the shortest infrastructure timeout, along with `keepaliveTime`, ensures HikariCP retires aging connections cleanly before the network kills them.

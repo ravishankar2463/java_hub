@@ -9,9 +9,9 @@
 `JavaHub` is a production-grade, dark/light mode responsive Next.js application built to serve as the definitive curriculum for mastering Java from absolute zero to hyperscale enterprise engineering, modern AI orchestration, and sub-microsecond low-latency systems.
 
 - **Expanded 16-Level Curriculum**: 100% of all **116 roadmap topics** across **Levels 0 through 15** are authored, verified, and pushed to `origin/master`. Zero placeholder files exist.
-- **Empathetic Senior Engineering Voice**: Every topic is written in a conversational, senior-mentor human tone that avoids dry dictionary definitions. It emphasizes *why* design decisions were made, hardware and memory realities (CPU cache lines, L1/L2 locality, Metaspace, GC roots, off-heap buffers), failure modes, and real-world production post-mortems.
-- **Architecture & Lifecycle Diagrams**: Mermaid v11 flowcharts, sequence diagrams, and state machines illustrate memory layouts, distributed pipelines, and protocol handshakes. All node labels containing brackets or parentheses are strictly double-quoted to prevent Mermaid parser errors.
-- **Senior Interview Crucibles**: Every topic concludes with 4 rigorous, senior-level interview questions paired with deep-dive technical answers.
+- **Human Engineering Voice (revised November 24, 2026)**: All 116 topics were audited against `data/roadmap.ts` and rewritten in plain, grounded prose: no hype headings ("Catastrophe", "Holy Trinity", "Crucible"), no formulaic AI openings, no emoji headings, and minimal em-dashes. Every `details` item in `data/roadmap.ts` has a dedicated explanation with code, and version-sensitive claims (Java 21/22/24/25 JEPs, Spring Boot 3.x, Spring AI 1.0 GA) were corrected.
+- **Architecture & Lifecycle Diagrams**: Mermaid flowcharts, sequence diagrams, and state machines illustrate memory layouts, distributed pipelines, and protocol handshakes. All node labels containing brackets or parentheses are double-quoted, and `sequenceDiagram` notes must not contain semicolons.
+- **Closing Questions**: Every topic ends with a plain `## Interview Questions` or `## Practical Questions` section (3–4 questions with direct answers).
 - **Zero-Tolerance Quality Gates**:
   - **Zero LaTeX Math Artifacts**: Every topic uses clean markdown backticks (`` `O(1)` ``) and Unicode symbols rather than unescaped dollar signs (`$O(1)$` or `$$...$$`), preventing KaTeX rendering glitches.
   - **Zero Numbered Headings**: Clean headings (`### Headings`) ensure `github-slugger` generates predictable, resilient Table of Contents anchor slugs.
@@ -206,7 +206,7 @@
 - **Bi-Directional Lesson Navigation**: Next and Previous topic cards at the end of every topic with level badges and topic titles.
 - **Enhanced Code Blocks (`components/CodeBlock.tsx`)**: Highlighting for `bash`, `java`, `yaml`, `dockerfile`, `diff`, with line counts and an instant clipboard copy button. Shiki highlighter is cached globally as a Promise singleton, eliminating multiple highlighter instance warnings.
 - **Mermaid Modal Canvas (`components/MermaidDiagram.tsx`)**: Interactive fullscreen modal with pan & zoom capabilities for complex architectures.
-- **100% Validated Mermaid Diagrams**: All 383 diagrams across all curriculum files are validated against the Mermaid parser AST, with all edge labels with parentheses/brackets safely quoted.
+- **100% Validated Mermaid Diagrams**: All 343 diagrams across all curriculum files are validated against the Mermaid parser AST, with all edge labels with parentheses/brackets safely quoted.
 
 ### 4. Companion Hands-On Code Repository (`java_hub_resources`)
 - **Repository URL**: [`https://github.com/ravishankar2463/java_hub_resources`](https://github.com/ravishankar2463/java_hub_resources)
@@ -235,7 +235,7 @@
 | :--- | :--- | :--- |
 | `node scripts/verify-all-topics.js` | Cross-references `data/roadmap.ts` slugs against `content/roadmap/` files on disk. | **116 / 116 Present, 0 Missing, 0 Placeholders** |
 | `node scripts/check-all-markdown.js` | AST scanner checking 120 markdown files for unescaped raw dollar math (`$O(1)$`) and numbered headings (`### 1. `). | **120 / 120 Files Clean, 0 Formatting Issues** |
-| `node scripts/validate-all-mermaid.js` | Full AST validation of all Mermaid diagrams across all markdown files in the project. | **383 / 383 Diagrams Valid, 0 Errors** |
+| `node scripts/validate-all-mermaid.js` | Full AST validation of all Mermaid diagrams across all markdown files in the project. | **343 / 343 Diagrams Valid, 0 Errors** |
 | `node scripts/setup-resources-repo.js` | Automated generator and synchronizer for all 116 branches in `java_hub_resources`. | **116 / 116 Branches Generated & Synchronized** |
 | `node scripts/deploy-rich-resources.js` | Deploys deep-dive Java 21 domain implementations & JUnit 5 tests across all 116 branches. | **116 / 116 Branches Populated & Pushed to Origin** |
 | `npm run build` | Next.js Turbopack production compilation and static site generation across all routes. | **125 / 125 Routes Compiled Cleanly** |
@@ -245,7 +245,9 @@
 ## 6. Development Guidelines for Future Contributions
 
 1. **Adding or Modifying Topics**:
-   - Always run `node scripts/check-all-markdown.js` after writing markdown content.
+   - Every roadmap file needs YAML frontmatter with `title`, `description`, `category: "level-<N>"`, and `date`. Do NOT add a `# H1` in the body (the page renders the title); start sections at `##`.
+   - Write in plain engineering prose. Avoid hype headings, emoji headings, "In this guide we will..." openings, and unqualified performance claims.
+   - Always run `node scripts/check-all-markdown.js` and `node scripts/validate-all-mermaid.js` after writing markdown content.
    - Do NOT use unescaped dollar signs (`$`) for complexity notation or math formulas. Use backticks (`` `O(1)` ``) and plain text.
    - Do NOT prefix markdown headings with numbers (`### 1. Title`). Use clean titles (`### Title`).
    - Double-quote any Mermaid diagram node label that includes parentheses, brackets, or braces (e.g. `node["Label (Details)"]`).

@@ -1,347 +1,361 @@
 ---
 title: "Advanced Class Design"
-description: "Master advanced structural patterns: static nested vs. inner classes, the Outer.this memory leak hazard, effectively final variable capture mechanics, and Java 14+ immutable Records."
+description: "How to choose between static nested classes, non-static inner classes, local and anonymous classes, and Java 16 immutable records without introducing hidden memory leaks."
 category: "level-1"
 date: "2026-06-25T10:00:00Z"
 ---
 
-Up to this point, you have defined classes as independent citizens living in their own files: one class, one file, matching names.
+Most classes in a Java project live as top-level types in their own `.java` files. Sometimes, though, a helper type only exists to support one enclosing class, such as the internal `Node` inside a `LinkedList`, an `Entry` inside a `Map`, or a `Builder` paired with an immutable configuration object. Turning every helper into a public top-level class clutters the package namespace and weakens encapsulation.
 
-However, real-world software often requires components that exist solely to support an enclosing entity. A `LinkedList` has internal `Node`s. A `DatabaseConnection` has a `TransactionHolder`. A GUI button has a click listener. 
-
-If you make these helper classes public top-level files, you pollute your library's public namespace. 
-
-Java's solution is **Nested Classes**: classes defined directly within the curly braces of another class. 
-
-When used properly, nested structures create elegant encapsulation, enable the famous Builder pattern, and group cohesive logic. When misunderstood, they introduce **insidious memory leaks** that keep gigabytes of abandoned heap memory alive.
-
-Furthermore, we will explore **Records**—one of the most impactful language features added in modern Java—and uncover why they are fundamentally safer for serialization and domain modeling than traditional JavaBean POJOs.
+Java gives you **nested classes** for grouping tightly related types, **anonymous inner classes** for one-off inline implementations, and **records** (previewed in Java 14 and finalized in Java 16) for concise, immutable data carriers. Each has specific memory and lifecycle rules that matter in production code.
 
 ---
 
 ## Nested Classes: Static vs. Non-Static Inner Classes
 
-In Java terminology, the distinction between "Static Nested" and "Inner" is not semantic pedantry—it represents a profound difference in **Heap memory layout**:
+A class declared inside another class falls into one of two broad categories: **static nested classes** and **non-static inner classes** (which include member inner classes, local classes, and anonymous classes).
+
+The presence or absence of `static` changes how the object behaves on the heap:
 
 ```mermaid
 flowchart TD
-    Nested["Classes Defined Inside Another Class"] --> StaticNested["1. Static Nested Class<br/>(Declared with 'static')"]
-    Nested --> InnerClass["2. Non-Static Inner Class<br/>(Declared without 'static')"]
+    Nested["Classes Declared Inside Another Class"] --> StaticNested["Static Nested Class<br/>(declared with static)"]
+    Nested --> InnerClass["Non-Static Inner Class<br/>(declared without static)"]
 
-    StaticNested --> S_Desc["• Zero reference to Outer instance<br/>• Behaves like a packaged top-level class<br/>• Cannot access Outer instance fields directly"]
-    InnerClass --> I_Desc["• Holds hidden 'Outer.this' reference<br/>• Tied to a specific Outer instance<br/>• Full access to Outer private fields"]
+    StaticNested --> S_Desc["No enclosing outer instance reference<br/>Can be instantiated independently<br/>Accesses only static outer members directly"]
+    InnerClass --> I_Desc["Associated with a specific outer instance<br/>Holds hidden reference to enclosing object<br/>Can access outer instance fields directly"]
 
-    style Nested fill:#0f172a,stroke:#3b82f6,stroke-width:2px,color:#f8fafc
+    style Nested fill:#0f172a,stroke:#3b82f6,color:#f8fafc
     style StaticNested fill:#047857,stroke:#34d399,color:#f8fafc
     style InnerClass fill:#7f1d1d,stroke:#f87171,color:#f8fafc
     style S_Desc fill:#022c22,color:#f8fafc
     style I_Desc fill:#450a0a,color:#f8fafc
 ```
 
----
+### Static Nested Classes
 
-## Static Nested Classes: The Clean Collaborator
+A **static nested class** behaves like a regular top-level class that happens to be scoped inside an enclosing class's namespace. It has no implicit reference to an instance of the outer class, and it can access `private static` members of the outer class directly (and private instance members if given an explicit outer object reference).
 
-A **Static Nested Class** is simply a top-level class that has been tucked inside another class's namespace for logical grouping.
+The Builder pattern is one of the most common uses:
 
 ```java
 public class DatabaseClient {
     private final String url;
+    private final int maxPoolSize;
 
-    public DatabaseClient(Builder builder) {
+    private DatabaseClient(Builder builder) {
         this.url = builder.url;
+        this.maxPoolSize = builder.maxPoolSize;
     }
 
-    // STATIC NESTED CLASS: Does NOT hold an instance of DatabaseClient!
     public static class Builder {
         private String url;
+        private int maxPoolSize = 10;
 
-        public Builder setUrl(String url) {
+        public Builder url(String url) {
             this.url = url;
             return this;
         }
 
+        public Builder maxPoolSize(int maxPoolSize) {
+            this.maxPoolSize = maxPoolSize;
+            return this;
+        }
+
         public DatabaseClient build() {
+            if (url == null || url.isBlank()) {
+                throw new IllegalStateException("Database URL is required");
+            }
             return new DatabaseClient(this);
         }
     }
 }
 ```
 
-### Key Properties:
-1. **No Implicit Pointer:** It has no implicit pointer to an instance of `DatabaseClient`. It can be instantiated anywhere without creating the outer class first:
-   ```java
-   DatabaseClient.Builder builder = new DatabaseClient.Builder();
-   ```
-2. **Access Rules:** It can access `private static` members of the outer class, but **cannot** access non-static instance fields of the outer class without an explicit reference.
-3. **Primary Use Case:** The **Builder Design Pattern**, cache entry holders, and private helper calculators.
+Callers can create the builder without first creating a `DatabaseClient`:
 
----
+```java
+DatabaseClient client = new DatabaseClient.Builder()
+        .url("jdbc:postgresql://localhost:5432/orders")
+        .maxPoolSize(20)
+        .build();
+```
 
-## Non-Static Inner Classes: The Hidden Pointer & Memory Leak Hazard
+### Non-Static Member Inner Classes and the `this$0` Reference
 
-When you omit the `static` keyword from a nested class, you create a **Non-Static Inner Class**.
-
-An inner class cannot exist in a vacuum—it is fundamentally tethered to a specific parent instance on the Heap:
+When you omit `static`, the nested class becomes a **member inner class**. Every instance of a member inner class belongs to a specific instance of the enclosing class:
 
 ```java
 public class BankAccount {
-    private double balance = 10_000.0;
+    private final String accountId;
+    private double balance;
 
-    // NON-STATIC INNER CLASS
-    public class AccountInspector {
-        public void printAudit() {
-            // Direct access to outer private field!
-            System.out.println("Auditing account balance: $" + balance);
+    public BankAccount(String accountId, double initialBalance) {
+        this.accountId = accountId;
+        this.balance = initialBalance;
+    }
+
+    // Non-static inner class: bound to a specific BankAccount instance
+    public class StatementLine {
+        public String summary() {
+            // Reads private instance fields of the enclosing BankAccount directly
+            return accountId + " current balance: " + balance;
         }
     }
 }
 ```
 
-To instantiate `AccountInspector`, you must have an active `BankAccount` instance:
+Outside `BankAccount`, instantiating `StatementLine` requires an existing outer object:
+
 ```java
-BankAccount account = new BankAccount();
-BankAccount.AccountInspector inspector = account.new AccountInspector();
+BankAccount account = new BankAccount("ACC-104", 1250.00);
+BankAccount.StatementLine line = account.new StatementLine();
 ```
 
-### The JVM Metal: How `Outer.this` Works in Memory
-How can `AccountInspector` read `balance` if it's in a separate class? 
+How does `StatementLine` read `accountId` and `balance` when it compiles to its own separate class file (`BankAccount$StatementLine.class`)?
 
-Under the hood, the Java compiler silently injects a **synthetic final field** into the inner class:
+Under the hood, the `javac` compiler generates a hidden synthetic `final` field in the inner class (conventionally named `this$0`) and passes the enclosing `BankAccount` reference into the inner class's constructor. Inside `StatementLine`, references to `balance` read through that hidden outer reference (which you can also reference explicitly in source code as `BankAccount.this`).
 
 ```mermaid
 flowchart LR
-    subgraph HeapMemory ["JVM Heap Space"]
-        OuterObj["BankAccount Instance (Address: 0x1000)<br/>• double balance = 10000.0"]
-        InnerObj["AccountInspector Instance (Address: 0x9000)<br/>• <b>final BankAccount this_0 = 0x1000</b> (Synthetic Hidden Pointer!)"]
+    subgraph HeapMemory ["JVM Heap"]
+        OuterObj["BankAccount instance (0x1000)<br/>accountId = ACC-104<br/>balance = 1250.00"]
+        InnerObj["StatementLine instance (0x9000)<br/>synthetic final reference -> 0x1000"]
     end
 
-    InnerObj -->|"hidden this_0 pointer"| OuterObj
+    InnerObj -->|"enclosing outer reference"| OuterObj
 
     style HeapMemory fill:#0f172a,stroke:#3b82f6,color:#f8fafc
     style OuterObj fill:#047857,stroke:#34d399,color:#f8fafc
     style InnerObj fill:#7f1d1d,stroke:#f87171,color:#f8fafc
 ```
 
-The compiler adds a hidden parameter to `AccountInspector`'s constructor and assigns `this.this_0 = account`. When you write `balance`, the compiler secretly translates it to `this_0.balance`.
+### How a Non-Static Inner Class Causes a Memory Leak
 
-### The Lethal Senior Memory Leak Trap
-Because `AccountInspector` carries this hidden `this_0` pointer, **the Garbage Collector can never reclaim `BankAccount` as long as `AccountInspector` is alive!**
+That hidden outer reference is the source of a classic Java memory leak. Because the inner object keeps a strong reference to its enclosing outer object, **the garbage collector cannot reclaim the outer object as long as the inner object stays reachable**.
 
-Imagine this common bug in an enterprise web service:
+Consider an order processor that holds a large buffer in memory and submits a background task to a shared queue:
 
 ```java
-public class LargeOrderProcessingService {
-    // 50 Megabytes of cached transaction data in memory
-    private byte[] cachedLedgerData = new byte[50 * 1024 * 1024];
+public class OrderBatchProcessor {
+    // 50 MB working buffer used during batch processing
+    private final byte[] workingBuffer = new byte[50 * 1024 * 1024];
+    private final String batchId;
 
-    public void scheduleNotification() {
-        // Creates an inner class and registers it with a global long-running thread pool
-        GlobalAsyncJobQueue.submit(new OrderNotificationTask());
+    public OrderBatchProcessor(String batchId) {
+        this.batchId = batchId;
     }
 
-    // ❌ NON-STATIC INNER CLASS!
-    public class OrderNotificationTask implements Runnable {
+    public Runnable createCompletionTask() {
+        return new CompletionNotifier();
+    }
+
+    // Problem: non-static inner class retains a strong reference to OrderBatchProcessor
+    private class CompletionNotifier implements Runnable {
         @Override
         public void run() {
-            System.out.println("Order delivered!");
+            System.out.println("Finished batch " + batchId);
         }
     }
 }
 ```
 
-What happens here?
-The `OrderNotificationTask` sits in the background thread queue waiting for hours. Because it holds a hidden `this_0` pointer to `LargeOrderProcessingService`, **all 50 Megabytes of cached ledger data cannot be garbage collected**! 
+Once batch processing finishes, your application drops its reference to `OrderBatchProcessor`, expecting the 50 MB `workingBuffer` to be garbage collected. However, `CompletionNotifier` is still sitting in a delayed executor queue waiting to run. Because `CompletionNotifier` holds a synthetic `this$0` pointer back to `OrderBatchProcessor`, the entire 50 MB buffer stays pinned in heap memory until that task finishes and is discarded. If hundreds of batches are queued, the heap fills up and throws `OutOfMemoryError`.
 
-If 1,000 orders are scheduled, your server will exhaust its heap and crash with `java.lang.OutOfMemoryError: Java heap space`.
+The fix is straightforward: declare `CompletionNotifier` as a `static` nested class and pass only the small `String batchId` it actually needs into its constructor.
 
 > [!TIP]
-> **Joshua Bloch's Rule (*Effective Java* Item 24):**
-> **Always declare a nested class as `static` unless it explicitly requires access to an enclosing instance.**
+> Follow *Effective Java* Item 24: **always declare a nested class `static` unless it genuinely needs access to an enclosing instance.** Even when a newer compiler (JDK 18+) can omit an unused outer reference in certain cases, declaring the class `static` makes the independence explicit and prevents a future edit from silently reintroducing the retention bug.
 
 ---
 
-## Local and Anonymous Classes: The "Effectively Final" Secret
+## Local Classes and Anonymous Inner Classes
 
-Java allows you to define classes inside method bodies (Local Classes) or on the fly without a name (Anonymous Classes):
+Java also lets you declare classes inside a method or block.
+
+### Local Classes
+
+A **local class** is a named class declared inside a method body. You occasionally see them when a method needs a short helper type with multiple methods or custom state that is useless anywhere else:
 
 ```java
-public class PaymentService {
-    public void executePayment(double amount, String transactionId) {
-        // Anonymous Inner Class implementing Runnable on the fly
-        Runnable auditTask = new Runnable() {
-            @Override
-            public void run() {
-                // Captures method parameters!
-                System.out.println("Audited " + transactionId + " for $" + amount);
-            }
-        };
+public void processNames(List<String> names) {
+    class NormalizedName {
+        final String original;
+        final String key;
 
-        new Thread(auditTask).start();
+        NormalizedName(String original) {
+            this.original = original;
+            this.key = original.trim().toLowerCase();
+        }
+    }
+
+    List<NormalizedName> items = names.stream()
+            .map(NormalizedName::new)
+            .toList();
+    // use items locally
+}
+```
+
+### Anonymous Inner Classes
+
+An **anonymous inner class** declares and instantiates a one-off subclass or interface implementation in a single expression without giving it a class name:
+
+```java
+import java.util.Comparator;
+import java.util.List;
+
+public class AnonymousExample {
+    public void sortByLength(List<String> words) {
+        words.sort(new Comparator<String>() {
+            @Override
+            public int compare(String a, String b) {
+                return Integer.compare(a.length(), b.length());
+            }
+        });
     }
 }
 ```
 
-### The Variable Capture Invariant: Why Variables Must Be Effectively Final
-Notice that `auditTask` accesses `transactionId` and `amount`. 
+Since Java 8, lambda expressions (`(a, b) -> Integer.compare(a.length(), b.length())`) have replaced most anonymous classes that implement a single-method functional interface. However, anonymous inner classes are still required when you need to:
 
-If you try to modify `amount` inside the method after declaring the task (`amount = 0.0;`), the Java compiler flatly rejects your code:
+- Extend an abstract or concrete class on the fly.
+- Implement an interface with **two or more** abstract methods.
+- Hold mutable instance fields inside the inline implementation.
 
-```text
-Local variable amount defined in an enclosing scope must be final or effectively final
-```
+Also watch out for two subtle differences between anonymous classes and lambdas: inside an anonymous class, `this` refers to the anonymous class instance itself (whereas in a lambda, `this` refers to the enclosing class); and an anonymous class created inside an instance method can also capture the enclosing instance, carrying the same memory-retention risk as a non-static inner class.
 
-Why does this restriction exist?
+### Why Captured Local Variables Must Be Effectively Final
 
-Think about where variables live:
-1. `amount` is a local variable living on the thread's **Stack Frame**. When `executePayment()` finishes, that stack frame is popped and destroyed.
-2. The `auditTask` object lives on the **JVM Heap** and will continue executing in a background thread minutes after `executePayment()` has vanished from memory!
-
-How can an object on the Heap reference a variable on a stack frame that no longer exists?
-
-**The compiler cheats:** It secretly copies the values of `amount` and `transactionId` into synthetic private fields inside the anonymous class object on the Heap.
-
-Because there are now **two distinct copies** of the value (one on the Stack, one on the Heap), Java mandates that the variable must be `final` or **effectively final** (never modified). This prevents race conditions where the stack and heap values drift out of sync!
-
----
-
-## Modern Java: Records (Java 14/16+)
-
-For twenty-five years, Java was criticized for boilerplate. If you wanted a simple immutable data-holder (a Data Transfer Object / POJO), you had to write fifty lines of ceremonial code:
+Both local classes and anonymous inner classes (as well as lambdas) can read local variables and parameters from their enclosing method, provided those variables are `final` or **effectively final** (assigned once and never reassigned):
 
 ```java
-// ❌ THE OLD 50-LINE JAVABEAN POJO:
-public final class CustomerProfile {
-    private final String id;
-    private final String email;
+public Runnable createAuditTask(String transactionId, double amount) {
+    // Reassigning amount here would cause a compile error because the anonymous class captures it:
+    // amount = amount * 1.05;
 
-    public CustomerProfile(String id, String email) { ... }
-    public String getId() { ... }
-    public String getEmail() { ... }
-    @Override public boolean equals(Object o) { ... }
-    @Override public int hashCode() { ... }
-    @Override public String toString() { ... }
+    return new Runnable() {
+        @Override
+        public void run() {
+            System.out.println("Audited " + transactionId + " for amount " + amount);
+        }
+    };
 }
 ```
 
-In **Java 14 (finalized in Java 16)**, Java introduced **Records** (JEP 395):
+If you uncomment `amount = amount * 1.05;`, `javac` fails with:
+
+```text
+local variables referenced from an inner class must be final or effectively final
+```
+
+The reason comes down to stack vs. heap lifetimes. `transactionId` and `amount` live in the current method's **stack frame**, which disappears as soon as `createAuditTask()` returns. The `Runnable` object lives on the **heap** and may run minutes later on a different thread.
+
+To make that work, the compiler copies the values of `transactionId` and `amount` into hidden fields inside the heap-allocated `Runnable`. Because there are now two separate copies (one on the stack and one inside the object on the heap), Java forbids mutating the local variable so the two copies can never silently drift out of sync.
+
+---
+
+## Records: Immutable Data Carriers (Java 16+)
+
+Historically, modeling a simple immutable data holder in Java took dozens of lines of repetitive code: `private final` fields, a constructor, getters, `equals`, `hashCode`, and `toString`. Every time you added a field, you had to remember to update all of them.
+
+**Records** were introduced as a preview feature in **Java 14** (JEP 359) and **Java 15** (JEP 384), and finalized as a standard language feature in **Java 16** (JEP 395). A record declares a transparent, shallowly immutable carrier of a fixed set of values in one line:
 
 ```java
-// ✅ THE MODERN JAVA RECORD (One single line!)
 public record CustomerProfile(String id, String email) {}
 ```
 
-That single line instructs `javac` to generate:
-- A `final` class extending `java.lang.Record`.
-- `private final` fields for every component.
-- A canonical constructor initializing all components.
-- Modern accessor methods (`id()` and `email()`, without the legacy `get` prefix).
-- Component-wise, high-performance implementations of `equals()`, `hashCode()`, and `toString()`.
+From that declaration, `javac` automatically generates:
 
----
+- A `final` class that implicitly extends `java.lang.Record`.
+- A `private final` field for each component (`id` and `email`).
+- A **canonical constructor** `CustomerProfile(String id, String email)` that assigns every component.
+- Public accessor methods matching the component names (`id()` and `email()`, without a `get` prefix).
+- Component-wise implementations of `equals()`, `hashCode()`, and `toString()` (implemented via `invokedynamic` and `java.lang.runtime.ObjectMethods` in modern JDKs).
 
-## Compact Constructors & Validation
+### Compact Constructors, Validation, and Defensive Copying
 
-Records are designed for **data modeling with integrity**. If you need to validate inputs or normalize data, you do not write a standard constructor; you write a **Compact Constructor**:
+Records are not restricted to unvalidated bags of fields. You can validate or normalize inputs using a **compact constructor**, which omits the parameter list and automatically assigns the fields at the end of its body:
 
 ```java
-public record Money(double amount, String currency) {
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Objects;
 
-    // Compact Constructor: Notice there are NO parameter parentheses!
-    public Money {
-        if (amount < 0) {
-            throw new IllegalArgumentException("Monetary amount cannot be negative.");
-        }
-        if (currency == null || currency.isBlank()) {
-            throw new IllegalArgumentException("Currency code is required.");
-        }
-        // Normalize currency to uppercase:
-        currency = currency.trim().toUpperCase();
+public record OrderSummary(String orderId, BigDecimal total, List<String> itemSkus) {
 
-        // The compiler automatically assigns this.amount = amount 
-        // and this.currency = currency at the end of this block!
+    // Compact constructor: runs before fields are assigned
+    public OrderSummary {
+        Objects.requireNonNull(orderId, "orderId is required");
+        if (total == null || total.signum() < 0) {
+            throw new IllegalArgumentException("Total cannot be negative");
+        }
+        // Defensive copy: records are only shallowly immutable by default
+        itemSkus = List.copyOf(itemSkus);
+    }
+
+    // You can still add custom instance or static methods
+    public int itemCount() {
+        return itemSkus.size();
     }
 }
 ```
 
----
+Pay close attention to `itemSkus = List.copyOf(itemSkus)`. A record makes its component *references* `final`, which means **records are shallowly immutable**. If a component holds a mutable `ArrayList`, `Date`, or `byte[]`, callers can still mutate the contents of that list or array unless you copy it defensively in the compact constructor.
 
-## Why Records Are Architecturally Superior to Lombok `@Data`
+### What Records Can and Cannot Do
 
-Many teams used Project Lombok's `@Data` or `@Value` annotations to auto-generate boilerplate. While convenient, Lombok relies on non-standard internal `javac` AST hacking. 
+Because a record's header is the complete specification of its state, Java enforces a few clear boundaries:
 
-Records provide core JVM architectural advantages that Lombok can never match:
+- **Allowed:** implementing interfaces, adding instance methods, adding `static` fields and `static` methods, defining compact or custom constructors, and nesting records inside other classes.
+- **Not allowed:** extending another class (every record already extends `java.lang.Record`), being subclassed (records are implicitly `final`), or declaring extra non-static instance fields inside the body.
 
-```mermaid
-flowchart TD
-    subgraph POJO ["Traditional POJO / Lombok"]
-        P1["State definition is arbitrary"]
-        P2["Constructors can be bypassed during Deserialization!"]
-        P3["Reflection can alter private final fields"]
-    end
+### Records vs. Hand-Written Classes and Lombok
 
-    subgraph RecordModel ["Java 14+ Record Architecture"]
-        R1["State description IS the API contract"]
-        R2["Deserialization MUST pass through Canonical Constructor!"]
-        R3["JVM enforces strict immutability against reflective mutation"]
-    end
+Teams previously used libraries like Project Lombok (`@Value`) to cut down on POJO boilerplate. Records differ in two structural ways:
 
-    style POJO fill:#7f1d1d,stroke:#f87171,color:#f8fafc
-    style RecordModel fill:#064e3b,stroke:#34d399,color:#f8fafc
-```
+1. **Standard language and reflection support:** Records are part of the Java language and JVM (`Class.isRecord()`, `Class.getRecordComponents()`), requiring no annotation processors or compiler internals.
+2. **Safer Java serialization:** Traditional Java Object Serialization bypasses constructors and populates fields directly from the byte stream, which can leave deserialized objects in invalid states that violate constructor invariants. For records, the serialization specification requires deserialization to read component values from the stream and pass them through the **canonical constructor**, so validation in your compact constructor always runs.
 
-### The Serialization Security Shield:
-In traditional Java serialization, an incoming byte stream bypasses class constructors completely, allocating raw bytes straight onto the Heap. This is the root cause of dozens of catastrophic remote-code-execution (RCE) vulnerabilities.
+Records are ideal for DTOs, API payloads, value objects (`Money`, `Coordinate`), configuration snapshots, and composite map keys. They are **not** a good fit for mutable domain entities or JPA `@Entity` classes, which require mutable fields, proxies, and no-argument constructors.
 
-**The JVM treats Records differently:** The Java serialization protocol guarantees that deserializing a Record **MUST invoke its canonical constructor**. It is impossible to sneak an invalid or malicious state past a Record's validation checks!
+### Preview of Record Patterns (Java 21+)
 
----
-
-## Java 21 LTS: Record Patterns and Deconstruction
-
-Because the JVM understands the exact shape of a Record's components, modern Java lets you **deconstruct records directly inside conditionals**:
+Because the compiler knows the exact structure of every record, **Java 21** (JEP 440) lets you deconstruct records directly in `instanceof` and `switch`:
 
 ```java
-public void handleTransaction(Object event) {
-    // Record pattern match: checks type AND extracts inner components in one shot!
-    if (event instanceof Money(double amount, String currency)) {
-        System.out.println("Processing " + currency + " " + amount);
+public record Money(BigDecimal amount, String currency) {}
+public record Account(String owner, Money balance) {}
+
+public void inspect(Object obj) {
+    if (obj instanceof Account(String owner, Money(BigDecimal amount, String currency))) {
+        System.out.println(owner + " holds " + amount + " " + currency);
     }
 }
 ```
 
-You can even nest record patterns:
-```java
-public record User(String name, Money balance) {}
-
-if (obj instanceof User(String name, Money(double amount, String currency))) {
-    System.out.println(name + " holds " + amount + " " + currency);
-}
-```
+We explore nested record patterns and exhaustive `switch` expressions in full in the *Sealed Classes and Pattern Matching* lesson.
 
 ---
 
-## Summary & Mental Model Checkpoint
+## Recap
 
-1. **Static Nested Class**: A packaged top-level class with no outer instance pointer. Use by default for builders and helpers.
-2. **Inner Class**: Tethered to an outer instance via a hidden synthetic pointer (`Outer.this`). Beware memory leaks in asynchronous tasks!
-3. **Variable Capture**: Local/anonymous classes capture local variables by copying them to the Heap; variables must be effectively final to guarantee consistency.
-4. **Records (Java 14+)**: Transparent, shallowly immutable data carriers with compiler-generated accessors, equality, and hash contracts.
-5. **Serialization Safety**: Records enforce deserialization through their canonical constructor, preventing corrupted state injection.
-6. **Record Deconstruction**: Java 21 pattern matching unpacks records directly in `if` and `switch` expressions.
+- **Static nested classes** have no reference to an enclosing outer instance and should be your default choice for nested helpers and builders.
+- **Non-static inner classes** hold a hidden synthetic reference (typically `this$0`) to their enclosing instance; handing them to long-lived executors or caches can keep the outer object pinned in memory.
+- **Local and anonymous inner classes** capture enclosing local variables by copying them into heap fields, which is why captured variables must be `final` or effectively final.
+- **Records** (previewed in Java 14–15, finalized in Java 16) provide concise, shallowly immutable data carriers with compiler-generated accessors, `equals`/`hashCode`/`toString`, compact constructors for validation and defensive copying, and constructor-enforced serialization.
 
 ---
 
-## 🎯 Senior Engineer Interview Questions
+## Interview Questions
 
-### Why can a non-static inner class cause a memory leak when passed to an asynchronous executor?
-> **Answer:** A non-static inner class retains a hidden synthetic reference (`this_0`) pointing directly to the enclosing outer class instance on the Heap. If the inner class is submitted to a long-running thread pool, event bus, or static collection, that hidden reference prevents the Garbage Collector from collecting the outer instance—even if the application has discarded all direct references to the outer object. If the outer instance holds large data structures, this results in severe heap exhaustion (`OutOfMemoryError`).
+### Why can a non-static inner class cause a memory leak when submitted to a thread pool or cache?
+A non-static inner class holds a hidden synthetic reference to the enclosing outer class instance (commonly compiled as `this$0`). As long as the inner object remains queued in an executor, stored in a static collection, or registered as a listener, that reference keeps the outer object strongly reachable so the garbage collector cannot reclaim it, even if the rest of the application no longer holds any reference to the outer object. Making the nested class `static` breaks that implicit link.
 
-### Why must local variables captured by anonymous inner classes or lambda expressions be "effectively final"?
-> **Answer:** Local variables reside in the thread's Stack frame and are reclaimed when the method returns, whereas anonymous classes and lambdas are Heap-allocated objects that may outlive the method. To enable execution after method completion, the compiler makes a private copy of the local variable inside the heap object. Requiring the variable to be effectively final guarantees that the Stack copy and the Heap copy never diverge in value, preventing subtle concurrency and data synchronization bugs.
+### Why must local variables referenced by an anonymous inner class or lambda be effectively final?
+Local variables live on the thread's stack frame and disappear when the method returns, whereas the anonymous class or lambda object lives on the heap and can outlive the method. The compiler copies the values of captured local variables into synthetic fields on the heap object. Requiring those variables to be `final` or effectively final guarantees that the stack variable and the captured copy can never diverge.
 
-### How does Java Record deserialization fundamentally differ from standard JavaBean serialization?
-> **Answer:** Standard Java serialization instantiates objects using native JVM reflection without invoking any constructor, allowing corrupted or malicious payloads to bypass validation logic. In contrast, the Java Object Serialization Specification explicitly mandates that Records must be deserialized by extracting the component values from the stream and passing them directly into the Record's canonical constructor. This guarantees that all validation, normalization, and security invariants in the constructor are unconditionally enforced during deserialization.
+### Are Java records deeply immutable? How do you protect a record that contains a `List` or array?
+No. Records are only **shallowly immutable**: their generated component fields are `private final`, so the references cannot be reassigned, but mutable objects referenced by those fields (such as an `ArrayList` or `byte[]`) can still be modified. To achieve deep immutability, perform defensive copying in a compact constructor (for example, `items = List.copyOf(items)` or `bytes = bytes.clone()`) and return defensive copies from custom accessors if needed for mutable arrays.
 
-### Can you declare additional instance fields inside the body of a Java Record? Why or why not?
-> **Answer:** No. You cannot declare additional non-static instance fields in a Record body. The foundational design principle of a Record is that **its header declaration is the sole and complete specification of its state**. Allowing arbitrary instance fields would break the 1-to-1 isomorphism between the Record's state description, its canonical constructor, its accessor methods, its `equals`/`hashCode` contracts, and its deconstruction patterns. Only static fields are permitted.
+### How does Java serialization treat records differently from ordinary classes?
+Ordinary Java serialization instantiates objects without invoking their constructors and injects deserialized field values directly, which can bypass validation checks and create invalid objects. For records, Java serialization reads component values from the stream and invokes the record's canonical constructor, guaranteeing that any validation or normalization logic in the constructor is enforced.

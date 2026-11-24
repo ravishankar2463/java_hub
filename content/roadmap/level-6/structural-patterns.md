@@ -1,67 +1,76 @@
 ---
 title: "Structural Patterns"
-description: "Master the Gang of Four structural patterns in modern Java 21: Adapter, Decorator, Facade, Proxy, and Composite. Understand wrapper semantics, dynamic proxies, and tree hierarchies."
+description: "How Adapter, Decorator, Facade, Proxy, and Composite structure object relationships in Java, with concrete examples from the JDK and Spring."
 category: "level-6"
 date: "2026-10-29T10:00:00Z"
 ---
 
-When engineers talk about object-oriented design, they often focus on inheritance hierarchies ("Dog is an Animal"). But in enterprise software, inheritance is rarely your biggest challenge. The real complexity lies in **object topology**: how dozens of disparate classes, third-party libraries, legacy protocols, and network stubs interlock to form a cohesive system.
+In production Java systems, most design friction has little to do with inheritance hierarchies and a lot to do with how objects connect to one another: wrapping legacy libraries, layering logging and retries around network calls, hiding noisy multi-service workflows, intercepting calls for transactions, and walking recursive tree structures.
 
-Structural design patterns describe how classes and objects are composed into larger, flexible structures. 
+Structural design patterns solve these wiring problems through object composition.
 
-One of the most common confusions in software architecture is the **"Wrapper Dilemma"**: Adapter, Decorator, and Proxy share almost identical class structures—they all wrap an underlying object. Yet their architectural intents could not be more different:
+Three of them, **Adapter**, **Decorator**, and **Proxy**, look almost identical on a class diagram because all three wrap another object and delegate to it. What separates them is their intent and what they do to the interface:
 
 ```mermaid
 flowchart LR
-    subgraph "The Wrapper Spectrum"
-        A["Adapter: Changes Interface<br/>(Translates Legacy API to Modern Port)"]
-        D["Decorator: Preserves Interface<br/>(Adds Composable Behaviors at Runtime)"]
-        P["Proxy: Preserves Interface<br/>(Controls Access, Lazy Loading, or Remoting)"]
+    subgraph "How the Three Wrapper Patterns Differ"
+        A["Adapter: Changes the interface<br/>(Translates incompatible APIs)"]
+        D["Decorator: Keeps the same interface<br/>(Stacks optional behaviors at runtime)"]
+        P["Proxy: Keeps the same interface<br/>(Controls access, laziness, or interception)"]
     end
 ```
 
-Alongside these wrappers, **Facade** simplifies access across an entire subsystem, while **Composite** allows you to treat individual objects and nested trees of objects uniformly.
+The other two patterns covered here work at a different shape: **Facade** puts a clean front door in front of a multi-class subsystem, and **Composite** lets callers treat single leaf items and nested trees through one uniform interface.
 
 ---
 
-## Adapter: Bridging Mismatched Interfaces
+## Adapter
 
-> *"Convert the interface of a class into another interface clients expect. Adapter lets classes work together that couldn't otherwise because of incompatible interfaces."* — Gang of Four
+> *"Convert the interface of a class into another interface clients expect. Adapter lets classes work together that couldn't otherwise because of incompatible interfaces."* (Gang of Four)
 
-The Adapter pattern acts as a translator. When you integrate a third-party payment gateway, an old SOAP XML service, or a legacy database library into your clean domain architecture, their method signatures and data formats rarely align with your domain's interfaces.
-
-Instead of polluting your clean domain code with legacy vendor types, you introduce an **Object Adapter** that implements your domain's target interface and delegates to the adaptee.
+You reach for an Adapter whenever you have to integrate code you do not own (a third-party SDK, a legacy SOAP client, or a low-level JDK type) into a clean domain interface. Rather than letting vendor-specific types leak through your services, you write an **Object Adapter** that implements your target interface, holds a reference to the existing object, and translates parameters and return values.
 
 ```mermaid
 flowchart LR
-    Client["CheckoutController"] --> Target["<<interface>><br/>PaymentGatewayPort"]
-    Adapter["StripePaymentAdapter"] -.->|implements| Target
-    Adapter -->|delegates & translates| Adaptee["StripeApi (Third-Party SDK)"]
+    Client["CheckoutService"] --> Target["PaymentGatewayPort (interface)"]
+    Adapter["LegacyBankAdapter"] -.->|"implements"| Target
+    Adapter -->|"translates and delegates"| Adaptee["LegacyBankSoapClient"]
 ```
 
-### Production Implementation
+### Real JDK and Spring Examples
+
+You already use adapters across the Java ecosystem:
+
+- **`Arrays.asList(T... a)`**: Adapts a fixed-size Java array into the `List<T>` interface. Changes to the list write straight through to the underlying array, and structural mutations (`add`, `remove`) throw `UnsupportedOperationException` because arrays cannot resize.
+- **`InputStreamReader` and `OutputStreamWriter`**: Adapt byte-oriented `InputStream`/`OutputStream` objects into character-oriented `Reader`/`Writer` interfaces using a `Charset`.
+- **Spring MVC `HandlerAdapter`**: Lets `DispatcherServlet` invoke different kinds of controllers (`@RequestMapping` methods, `HttpRequestHandler`, functional routes) through one uniform invocation contract.
+
+### Domain Integration Example
+
+Suppose your domain defines a clean `PaymentGatewayPort` using `BigDecimal` and a Java `record`, while an older bank client expects cents as a `long` and numeric ISO currency codes:
 
 ```java
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Objects;
 
-// 1. The Clean Domain Port (Target Interface)
+// 1. Target interface expected by domain code
 public interface PaymentGatewayPort {
     PaymentResult processCharge(String customerId, BigDecimal amount, String currency);
 }
 
 public record PaymentResult(String transactionId, boolean successful, String errorMessage) {}
 
-// 2. The Third-Party / Legacy Adaptee (Incompatible Signature & Types)
+// 2. Existing third-party / legacy class with an incompatible API
 public final class LegacyBankSoapClient {
-    public int executeWireTransfer(String senderAccount, long cents, int currencyCode) {
-        System.out.printf("Legacy SOAP Wire: Account=%s, Cents=%d, Code=%d%n", 
-            senderAccount, cents, currencyCode);
-        return 200; // Returns raw HTTP-like status codes
+    public int executeWireTransfer(String senderAccount, long cents, int isoCurrencyCode) {
+        System.out.printf("Legacy SOAP wire: account=%s, cents=%d, currencyCode=%d%n",
+                senderAccount, cents, isoCurrencyCode);
+        return 200;
     }
 }
 
-// 3. The Object Adapter (Translates between Domain and Legacy)
+// 3. Object Adapter translating between the two contracts
 public final class LegacyBankAdapter implements PaymentGatewayPort {
     private final LegacyBankSoapClient soapClient;
 
@@ -71,85 +80,83 @@ public final class LegacyBankAdapter implements PaymentGatewayPort {
 
     @Override
     public PaymentResult processCharge(String customerId, BigDecimal amount, String currency) {
-        // Translation 1: Currency ISO String -> Integer Code
-        int currencyCode = "USD".equalsIgnoreCase(currency) ? 840 : 978;
+        int currencyCode = switch (currency.toUpperCase()) {
+            case "USD" -> 840;
+            case "EUR" -> 978;
+            case "GBP" -> 826;
+            default -> throw new IllegalArgumentException("Unsupported currency: " + currency);
+        };
 
-        // Translation 2: BigDecimal Dollars -> Long Cents
-        long cents = amount.multiply(BigDecimal.valueOf(100)).longValue();
+        long cents = amount.multiply(BigDecimal.valueOf(100))
+                .setScale(0, RoundingMode.HALF_UP)
+                .longValueExact();
 
-        // Translation 3: Invoke legacy adaptee
         int statusCode = soapClient.executeWireTransfer(customerId, cents, currencyCode);
-
-        // Translation 4: Map raw status code to clean domain Record
         if (statusCode == 200) {
             return new PaymentResult("TX-" + System.currentTimeMillis(), true, null);
-        } else {
-            return new PaymentResult(null, false, "Bank rejected wire transfer code: " + statusCode);
         }
+        return new PaymentResult(null, false, "Bank rejected wire transfer with code " + statusCode);
     }
 }
 ```
 
 > [!TIP]
-> Prefer **Object Adapters** (which use composition to wrap an instance) over **Class Adapters** (which use multiple inheritance / subclassing). Object adapters allow you to adapt an entire family of subclasses dynamically without tight inheritance coupling.
+> In Java, prefer **Object Adapters** (composition) over **Class Adapters** (subclassing the adaptee). Because Java does not allow multiple class inheritance, composition is more flexible, works with `final` third-party classes like `LegacyBankSoapClient`, and lets you swap in a test double easily.
 
 ---
 
-## Decorator: Dynamic and Composable Responsibilities
+## Decorator
 
-> *"Attach additional responsibilities to an object dynamically. Decorators provide a flexible alternative to subclassing for extending functionality."* — Gang of Four
+> *"Attach additional responsibilities to an object dynamically. Decorators provide a flexible alternative to subclassing for extending functionality."* (Gang of Four)
 
-When you use subclassing to add features, you encounter a combinatorial explosion of classes. If you have an `HttpClient` and want to add:
-- Logging
-- Metrics Gathering
-- Automatic Retries
-- Distributed Rate Limiting
+Suppose you have an `HttpClientPort` and want optional combinations of logging, retries, metrics, and rate limiting. Trying to model every combination with subclasses quickly gets out of hand: `LoggingHttpClient`, `RetryingHttpClient`, `LoggingRetryingHttpClient`, `MetricsLoggingRetryingHttpClient`, and so on.
 
-Subclassing would require: `LoggingHttpClient`, `RetryingHttpClient`, `LoggingAndRetryingHttpClient`, `MetricsLoggingAndRetryingHttpClient`, and so on.
+The **Decorator** pattern avoids that explosion by wrapping the component behind the exact same interface. Each decorator adds one focused behavior before or after delegating to the wrapped component, and you can stack them in any order at runtime.
 
-The **Decorator** pattern solves this by wrapping the target object behind the **exact same interface**. Decorators can be chained at runtime like Russian nesting dolls.
+### Real JDK Examples
 
-### Canonical Example: Java I/O Streams
-
-The standard Java I/O library (`java.io`) is the most famous decorator architecture in software engineering:
+The `java.io` package is the classic Java decorator chain:
 
 ```java
-InputStream stream = new BufferedInputStream(
-    new GZIPInputStream(
-        new FileInputStream("data.tar.gz")
-    )
-);
+import java.io.BufferedInputStream;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.util.zip.GZIPInputStream;
+
+try (InputStream stream = new BufferedInputStream(
+        new GZIPInputStream(
+                new FileInputStream("events.json.gz")))) {
+    byte[] payload = stream.readAllBytes();
+}
 ```
 
-Each wrapper implements `InputStream` and delegates to the next stream while adding buffering or decompression.
+`FileInputStream` reads raw bytes from disk, `GZIPInputStream` decompresses bytes on the fly, and `BufferedInputStream` reduces system calls by reading chunks into an internal buffer. Every wrapper extends `InputStream`, so the caller reads bytes without caring how many layers are stacked underneath.
 
-### Resilient HTTP Client Pipeline
+You also see decorators in `java.util.Collections`: `Collections.synchronizedList(list)` and `Collections.unmodifiableList(list)` wrap an existing `List` and return another `List` with added synchronization or read-only checks.
 
-Here is an industrial-strength decorator pipeline for an HTTP client:
+### Composable HTTP Client Pipeline
 
 ```java
 import java.io.IOException;
+import java.util.Objects;
 
-// 1. The Component Interface
 public interface HttpClientPort {
     String sendGet(String url) throws IOException;
 }
 
-// 2. Concrete Core Component
 public final class BasicHttpClient implements HttpClientPort {
     @Override
     public String sendGet(String url) throws IOException {
-        System.out.println(">>> Executing physical network socket call to: " + url);
-        return "{\"status\": \"OK\", \"data\": 42}";
+        System.out.println("Network GET -> " + url);
+        return "{\"status\":\"OK\"}";
     }
 }
 
-// 3. Abstract Decorator (Maintains delegate reference)
 public abstract class HttpClientDecorator implements HttpClientPort {
     protected final HttpClientPort delegate;
 
     protected HttpClientDecorator(HttpClientPort delegate) {
-        this.delegate = delegate;
+        this.delegate = Objects.requireNonNull(delegate);
     }
 
     @Override
@@ -158,7 +165,6 @@ public abstract class HttpClientDecorator implements HttpClientPort {
     }
 }
 
-// 4. Logging Decorator
 public final class LoggingClientDecorator extends HttpClientDecorator {
     public LoggingClientDecorator(HttpClientPort delegate) {
         super(delegate);
@@ -166,79 +172,89 @@ public final class LoggingClientDecorator extends HttpClientDecorator {
 
     @Override
     public String sendGet(String url) throws IOException {
-        long start = System.currentTimeMillis();
-        System.out.println("[LOG] Starting request to: " + url);
+        long startNanos = System.nanoTime();
+        System.out.println("[LOG] GET " + url);
         try {
             String response = delegate.sendGet(url);
-            System.out.printf("[LOG] Finished %s in %d ms%n", url, (System.currentTimeMillis() - start));
+            long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000;
+            System.out.printf("[LOG] Completed %s in %d ms%n", url, elapsedMs);
             return response;
         } catch (IOException e) {
-            System.err.printf("[LOG] Request to %s failed: %s%n", url, e.getMessage());
+            System.err.printf("[LOG] Failed %s: %s%n", url, e.getMessage());
             throw e;
         }
     }
 }
 
-// 5. Retrying Decorator
 public final class RetryingClientDecorator extends HttpClientDecorator {
-    private final int maxRetries;
+    private final int maxAttempts;
 
-    public RetryingClientDecorator(HttpClientPort delegate, int maxRetries) {
+    public RetryingClientDecorator(HttpClientPort delegate, int maxAttempts) {
         super(delegate);
-        this.maxRetries = maxRetries;
+        if (maxAttempts < 1) {
+            throw new IllegalArgumentException("maxAttempts must be >= 1");
+        }
+        this.maxAttempts = maxAttempts;
     }
 
     @Override
     public String sendGet(String url) throws IOException {
-        int attempts = 0;
+        int attempt = 0;
         while (true) {
             try {
+                attempt++;
                 return delegate.sendGet(url);
             } catch (IOException e) {
-                if (++attempts >= maxRetries) {
-                    System.err.println("[RETRY] Max retries exhausted for: " + url);
+                if (attempt >= maxAttempts) {
                     throw e;
                 }
-                System.out.printf("[RETRY] Attempt %d failed. Retrying...%n", attempts);
+                System.out.printf("[RETRY] Attempt %d failed for %s, retrying%n", attempt, url);
             }
         }
     }
 }
 ```
 
-### The "Order Matters" Trap in Decorators
+### Watch the Nesting Order
 
-Notice how decorating order fundamentally dictates runtime behavior:
-- `new LoggingClientDecorator(new RetryingClientDecorator(client))` will log **only the overall request**, reporting the total time across all retries.
-- `new RetryingClientDecorator(new LoggingClientDecorator(client))` will log **every single individual retry attempt** separately!
+With decorators, wrapping order directly changes behavior:
+
+- `new LoggingClientDecorator(new RetryingClientDecorator(client, 3))` logs **once** for the whole operation, measuring total latency across retries.
+- `new RetryingClientDecorator(new LoggingClientDecorator(client), 3)` logs **every individual retry attempt** separately.
+
+Also keep decorator chains shallow. Debugging a bug buried six wrappers deep, where stack traces bounce through forwarding methods, is a real maintenance cost if you overuse the pattern.
 
 ---
 
-## Facade: Simplifying Subsystem Topologies
+## Facade
 
-> *"Provide a unified interface to a set of interfaces in a subsystem. Facade defines a higher-level interface that makes the subsystem easier to use."* — Gang of Four
+> *"Provide a unified interface to a set of interfaces in a subsystem. Facade defines a higher-level interface that makes the subsystem easier to use."* (Gang of Four)
 
-While an Adapter wraps a single object to alter its interface, a **Facade** wraps an **entire cluster of collaborating subsystems** to provide a simple, unified entry point.
-
-Complex enterprise workflows often require coordinating five to ten discrete services: checking inventory, authorizing payments, calculating VAT tax, creating shipping labels, emitting analytics events, and scheduling notifications. Forcing the client controller to talk to all ten services introduces chaotic coupling.
+A **Facade** sits in front of several collaborating classes and offers a simpler, coarse-grained API for the most common workflows. Unlike an Adapter, it is not translating one legacy interface into another; it is shielding callers from having to orchestrate five or six subsystems directly.
 
 ```mermaid
 flowchart TD
-    Client["Client / API Gateway"] --> Facade["OrderFulfillmentFacade"]
-    
-    subgraph "Subsystem Micro-Components"
+    Client["CheckoutController"] --> Facade["OrderFulfillmentFacade"]
+
+    subgraph "Order Fulfillment Subsystem"
         Facade --> S1["InventoryService"]
-        Facade --> S2["PaymentGateway"]
-        Facade --> S3["TaxCalculator"]
-        Facade --> S4["ShippingService"]
-        Facade --> S5["KafkaEventPublisher"]
+        Facade --> S2["PaymentProcessor"]
+        Facade --> S3["ShippingService"]
+        Facade --> S4["AuditLogger"]
     end
 ```
 
-### Production Implementation
+### Real JDK and Spring Examples
+
+- **Spring `JdbcTemplate`**: Hides the ceremony of acquiring a JDBC `Connection`, creating a `PreparedStatement`, iterating a `ResultSet`, translating checked `SQLException`s into unchecked `DataAccessException`s, and closing resources cleanly.
+- **SLF4J `LoggerFactory`**: Gives application code a single facade over Logback, Log4j2, or `java.util.logging`.
+- **`java.net.http.HttpClient`**: Exposes a single high-level entry point over connection pooling, HTTP/2 framing, TLS negotiation, and redirect handling.
+
+### Order Fulfillment Facade
 
 ```java
 import java.math.BigDecimal;
+import java.util.Objects;
 
 public class OrderFulfillmentFacade {
     private final InventoryService inventory;
@@ -246,174 +262,219 @@ public class OrderFulfillmentFacade {
     private final ShippingService shipping;
     private final AuditLogger auditLogger;
 
-    public OrderFulfillmentFacade(InventoryService inventory, 
-                                  PaymentProcessor payment, 
-                                  ShippingService shipping, 
+    public OrderFulfillmentFacade(InventoryService inventory,
+                                  PaymentProcessor payment,
+                                  ShippingService shipping,
                                   AuditLogger auditLogger) {
-        this.inventory = inventory;
-        this.payment = payment;
-        this.shipping = shipping;
-        this.auditLogger = auditLogger;
+        this.inventory = Objects.requireNonNull(inventory);
+        this.payment = Objects.requireNonNull(payment);
+        this.shipping = Objects.requireNonNull(shipping);
+        this.auditLogger = Objects.requireNonNull(auditLogger);
     }
 
-    public void completeOrder(String orderId, String customerId, String sku, BigDecimal amount) {
-        auditLogger.log("Starting order fulfillment: " + orderId);
+    public String completeOrder(String orderId, String customerId, String sku, BigDecimal amount) {
+        auditLogger.log("Starting fulfillment for order " + orderId);
 
-        if (!inventory.checkStock(sku)) {
-            throw new IllegalStateException("SKU " + sku + " is out of stock!");
+        if (!inventory.hasStock(sku)) {
+            throw new IllegalStateException("SKU out of stock: " + sku);
         }
 
         inventory.reserve(sku);
         payment.charge(customerId, amount);
         String trackingNumber = shipping.dispatch(orderId, sku);
 
-        auditLogger.log("Order " + orderId + " fulfilled. Tracking: " + trackingNumber);
+        auditLogger.log("Fulfilled order " + orderId + " with tracking " + trackingNumber);
+        return trackingNumber;
     }
 }
 
-// Subsystem components
-class InventoryService { boolean checkStock(String sku) { return true; } void reserve(String sku) {} }
-class PaymentProcessor { void charge(String cust, BigDecimal amount) {} }
-class ShippingService { String dispatch(String order, String sku) { return "TRK-9901"; } }
-class AuditLogger { void log(String msg) { System.out.println("[AUDIT] " + msg); } }
+class InventoryService {
+    boolean hasStock(String sku) { return true; }
+    void reserve(String sku) {}
+}
+
+class PaymentProcessor {
+    void charge(String customerId, BigDecimal amount) {}
+}
+
+class ShippingService {
+    String dispatch(String orderId, String sku) { return "TRK-9901"; }
+}
+
+class AuditLogger {
+    void log(String message) { System.out.println("[AUDIT] " + message); }
+}
 ```
 
-> [!NOTE]
-> A Facade does not hide the underlying subsystems if a client genuinely needs low-level control. Advanced clients can still access `ShippingService` directly, but 95% of consumers will use the simple, coarse-grained Facade.
+A Facade does not have to lock callers out of the underlying services. Callers with specialized needs can still use `ShippingService` directly, while typical controllers call `completeOrder(...)`. Watch out for one pitfall: do not let a Facade quietly turn into a giant God class filled with business logic. Its job is coordination and simplification, not owning every domain rule itself.
 
 ---
 
-## Proxy: Access Control, Lazy Loading, and Interception
+## Proxy
 
-> *"Provide a surrogate or placeholder for another object to control access to it."* — Gang of Four
+> *"Provide a surrogate or placeholder for another object to control access to it."* (Gang of Four)
 
-Like the Decorator, the **Proxy** implements the exact same interface as the target object. However, its primary intent is **access control, lifecycle management, or remote mediation**, rather than adding domain behavior.
+A **Proxy** implements the same interface (or extends the same class) as the real target, just like a Decorator. The difference is purpose: a Decorator layers extra domain behavior chosen by the caller, whereas a Proxy stands in for the target to control access, defer expensive initialization, cache results, bridge network calls, or weave cross-cutting framework logic like transactions.
 
-### The Four Classic Proxy Archetypes
+Common proxy variants include:
 
-1. **Virtual Proxy**: Defers the instantiation of an expensive object until it is actually accessed (Lazy Loading).
-2. **Protection Proxy**: Checks permissions and roles before granting access to sensitive methods.
-3. **Remote Proxy**: Represents an object living in another address space or microservice (e.g., gRPC stubs, RMI).
-4. **Caching / Memoization Proxy**: Transparently checks an in-memory cache before delegating expensive queries to the target.
+- **Virtual Proxy**: Delays creating an expensive object until the first method call that needs it (for example, Hibernate lazy-loaded associations).
+- **Protection Proxy**: Enforces authorization checks before forwarding calls.
+- **Remote Proxy**: Represents an object running in another JVM or service (gRPC stubs, RMI stubs).
+- **Caching Proxy**: Returns a cached response when available instead of invoking the target.
 
-### Production Implementation: Virtual & Protection Proxy
+### Manual Virtual and Protection Proxy
 
 ```java
-import java.util.Objects;
-
-// 1. The Subject Interface
 public interface SensitiveReportGenerator {
     String generateReport(String userRole);
 }
 
-// 2. The Real Subject (Heavy initialization & confidential data)
-public final class RealHeavyReportGenerator implements SensitiveReportGenerator {
-    public RealHeavyReportGenerator() {
-        System.out.println(">>> [HEAVY] Performing 5-second database warmup & memory allocation...");
+public final class RealReportGenerator implements SensitiveReportGenerator {
+    public RealReportGenerator() {
+        System.out.println("Initializing report engine and warming connection cache...");
     }
 
     @Override
     public String generateReport(String userRole) {
-        return "CONFIDENTIAL FINANCIAL LEDGER: 2026 Q3 PROFIT = $42,000,000";
+        return "Q3 Financial Ledger: Net Profit = USD 42,000,000";
     }
 }
 
-// 3. The Proxy (Combines Virtual Lazy Loading and Security Protection)
 public final class SecureLazyReportProxy implements SensitiveReportGenerator {
-    private volatile RealHeavyReportGenerator realSubject;
+    private volatile RealReportGenerator realSubject;
 
     @Override
     public String generateReport(String userRole) {
-        // Protection Proxy Check
         if (!"ADMIN".equalsIgnoreCase(userRole)) {
-            throw new SecurityException("Access Denied! Role " + userRole + " cannot view financial ledgers.");
+            throw new SecurityException("Access denied for role: " + userRole);
         }
 
-        // Virtual Proxy Lazy Initialization (Double-Checked Locking)
-        RealHeavyReportGenerator subject = realSubject;
+        RealReportGenerator subject = realSubject;
         if (subject == null) {
             synchronized (this) {
                 subject = realSubject;
                 if (subject == null) {
-                    realSubject = subject = new RealHeavyReportGenerator();
+                    realSubject = subject = new RealReportGenerator();
                 }
             }
         }
-
         return subject.generateReport(userRole);
     }
 }
 ```
 
-### The Spring @Transactional Self-Invocation Trap
+Notice that an unauthorized caller never even triggers the expensive `RealReportGenerator` constructor.
 
-Modern frameworks like Spring, Hibernate, and Quarkus use dynamic proxies (via `java.lang.reflect.Proxy` or ByteBuddy) to implement `@Transactional`, `@Async`, and `@Cacheable`.
+### JDK Dynamic Proxy vs. CGLIB (and ByteBuddy)
 
-A notorious bug in Spring applications occurs when an internal method calls another annotated method in the same class:
+Writing proxy classes by hand quickly gets tedious when you want to intercept dozens of services. Java frameworks generate proxies at runtime using two main mechanisms.
+
+**1. JDK Dynamic Proxy (`java.lang.reflect.Proxy`)**
+
+Built directly into the JDK, `Proxy.newProxyInstance` generates an in-memory proxy class at runtime for one or more **interfaces** and routes every call through an `InvocationHandler`:
 
 ```java
-@Service
-public class OrderService {
-    public void checkout(Order order) {
-        // Direct method call! Bypasses the Spring dynamic proxy!
-        this.saveToDatabase(order); 
-    }
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 
-    @Transactional // THIS ANNOTATION DOES NOT RUN!
-    public void saveToDatabase(Order order) {
-        // SQL queries executed without a database transaction!
+public class TimingProxyFactory {
+    @SuppressWarnings("unchecked")
+    public static <T> T withTiming(T target, Class<T> interfaceType) {
+        InvocationHandler handler = (Object proxy, Method method, Object[] args) -> {
+            long start = System.nanoTime();
+            try {
+                return method.invoke(target, args);
+            } finally {
+                long elapsedMicros = (System.nanoTime() - start) / 1_000;
+                System.out.printf("[PROXY] %s took %d us%n", method.getName(), elapsedMicros);
+            }
+        };
+
+        return (T) Proxy.newProxyInstance(
+                interfaceType.getClassLoader(),
+                new Class<?>[] { interfaceType },
+                handler
+        );
     }
 }
 ```
 
-Because `checkout()` invokes `this.saveToDatabase()` directly on the internal target object rather than through the Spring proxy, the proxy's interceptor never triggers. No transaction is opened, and no rollback occurs on exception!
+Because JDK Dynamic Proxies work strictly on interfaces, you cannot use them to proxy a plain concrete class that does not implement an interface.
+
+**2. CGLIB / ByteBuddy Subclass Proxies**
+
+Libraries like CGLIB (repackaged inside Spring Core as `org.springframework.cglib`) and ByteBuddy (used by Hibernate 6 and Mockito) generate a **runtime subclass** of your concrete class in bytecode and override its methods to run interceptor logic before delegating to `super`.
+
+| Aspect | JDK Dynamic Proxy | CGLIB / ByteBuddy Subclass Proxy |
+| :--- | :--- | :--- |
+| **Requirement** | Target must implement an interface | Works on concrete classes without interfaces |
+| **Limitations** | Cannot proxy class-only methods | Cannot proxy `final` classes, `final` methods, or `private` methods |
+| **Spring Boot 3 Default** | Used if `spring.aop.proxy-target-class=false` and bean has an interface | Default in Spring Boot 2 and 3 (`proxy-target-class=true`) |
+| **Hibernate Lazy Entities** | Not used for entity classes | ByteBuddy generates entity proxy subclasses |
+
+### The Spring `@Transactional` Self-Invocation Trap
+
+Understanding how Spring proxies work explains one of the most common Spring bugs in production:
+
+```java
+@Service
+public class OrderService {
+
+    public void checkout(Order order) {
+        // Direct call on 'this' bypasses the Spring proxy completely!
+        this.saveOrder(order);
+    }
+
+    @Transactional
+    public void saveOrder(Order order) {
+        // Runs WITHOUT a transaction when called from checkout() above
+    }
+}
+```
 
 ```mermaid
 sequenceDiagram
     participant Controller as HTTP Controller
     participant Proxy as Spring CGLIB Proxy
-    participant Target as OrderServiceImpl Target
+    participant Target as OrderService Target
 
-    Controller->>Proxy: checkout()
-    Proxy->>Target: checkout()
-    Note over Target: Calls this.saveToDatabase() DIRECTLY!
-    Note over Target: Proxy is BYPASSED! @Transactional ignored!
-    Target-->>Proxy: Returns
-    Proxy-->>Controller: 200 OK (Unprotected execution!)
+    Controller->>Proxy: checkout(order)
+    Proxy->>Target: checkout(order)
+    Note over Target: Calls this.saveOrder(order) directly
+    Note over Target: Proxy is bypassed, so @Transactional never runs
+    Target-->>Proxy: returns
+    Proxy-->>Controller: HTTP 200 (no transaction opened)
 ```
+
+When the controller calls `checkout()`, the call enters the Spring proxy, which forwards it to the real `OrderService` instance. Inside `checkout()`, `this` points to the raw target object, not the proxy. Calling `this.saveOrder(order)` jumps straight to the method without passing through the transaction interceptor, so no transaction starts and exceptions will not roll back.
+
+The cleanest fixes are to move the `@Transactional` method into a separate collaborator bean (often the right choice for SRP anyway), annotate `checkout()` itself if the whole method belongs in one transaction, or use Spring's `TransactionTemplate` for explicit programmatic transaction boundaries.
 
 ---
 
-## Composite: Part-Whole Tree Hierarchies
+## Composite
 
-> *"Compose objects into tree structures to represent part-whole hierarchies. Composite lets clients treat individual objects and compositions of objects uniformly."* — Gang of Four
+> *"Compose objects into tree structures to represent part-whole hierarchies. Composite lets clients treat individual objects and compositions of objects uniformly."* (Gang of Four)
 
-When building directory structures, file systems, organizational charts, or nested UI view trees, you have two kinds of entities:
-- **Leaf nodes**: Individual items that contain no children (e.g., a File, an Employee).
-- **Composite nodes**: Containers that contain children, which may themselves be leaves or other composites (e.g., a Directory, a Department).
+Tree structures show up everywhere: file systems (files and directories), UI layouts (buttons inside panels inside windows), organization charts, pricing bundles, and expression trees.
 
-Without the Composite pattern, client code is plagued with recursive `instanceof` checks:
-```java
-if (node instanceof Directory) {
-    for (Object child : ((Directory) node).getChildren()) { ... }
-} else if (node instanceof File) {
-    // Process file
-}
-```
-
-The **Composite** pattern defines a single component interface that both leaves and composites implement, allowing clients to treat leaves and branches completely identically.
+Without Composite, callers end up checking types everywhere (`if (node instanceof Directory) ... else if (node instanceof File) ...`). With Composite, both **leaves** (individual items) and **composites** (containers holding children) implement the same component interface.
 
 ```mermaid
 flowchart TD
-    Component["<<interface>><br/>FileSystemItem<br/>+calculateSizeInBytes(): long"]
-    
-    FileLeaf["FileItem (Leaf)<br/>-size: long"] -.->|implements| Component
-    DirComposite["DirectoryComposite (Composite)<br/>-children: List<FileSystemItem>"] -.->|implements| Component
-    
-    DirComposite -->|contains 0..*| Component
+    Component["FileSystemItem (interface)<br/>calculateSizeInBytes(): long"]
+
+    FileLeaf["FileItem (Leaf)<br/>sizeInBytes: long"] -.->|"implements"| Component
+    DirComposite["DirectoryComposite (Composite)<br/>children: List of FileSystemItem"] -.->|"implements"| Component
+
+    DirComposite -->|"contains 0 or more"| Component
 ```
 
-### Production Implementation
+Real examples in Java include `java.awt.Component` and `java.awt.Container`, XML DOM `org.w3c.dom.Node`, and Spring's `CompositeCacheManager` and `CompositeFilter`.
+
+### File System Tree Example
 
 ```java
 import java.util.ArrayList;
@@ -421,18 +482,20 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-// 1. The Component Interface
+// 1. Component interface
 public interface FileSystemItem {
     String name();
     long calculateSizeInBytes();
-    void renderHierarchy(int indentLevel);
+    void printTree(int indentLevel);
 }
 
-// 2. The Leaf Node
+// 2. Leaf node
 public record FileItem(String name, long sizeInBytes) implements FileSystemItem {
     public FileItem {
         Objects.requireNonNull(name);
-        if (sizeInBytes < 0) throw new IllegalArgumentException("Size cannot be negative");
+        if (sizeInBytes < 0) {
+            throw new IllegalArgumentException("Size cannot be negative");
+        }
     }
 
     @Override
@@ -441,12 +504,12 @@ public record FileItem(String name, long sizeInBytes) implements FileSystemItem 
     }
 
     @Override
-    public void renderHierarchy(int indentLevel) {
-        System.out.println("  ".repeat(indentLevel) + "- [FILE] " + name + " (" + sizeInBytes + " bytes)");
+    public void printTree(int indentLevel) {
+        System.out.println("  ".repeat(indentLevel) + "- " + name + " (" + sizeInBytes + " bytes)");
     }
 }
 
-// 3. The Composite Node
+// 3. Composite node
 public final class DirectoryComposite implements FileSystemItem {
     private final String name;
     private final List<FileSystemItem> children = new ArrayList<>();
@@ -457,7 +520,7 @@ public final class DirectoryComposite implements FileSystemItem {
 
     public DirectoryComposite add(FileSystemItem item) {
         children.add(Objects.requireNonNull(item));
-        return this; // Fluent addition
+        return this;
     }
 
     @Override
@@ -467,86 +530,81 @@ public final class DirectoryComposite implements FileSystemItem {
 
     @Override
     public long calculateSizeInBytes() {
-        // Recursive aggregation across all leaves and sub-composites
         return children.stream()
-            .mapToLong(FileSystemItem::calculateSizeInBytes)
-            .sum();
+                .mapToLong(FileSystemItem::calculateSizeInBytes)
+                .sum();
     }
 
     @Override
-    public void renderHierarchy(int indentLevel) {
-        System.out.println("  ".repeat(indentLevel) + "+ [DIR] " + name);
+    public void printTree(int indentLevel) {
+        System.out.println("  ".repeat(indentLevel) + "+ " + name + "/");
         for (FileSystemItem child : children) {
-            child.renderHierarchy(indentLevel + 1);
+            child.printTree(indentLevel + 1);
         }
     }
 
-    public List<FileSystemItem> getChildren() {
+    public List<FileSystemItem> children() {
         return Collections.unmodifiableList(children);
     }
 }
 ```
 
-### Running the Composite Tree
+### Walking the Tree Uniformly
 
 ```java
 public class CompositeDemo {
     public static void main(String[] args) {
         DirectoryComposite root = new DirectoryComposite("root");
-        DirectoryComposite etc = new DirectoryComposite("etc");
-        DirectoryComposite home = new DirectoryComposite("home");
-        DirectoryComposite userAlice = new DirectoryComposite("alice");
+        DirectoryComposite etc = new DirectoryComposite("etc")
+                .add(new FileItem("hosts", 120))
+                .add(new FileItem("resolv.conf", 85));
 
-        etc.add(new FileItem("hosts", 120));
-        etc.add(new FileItem("resolv.conf", 85));
+        DirectoryComposite alice = new DirectoryComposite("alice")
+                .add(new FileItem("resume.pdf", 450_000))
+                .add(new FileItem("avatar.png", 1_200_000));
 
-        userAlice.add(new FileItem("resume.pdf", 450_000));
-        userAlice.add(new FileItem("avatar.png", 1_200_000));
-        home.add(userAlice);
+        DirectoryComposite home = new DirectoryComposite("home").add(alice);
 
-        root.add(etc);
-        root.add(home);
-        root.add(new FileItem("boot.img", 10_000_000));
+        root.add(etc)
+                .add(home)
+                .add(new FileItem("boot.img", 10_000_000));
 
-        // Uniform execution!
-        root.renderHierarchy(0);
-        System.out.printf("%nTotal Root Size: %d bytes%n", root.calculateSizeInBytes());
+        root.printTree(0);
+        System.out.printf("%nTotal size: %d bytes%n", root.calculateSizeInBytes());
     }
 }
 ```
 
+Notice that `add(...)` is placed only on `DirectoryComposite`, not on `FileSystemItem`. That favors **type safety** (you cannot accidentally call `add()` on a `FileItem`) over **uniformity** (where `FileSystemItem` declares `add()` and `FileItem` has to throw `UnsupportedOperationException`). In Java, keeping mutation methods on the composite class usually avoids LSP violations while keeping read/traversal operations completely uniform.
+
 ---
 
-## Structural Patterns Comparison Matrix
+## Pattern Comparison
 
-| Pattern | Primary Intent | Interface Impact | Real-World Ecosystem Example |
+| Pattern | Primary Intent | Effect on Interface | JDK / Spring Examples |
 | :--- | :--- | :--- | :--- |
-| **Adapter** | Translate incompatible interfaces. | Changes the interface to match target port. | `InputStreamReader` (adapting `InputStream` to `Reader`), Slf4j Log4j bridges |
-| **Decorator** | Add dynamic responsibilities without subclassing. | Preserves identical interface. | `java.io.BufferedInputStream`, `Collections.synchronizedList()` |
-| **Facade** | Simplify a multi-component subsystem. | Introduces a new coarse-grained high-level interface. | Spring `JdbcTemplate`, SLF4J `LoggerFactory` |
-| **Proxy** | Control access, lifecycle, or remote execution. | Preserves identical interface. | Spring `@Transactional` CGLIB proxies, Hibernate Lazy proxies |
-| **Composite** | Model recursive part-whole tree hierarchies. | Unifies leaves and composites behind one interface. | DOM View Trees (`java.awt.Container`), Filesystems |
+| **Adapter** | Make incompatible interfaces work together | Changes the interface to match what callers expect | `Arrays.asList()`, `InputStreamReader`, Spring `HandlerAdapter` |
+| **Decorator** | Add composable behavior at runtime | Keeps the same interface | `BufferedInputStream`, `GZIPInputStream`, `Collections.synchronizedList()` |
+| **Facade** | Simplify a multi-class subsystem | Introduces a simpler, higher-level interface | Spring `JdbcTemplate`, SLF4J `LoggerFactory` |
+| **Proxy** | Control access, laziness, or interception | Keeps the same interface (or subclasses target) | `java.lang.reflect.Proxy`, Spring `@Transactional` CGLIB proxies, Hibernate lazy proxies |
+| **Composite** | Treat leaf items and nested trees uniformly | Shared component interface for leaves and containers | `java.awt.Container`, DOM `Node`, Spring `CompositeCacheManager` |
 
 ---
 
-## Senior Engineer Interview Crucible
+## Interview Questions
 
-### Adapter, Decorator, and Proxy share almost identical class diagrams. Explain how their intents, contracts, and lifecycle bindings differ fundamentally.
-While all three wrap an underlying object, their architectural purposes are distinct:
-1. **Adapter**: Its goal is to resolve an **interface mismatch**. It alters the interface of the adaptee to conform to the client's expected target interface. The client is aware that it is communicating through a bridge to an external or legacy system.
-2. **Decorator**: Its goal is to **enhance behavior dynamically** without subclassing. It strictly preserves the target's original interface. Multiple decorators can be stacked in arbitrary combinations at runtime, and the client believes it is interacting with the underlying component.
-3. **Proxy**: Its goal is to **control access, mediate lifecycles, or enforce boundaries** (such as lazy initialization, security authentication, or network RPC). It strictly preserves the target's original interface, but unlike a decorator, the client is usually decoupled from proxy instantiation (the proxy often creates or manages the real subject internally).
+### Adapter, Decorator, and Proxy all wrap another object. How do you tell them apart?
 
-### Why does invoking a method annotated with @Transactional from within the same class fail to execute within a transaction in Spring, and how does the Proxy pattern explain this?
-Spring implements declarative transactions by creating a dynamic proxy (using CGLIB or JDK dynamic proxies) that wraps your service bean. When an external caller invokes a method on the bean, the invocation passes through the proxy, which opens a database transaction, begins interception, delegates to the target method, and commits or rolls back upon completion.
+Look at the interface and the reason the wrapper exists. An **Adapter** changes the interface so two incompatible types can talk to each other. A **Decorator** keeps the exact same interface and adds optional behavior that callers often assemble dynamically (like wrapping an `InputStream` with buffering and GZIP decompression). A **Proxy** also keeps the same interface, but its job is to control access to the target (lazy initialization, authorization, caching, remote calls, or framework interception), and the caller usually does not even know it is talking to a proxy.
 
-When a method inside the target class invokes another method on `this` (`this.annotatedMethod()`), the call is executed directly within the JVM memory frame of the target object. It completely bypasses the outer Spring proxy. Because the proxy interceptor is never invoked, Spring's transaction aspect never executes, causing the second method to run without a transactional context.
+### Why does a self-invocation to a `@Transactional` method in Spring skip the transaction?
 
-### In the Composite pattern, explain the trade-off between Transparency and Type Safety when deciding where to place child-management methods like add() and remove().
-This trade-off is defined by Gang of Four:
-- **Transparency**: Defining `add()`, `remove()`, and `getChild()` in the root `Component` interface. This allows clients to treat leaves and composites with complete uniformity—calling `add()` on any node without casting. The cost is **Type Safety**: a `Leaf` cannot have children, so its `add()` method must throw an `UnsupportedOperationException`, shifting errors from compile-time to runtime.
-- **Type Safety**: Defining child-management methods exclusively on the concrete `Composite` class. Leaves never have `add()` methods, preventing illegal operations at compile time. The cost is **Transparency**: clients must explicitly cast components to `Composite` or use `instanceof` checks to add children, diminishing the clean uniformity of the pattern.
+Spring implements `@Transactional` by wrapping the bean in a proxy (CGLIB subclass proxy by default in Spring Boot 2 and 3). External calls hit the proxy first, which opens a transaction before delegating to the target method. When a method inside the bean calls `this.otherMethod()`, the call happens directly on the raw target instance and never passes through the proxy, so the transaction interceptor never executes.
 
-### How does dynamic proxying using java.lang.reflect.Proxy compare to runtime bytecode generation with ByteBuddy or CGLIB?
-- **`java.lang.reflect.Proxy` (JDK Dynamic Proxies)**: Built into the standard JDK. It can **only proxy interfaces**; it cannot proxy concrete classes without interfaces. It uses Java Reflection and an `InvocationHandler`, which incurs slight overhead due to reflection invocation and boxing of primitives.
-- **Bytecode Generation (ByteBuddy / CGLIB)**: Dynamically generates sub-classes at runtime directly in JVM bytecode. This allows proxying **concrete classes** without requiring interfaces (by subclassing the target class and overriding non-final methods). Frameworks like Spring Boot 2+ and 3 default to CGLIB/ByteBuddy proxies because they eliminate the strict requirement for domain interfaces on every service bean.
+### When does Spring use JDK Dynamic Proxies versus CGLIB, and what breaks CGLIB proxies?
+
+JDK Dynamic Proxies (`java.lang.reflect.Proxy`) only work on interfaces. CGLIB generates a runtime subclass of the target class, so it can proxy concrete classes without requiring an interface; Spring Boot 2 and 3 enable CGLIB proxying by default via `spring.aop.proxy-target-class=true`. Because CGLIB relies on subclassing and method overriding, it cannot proxy `final` classes, `final` methods, or `private` methods.
+
+### In the Composite pattern, why is putting `add()` on the `Composite` class instead of the root `Component` interface usually preferred in Java?
+
+Putting `add()` on the root interface lets callers treat leaves and composites identically even during tree mutation, but forces every leaf class to throw `UnsupportedOperationException`, which breaks Liskov Substitution and turns mistakes into runtime errors. Keeping child-management methods on the `Composite` class lets the Java compiler catch invalid mutations at compile time while keeping read and traversal operations (`calculateSizeInBytes()`, `printTree()`) completely uniform.

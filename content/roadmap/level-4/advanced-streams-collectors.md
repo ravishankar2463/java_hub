@@ -1,247 +1,265 @@
 ---
 title: "Advanced Streams & Collectors"
-description: "Master advanced Java Collectors: Downstream multi-level grouping, Java 12 teeing collectors, the 4-function Collector interface contract, and parallel reduction combiners."
+description: "Collecting stream results with toList, toSet, toMap, groupingBy, partitioningBy, custom Collector implementations, and parallel streams on the Fork/Join pool."
 category: "level-4"
 date: "2026-10-29T10:00:00Z"
 ---
 
-Transforming data with `filter()` and `map()` is only half of the functional equation. At the end of every meaningful Stream pipeline, you must aggregate the results into a structured domain model: generating grouped hierarchies, calculating multi-dimensional metrics, or serializing summary reports.
+Filtering and mapping elements is only the first half of a stream pipeline. Most real pipelines end by summarizing elements into a list, a set, a lookup map, a grouped report, or a domain summary object. In Java, that work belongs to terminal reductions, primarily `Stream.collect()` and the `Collectors` utility class, alongside parallel execution on the Fork/Join pool when workloads genuinely benefit from multiple cores.
 
-This is the domain of **Terminal Reductions** and the **`Collector<T, A, R>` API**.
+## `reduce()` vs. `collect()`: Immutable Fold vs. Mutable Accumulation
 
-While most developers stop at `Collectors.toList()`, senior engineers treat Collectors as an expressive, composable algebra. By mastering **downstream multi-level aggregators**, **Java 12's `teeing()` collector**, and building **custom collectors**, you can execute complex statistical and hierarchical data transformations in a single, lightning-fast pass across your data.
+Both `reduce()` and `collect()` collapse a stream into a single result, but they are built for different jobs:
 
----
-
-## `reduce()` vs. `collect()`: The Fundamental Architectural Divide
-
-The Streams API offers two distinct reduction paradigms:
+- **`reduce()`** performs an **immutable reduction**. On every step, the accumulator function takes the current value and the next element and returns a new value. That works naturally for numbers, `BigDecimal`, or finding a maximum.
+- **`collect()`** performs a **mutable reduction**. It creates a mutable container (such as an `ArrayList`, `HashMap`, or `StringBuilder`) and updates it in place as elements arrive.
 
 ```mermaid
 flowchart TD
-    subgraph ImmutableReduction ["reduce(): Pure Functional Fold"]
-        RedInit["Identity value (e.g. 0)"]
-        RedOp["BinaryOperator: (acc, val) -&gt; newAcc<br/>Creates NEW object on every step!"]
-        RedInit --> RedOp
+    subgraph reduceFlow ["reduce(): Immutable Fold"]
+        r1["Start with identity value (for example 0)"] --> r2["Combine (acc, item) into a new immutable result"]
     end
 
-    subgraph MutableReduction ["collect(): Mutable Accumulator"]
-        ColInit["Supplier: new Container()"]
-        ColOp["BiConsumer: (container, val) -&gt; container.add(val)<br/>Mutates existing container in-place!"]
-        ColInit --> ColOp
+    subgraph collectFlow ["collect(): Mutable Accumulation"]
+        c1["Supplier creates mutable container"] --> c2["Accumulator mutates container in place"]
     end
 ```
 
-### The Catastrophic `reduce()` Anti-Pattern
-Why can't you just use `reduce()` to accumulate items into an `ArrayList`?
+Trying to build a `List` with `reduce()` is a classic performance mistake:
 
 ```java
-// ❌ PRODUCTION DISASTER: O(n²) Quadratic Time & Gigabytes of Garbage!
-List<String> list = stream.reduce(
+// Bad: copies the entire list on every element -> O(n^2) time and heavy GC pressure
+List<String> slow = stream.reduce(
         new ArrayList<>(),
         (acc, item) -> {
-            ArrayList<String> next = new ArrayList<>(acc); // Copies entire previous list!
-            next.add(item);
-            return next;
+            List<String> copy = new ArrayList<>(acc);
+            copy.add(item);
+            return copy;
         },
         (left, right) -> {
-            ArrayList<String> combined = new ArrayList<>(left);
-            combined.addAll(right);
-            return combined;
+            List<String> merged = new ArrayList<>(left);
+            merged.addAll(right);
+            return merged;
         }
 );
 ```
 
-Because `reduce()` is strictly designed for **immutable value types** (like numbers, strings, and BigDecimals), returning a new collection instance on every element forces copying all previous items, producing quadratic `O(n²)` copying churn!
+Copying an ever-growing list on every element turns an `O(n)` task into `O(n^2)`. Using `collect()` (or `Stream.toList()`) appends into a single container in amortized `O(1)` per element.
 
-**`collect()` is engineered for mutable containers.** It creates a single accumulator container (like an `ArrayList` or `StringBuilder`) and mutates it in place (`O(1)` per insertion), providing maximum performance.
+## Collecting into Lists, Sets, and Maps
 
----
+### `Collectors.toList()` vs. Java 16 `Stream.toList()`
 
-## The Four Functions of `Collector<T, A, R>`
-
-To understand how collectors work—and how to write your own—you must understand the four functional pillars of the `java.util.stream.Collector` interface:
-
-```mermaid
-flowchart LR
-    Supplier["1. supplier()<br/>() -&gt; A<br/>Creates accumulator"]
-    Accumulator["2. accumulator()<br/>(A, T) -&gt; void<br/>Folds element in-place"]
-    Combiner["3. combiner()<br/>(A, A) -&gt; A<br/>Merges partitions (Parallel)"]
-    Finisher["4. finisher()<br/>A -&gt; R<br/>Transforms container to final type"]
-
-    Supplier --> Accumulator --> Combiner --> Finisher
-```
-
-1. **`supplier()`**: `() -> A`  
-   A factory function that creates a fresh, empty mutable accumulation container (e.g. `ArrayList::new` or `HashMap::new`).
-2. **`accumulator()`**: `(A, T) -> void`  
-   A function that folds an incoming stream element `T` into the mutable container `A` (e.g. `List::add`).
-3. **`combiner()`**: `(A, A) -> A`  
-   A function that merges two partial accumulation containers into one. **Crucial for Parallel Streams!** When a parallel stream divides work across CPU threads, the combiner merges results from separate partitions.
-4. **`finisher()`**: `A -> R`  
-   Transforms the intermediate accumulation container `A` into the final result type `R` (e.g. converting a mutable `StringBuilder` to an immutable `String`, or wrapping a list in `Collections.unmodifiableList()`).
-5. **`characteristics()`**: Returns a set of optimization flags:
-   - `IDENTITY_FINISH`: The container `A` is cast directly to result `R` without invoking `finisher()`.
-   - `UNORDERED`: Accumulation does not depend on encounter order.
-   - `CONCURRENT`: The accumulator can be invoked concurrently by multiple threads on a single shared container without external synchronization.
-
----
-
-## The Modern Duel: `Collectors.toList()` vs. `Stream.toList()` (Java 16+)
-
-Starting in Java 16, a new convenience method arrived directly on the `Stream` interface: `stream.toList()`.
-
-Do not confuse these two methods:
+Before Java 16, collecting into a list meant writing `.collect(Collectors.toList())`. Java 16 added `stream.toList()` directly on `Stream`:
 
 ```java
-// Option A: Classic Java 8 Collector
-List<String> listA = stream.collect(Collectors.toList());
+// Classic Java 8 collector
+List<String> mutableList = names.stream().collect(Collectors.toList());
 
-// Option B: Modern Java 16 Direct Terminal
-List<String> listB = stream.toList();
+// Java 16+ direct terminal operation
+List<String> unmodifiableList = names.stream().toList();
 ```
 
-| Dimension | `Collectors.toList()` (Java 8) | `Stream.toList()` (Java 16+) |
-|---|---|---|
-| **Mutability** | Returns a standard mutable `ArrayList` (in OpenJDK implementation). | Returns a **strictly unmodifiable list** (`UnsupportedOperationException` on mutation). |
-| **Null Elements** | Permits `null` elements. | Permits `null` elements. |
-| **Memory Allocation** | Allocates intermediate `Collector` objects and resizes `ArrayList`. | **Zero intermediate collector allocation**; sized directly to exact element count! |
-| **Recommendation** | Use only if you specifically require a mutable list. | **Default choice for 99% of modern Java pipelines.** |
+The differences matter in production code:
 
----
+| Aspect | `Collectors.toList()` | `Stream.toList()` (Java 16+) | `Collectors.toUnmodifiableList()` (Java 10+) |
+|---|---|---|---|
+| Mutability | No spec guarantee (returns a mutable `ArrayList` in OpenJDK) | Strictly unmodifiable (`UnsupportedOperationException` on mutation) | Strictly unmodifiable |
+| `null` elements | Allowed | Allowed | Throws `NullPointerException` on `null` |
+| Typical use | Only when callers expect to mutate the returned list | Default choice in Java 16+ | When you want unmodifiable and explicitly forbid `null` elements |
 
-## The Duplicate Key Trap in `Collectors.toMap()`
+If you specifically need a guaranteed mutable `ArrayList` or `LinkedList`, make that explicit with `Collectors.toCollection(ArrayList::new)` instead of relying on the undocumented implementation detail of `Collectors.toList()`.
 
-The two-argument version of `Collectors.toMap()` is one of the most frequent sources of runtime crashes in production:
+### `Collectors.toSet()` and Specific Set Types
+
+`Collectors.toSet()` collects elements into a `Set`, automatically removing duplicates based on `equals()` and `hashCode()`:
 
 ```java
-record Employee(String department, String name) {}
+Set<String> uniqueDepartments = employees.stream()
+        .map(Employee::department)
+        .collect(Collectors.toSet());
+```
+
+Like `Collectors.toList()`, `Collectors.toSet()` makes no specification guarantee about mutability or iteration order (OpenJDK returns a `HashSet`). Use more specific collectors when the contract matters:
+
+```java
+// Unmodifiable set (Java 10+, rejects null elements)
+Set<String> readOnly = employees.stream()
+        .map(Employee::department)
+        .collect(Collectors.toUnmodifiableSet());
+
+// Preserves stream encounter order
+Set<String> ordered = employees.stream()
+        .map(Employee::department)
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+
+// Sorted alphabetically
+Set<String> sorted = employees.stream()
+        .map(Employee::department)
+        .collect(Collectors.toCollection(TreeSet::new));
+```
+
+### `Collectors.toMap()` and Duplicate Key Handling
+
+`Collectors.toMap()` builds a `Map<K, V>` from a key mapper and a value mapper. The two-argument overload is a frequent source of runtime exceptions because it throws `IllegalStateException` if two elements produce the same key:
+
+```java
+record Employee(String id, String department, String name) {}
 
 List<Employee> employees = List.of(
-        new Employee("ENG", "Alice"),
-        new Employee("HR", "Bob"),
-        new Employee("ENG", "Charlie") // Duplicate key "ENG"!
+        new Employee("E1", "ENG", "Alice"),
+        new Employee("E2", "HR", "Bob"),
+        new Employee("E3", "ENG", "Charlie")
 );
 
-// ❌ PRODUCTION OUTAGE CRASH:
-Map<String, String> map = employees.stream()
+// Throws IllegalStateException: Duplicate key ENG
+Map<String, String> broken = employees.stream()
         .collect(Collectors.toMap(Employee::department, Employee::name));
-// Throws: java.lang.IllegalStateException: Duplicate key ENG (attempted merging values Alice and Charlie)
 ```
 
-By default, `toMap()` assumes keys are globally unique. If a duplicate key occurs, it throws `IllegalStateException`.
-
-### The Safe Production Fix: Provide a Merge Function
-Always use the three-argument overload of `toMap()` specifying how to handle key collisions:
+Whenever keys are not guaranteed to be unique, use the three-argument overload and provide a **merge function** `(existing, incoming) -> ...`:
 
 ```java
-// ✅ Safe: Declares an explicit merge resolution policy
-Map<String, String> safeMap = employees.stream()
+// Keep the first value, or keep the latest, or combine them
+Map<String, String> byDepartment = employees.stream()
         .collect(Collectors.toMap(
                 Employee::department,
                 Employee::name,
-                (existing, replacement) -> existing + ", " + replacement // Merges colliding values!
+                (existing, replacement) -> existing + ", " + replacement
         ));
-
-System.out.println(safeMap); // {HR=Bob, ENG=Alice, Charlie}
+// Result: {HR=Bob, ENG=Alice, Charlie}
 ```
 
----
+A four-argument overload also lets you pick the map implementation, such as `LinkedHashMap::new` (to preserve encounter order) or `TreeMap::new` (for sorted keys). Also note a subtle `HashMap.merge` behavior: `Collectors.toMap()` throws `NullPointerException` if any **value** produced by the value mapper is `null`.
 
-## Downstream Multi-Level Grouping & Partitioning
+## Grouping and Partitioning
 
-`Collectors.groupingBy()` is exceptionally powerful because it can be nested with **Downstream Collectors** to build multi-dimensional data models in a single pass:
+### `Collectors.groupingBy()` and Downstream Collectors
+
+`groupingBy()` groups elements by a classification function into a `Map<K, List<T>>`. Its real flexibility comes from pairing it with a **downstream collector** to aggregate each group in a single pass instead of building intermediate lists first.
 
 ```java
-record Transaction(String customerId, String category, double amount) {}
+record Transaction(String customerId, String category, long amountCents) {}
 
 List<Transaction> txs = List.of(
-        new Transaction("CUST-1", "GROCERY", 45.0),
-        new Transaction("CUST-2", "TECH", 1200.0),
-        new Transaction("CUST-1", "TECH", 85.0),
-        new Transaction("CUST-1", "GROCERY", 30.0),
-        new Transaction("CUST-2", "GROCERY", 15.0)
+        new Transaction("C1", "GROCERY", 4500),
+        new Transaction("C2", "TECH", 120_000),
+        new Transaction("C1", "TECH", 8500),
+        new Transaction("C1", "GROCERY", 3000),
+        new Transaction("C2", "GROCERY", 1500)
 );
-```
 
-### Scenario 1: Group By Customer -> Group By Category (Two-Level Map)
+// Single-level grouping: customer -> transactions
+Map<String, List<Transaction>> byCustomer = txs.stream()
+        .collect(Collectors.groupingBy(Transaction::customerId));
 
-```java
-Map<String, Map<String, List<Transaction>>> nestedHierarchy = txs.stream()
-        .collect(Collectors.groupingBy(
-                Transaction::customerId,
-                Collectors.groupingBy(Transaction::category) // Downstream collector!
-        ));
-```
-
-### Scenario 2: Total Spending per Customer per Category
-
-```java
-Map<String, Map<String, Double>> spendingBreakdown = txs.stream()
+// Multi-level grouping with downstream sum: customer -> category -> total cents
+Map<String, Map<String, Long>> spendByCustomerAndCategory = txs.stream()
         .collect(Collectors.groupingBy(
                 Transaction::customerId,
                 Collectors.groupingBy(
                         Transaction::category,
-                        Collectors.summingDouble(Transaction::amount) // Downstream sum!
+                        Collectors.summingLong(Transaction::amountCents)
                 )
         ));
 
-System.out.println(spendingBreakdown);
-// {CUST-2={TECH=1200.0, GROCERY=15.0}, CUST-1={GROCERY=75.0, TECH=85.0}}
+// Transform each group's elements with mapping()
+Map<String, Set<String>> categoriesPerCustomer = txs.stream()
+        .collect(Collectors.groupingBy(
+                Transaction::customerId,
+                Collectors.mapping(Transaction::category, Collectors.toSet())
+        ));
 ```
 
-### Scenario 3: Partitioning by High-Value Threshold
-`partitioningBy()` divides data into exactly two buckets: `true` and `false`:
+Java 9 also added `Collectors.filtering(predicate, downstream)` and `Collectors.flatMapping(mapper, downstream)`. Unlike calling `.filter()` before `groupingBy()`, putting `Collectors.filtering()` as a downstream collector keeps groups with zero matching elements in the resulting map (with an empty list), which is often what reporting queries need:
 
 ```java
-Map<Boolean, List<Transaction>> highValueSplit = txs.stream()
-        .collect(Collectors.partitioningBy(tx -> tx.amount() >= 100.0));
-
-System.out.println("Transactions >= $100: " + highValueSplit.get(true).size());
+// Keeps every customer key, even if they had no transactions >= 10_000 cents
+Map<String, List<Transaction>> largeTxPerCustomer = txs.stream()
+        .collect(Collectors.groupingBy(
+                Transaction::customerId,
+                Collectors.filtering(tx -> tx.amountCents() >= 10_000, Collectors.toList())
+        ));
 ```
 
----
+One constraint to remember: the classifier function passed to `groupingBy()` must not return `null`, or it throws `NullPointerException`.
 
-## The Java 12 Superpower: `Collectors.teeing()`
+### `Collectors.partitioningBy()`
 
-Prior to Java 12, if you needed to calculate two independent metrics from a single stream—such as finding both the **Average** and the **Total Sum**—you had to run the stream twice, iterating over the data twice!
+`partitioningBy(Predicate<T>)` is a specialized binary grouping that always returns a `Map<Boolean, List<T>>` (or `Map<Boolean, D>` with a downstream collector). Unlike `groupingBy()`, both keys (`true` and `false`) are **always present** in the returned map, even when one bucket is empty:
 
-**`Collectors.teeing()`** splits incoming elements into two separate downstream collectors and then fuses their results together using a merger BiFunction, **in a single pass**:
+```java
+Map<Boolean, List<Transaction>> splitBySize = txs.stream()
+        .collect(Collectors.partitioningBy(tx -> tx.amountCents() >= 10_000));
+
+List<Transaction> highValue = splitBySize.get(true);
+List<Transaction> standard = splitBySize.get(false);
+
+// With a downstream collector: count high-value vs standard transactions
+Map<Boolean, Long> counts = txs.stream()
+        .collect(Collectors.partitioningBy(
+                tx -> tx.amountCents() >= 10_000,
+                Collectors.counting()
+        ));
+```
+
+## Computing Two Aggregations in One Pass with `Collectors.teeing()`
+
+Introduced in Java 12, `Collectors.teeing()` feeds every stream element to two independent downstream collectors at once and merges their results when the stream completes. This avoids traversing an expensive stream source twice.
 
 ```mermaid
-flowchart TD
-    Input["Stream Elements"] --> Tee["Collectors.teeing()"]
-    Tee --> Downstream1["Downstream 1: Collectors.summingDouble()"]
-    Tee --> Downstream2["Downstream 2: Collectors.counting()"]
-    Downstream1 --> Merger["BiFunction: (sum, count) -&gt; new Summary(sum, sum/count)"]
-    Downstream2 --> Merger
-    Merger --> Output["Final Domain DTO Result"]
+flowchart LR
+    in["Stream elements"] --> tee["Collectors.teeing()"]
+    tee --> d1["Downstream 1: summingDouble()"]
+    tee --> d2["Downstream 2: counting()"]
+    d1 --> merge["Merger BiFunction"]
+    d2 --> merge
+    merge --> out["ScoreSummary record"]
 ```
 
 ```java
-record StreamSummary(double sum, double average, long count) {}
+record ScoreSummary(double sum, double average, long count) {}
 
 List<Double> scores = List.of(95.0, 80.0, 90.0, 85.0, 100.0);
 
-StreamSummary summary = scores.stream()
+ScoreSummary summary = scores.stream()
         .collect(Collectors.teeing(
-                Collectors.summingDouble(Double::doubleValue), // Branch 1: Sum
-                Collectors.counting(),                         // Branch 2: Count
-                (sum, count) -> new StreamSummary(sum, sum / count, count) // Merger!
+                Collectors.summingDouble(Double::doubleValue),
+                Collectors.counting(),
+                (sum, count) -> new ScoreSummary(sum, count == 0 ? 0.0 : sum / count, count)
         ));
-
-System.out.println("Total: " + summary.sum());       // 450.0
-System.out.println("Average: " + summary.average()); // 90.0
-System.out.println("Count: " + summary.count());     // 5
 ```
 
----
+Checking `count == 0` in the merger avoids `NaN` when the input stream is empty.
 
-## Writing a Custom Collector from Scratch
+## Writing Custom Collectors (`Collector<T, A, R>` and `Collector.of`)
 
-When built-in collectors do not satisfy your business requirements, you can construct a custom `Collector` using **`Collector.of()`**:
+Every collector implements `java.util.stream.Collector<T, A, R>`, where:
 
-Let's build an **`ImmutableBatchCollector`** that partitions elements into fixed-size batches of `N` items:
+- `T` is the input element type.
+- `A` is the mutable intermediate accumulator type.
+- `R` is the final result type.
+
+The interface consists of four functions plus a set of optimization characteristics:
+
+```mermaid
+flowchart LR
+    sup["supplier(): () -> A"] --> acc["accumulator(): (A, T) -> void"]
+    acc --> comb["combiner(): (A, A) -> A (parallel merge)"]
+    comb --> fin["finisher(): A -> R"]
+```
+
+1. **`supplier()`**: Creates a fresh mutable accumulator `A`.
+2. **`accumulator()`**: Folds one element `T` into `A`.
+3. **`combiner()`**: Merges two partial accumulators into one. The runtime calls this during parallel execution to merge results from worker threads.
+4. **`finisher()`**: Converts the accumulator `A` into the final result `R`.
+5. **`characteristics()`**: Optional hints (`IDENTITY_FINISH`, `UNORDERED`, `CONCURRENT`).
+
+Be careful with **`IDENTITY_FINISH`**: setting it tells the stream runtime that `A` can be cast directly to `R` and that **`finisher()` can be skipped entirely**. If your finisher actually transforms or wraps the container (for example, making it unmodifiable), do **not** include `IDENTITY_FINISH`.
+
+### Example: Building a Batching Collector with `Collector.of()`
+
+Here is a custom collector that packs stream elements into fixed-size unmodifiable batches:
 
 ```java
 import java.util.ArrayList;
@@ -249,14 +267,18 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collector;
 
-public class BatchCollector {
+public final class BatchCollectors {
 
     public static <T> Collector<T, List<List<T>>, List<List<T>>> intoBatches(int batchSize) {
+        if (batchSize <= 0) {
+            throw new IllegalArgumentException("batchSize must be positive: " + batchSize);
+        }
+
         return Collector.of(
-                // 1. Supplier: creates intermediate container
+                // 1. Supplier: empty list of mutable batches
                 ArrayList::new,
 
-                // 2. Accumulator: packs items into chunks of batchSize
+                // 2. Accumulator: append element to current batch or start a new one
                 (batches, item) -> {
                     if (batches.isEmpty() || batches.get(batches.size() - 1).size() == batchSize) {
                         batches.add(new ArrayList<>(batchSize));
@@ -264,68 +286,100 @@ public class BatchCollector {
                     batches.get(batches.size() - 1).add(item);
                 },
 
-                // 3. Combiner: merges chunks across parallel worker partitions
-                (leftBatches, rightBatches) -> {
-                    if (leftBatches.isEmpty()) return rightBatches;
-                    if (rightBatches.isEmpty()) return leftBatches;
+                // 3. Combiner: merge right batches into left while keeping chunk sizes exact
+                (left, right) -> {
+                    if (left.isEmpty()) return right;
+                    if (right.isEmpty()) return left;
 
-                    List<T> lastLeft = leftBatches.get(leftBatches.size() - 1);
-                    for (List<T> rightBatch : rightBatches) {
-                        for (T item : rightBatch) {
-                            if (lastLeft.size() < batchSize) {
-                                lastLeft.add(item);
-                            } else {
-                                lastLeft = new ArrayList<>(batchSize);
-                                lastLeft.add(item);
-                                leftBatches.add(lastLeft);
+                    List<T> current = left.get(left.size() - 1);
+                    for (List<T> batch : right) {
+                        for (T item : batch) {
+                            if (current.size() == batchSize) {
+                                current = new ArrayList<>(batchSize);
+                                left.add(current);
                             }
+                            current.add(item);
                         }
                     }
-                    return leftBatches;
+                    return left;
                 },
 
-                // 4. Finisher: wrap each batch in an unmodifiable view
+                // 4. Finisher: freeze each inner batch and the outer list
                 batches -> batches.stream()
-                                  .map(Collections::unmodifiableList)
-                                  .toList(),
-
-                // 5. Characteristics: none (requires finisher)
-                Collector.Characteristics.IDENTITY_FINISH
+                        .map(Collections::unmodifiableList)
+                        .toList()
+                // No IDENTITY_FINISH because finisher() must run!
         );
-    }
-
-    public static void main(String[] args) {
-        List<Integer> numbers = List.of(1, 2, 3, 4, 5, 6, 7, 8);
-        List<List<Integer>> chunked = numbers.stream().collect(intoBatches(3));
-        System.out.println(chunked); // [[1, 2, 3], [4, 5, 6], [7, 8]]
     }
 }
 ```
 
----
+Usage:
 
-## Summary & Mental Model Checkpoint
+```java
+List<List<Integer>> chunks = List.of(1, 2, 3, 4, 5, 6, 7, 8).stream()
+        .collect(BatchCollectors.intoBatches(3));
+// [[1, 2, 3], [4, 5, 6], [7, 8]]
+```
 
-1. **`reduce()` vs. `collect()`**: `reduce` is for immutable value reduction (generates garbage if used for collections); `collect` is for high-speed in-place mutable accumulation.
-2. **The 4 Functions of a Collector**: `supplier` (factory), `accumulator` (fold), `combiner` (parallel merge), and `finisher` (output transform).
-3. **`Stream.toList()` (Java 16)**: Outperforms `Collectors.toList()` by returning an unmodifiable list with zero intermediate collector allocation.
-4. **`toMap()` Collision Rule**: Always provide a merge function `(existing, replacement) -> ...` to prevent `IllegalStateException` on duplicate keys.
-5. **Downstream Composition**: Nest collectors within `groupingBy` to compute multi-level hierarchies and statistics in a single pass.
-6. **`Collectors.teeing()` (Java 12)**: Runs two independent collectors simultaneously in a single iteration pass and merges their results.
-7. **Custom Collectors**: Build domain-specific aggregators using `Collector.of()`, ensuring the `combiner` properly merges partial partitions.
+You can also implement the `Collector<T, A, R>` interface as a dedicated class when the collector needs configurable state or clearer unit testing, and use `Collector.of(...)` for compact reusable factories like the one above.
 
----
+## Parallel Streams and the Fork/Join Pool
 
-## 🎯 Senior Engineer Interview Questions
+Calling `collection.parallelStream()` or `stream.parallel()` splits the input into chunks using the source's **`Spliterator`** and processes those chunks across multiple threads in **`ForkJoinPool.commonPool()`**.
 
-### Why does accumulating elements into a collection using `Stream.reduce()` result in `O(n²)` quadratic time complexity, and how does `Stream.collect()` solve this problem?
-> **Answer:** `Stream.reduce()` implements a purely functional fold designed for immutable values. Its accumulating function takes an accumulator and an element, and returns a new accumulator: `(acc, item) -> newAcc`. If you attempt to collect elements into a collection using `reduce()`, functional immutability requires you to allocate a new collection on every single element and copy all previously accumulated elements into it. Over `N` elements, the total number of element copying operations follows the arithmetic progression `1 + 2 + ... + N = N(N+1)/2`, resulting in `O(n²)` quadratic time complexity and massive young-generation heap churn. In contrast, `Stream.collect()` implements a mutable reduction: it instantiates a single mutable container via `supplier()` and mutates that exact container in-place via `accumulator()` (`container.add(item)`), delivering optimal `O(n)` linear time and minimal memory allocations.
+### How the Fork/Join Pool Works
 
-### What is the functional contract of the `combiner()` in the `Collector` interface, and when is it executed by the Streams runtime?
-> **Answer:** The `combiner()` function has the signature `BinaryOperator<A> combiner()`. It takes two partial mutable accumulation containers of type `A` and merges them into a single container of type `A`. The Streams runtime invokes the `combiner()` strictly during **parallel stream execution**. When a parallel stream executes, the underlying `Spliterator` partitions the source dataset across multiple worker threads in the `ForkJoinPool`. Each worker thread calls `supplier()` to create its own thread-local accumulator and populates it independently via `accumulator()`. Once subtasks complete, the runtime uses `combiner()` in a fork-join merge tree to combine partial accumulators from sibling threads until a single unified accumulator container remains to be passed to `finisher()`. In sequential streams, `combiner()` is never invoked.
+The Fork/Join framework uses **work-stealing**: each worker thread maintains its own deque of subtasks. When a worker finishes its own tasks, it steals tasks from the tail of another busy worker's deque, keeping CPU cores utilized without a single central lock bottleneck.
 
-### How does Java 12's `Collectors.teeing()` optimize stream performance compared to running two separate terminal operations?
-> **Answer:** In traditional Java, if you need to calculate two independent metrics from a stream that cannot be computed by a single built-in collector (such as calculating both the sum and the variance of a dataset), you are forced to iterate through the data source twice by running two separate stream pipelines. If the stream source is an expensive operation (such as reading from a disk file via `Files.lines()`, querying a database cursor, or performing complex upstream calculations), doubling the pipeline traversal doubles execution latency and I/O load. `Collectors.teeing()` accepts two downstream collectors and a merging `BiFunction`. As elements flow through the pipeline, each element is passed to **both** downstream collectors simultaneously in a single pass. When the pipeline finishes, the results of both collectors are supplied to the merger function to create a consolidated domain object, eliminating duplicate I/O and halving pipeline traversal time.
+By default, `ForkJoinPool.commonPool()` is shared across the entire JVM process and sized to `Runtime.getRuntime().availableProcessors() - 1` worker threads (the calling thread also participates in executing stream tasks, so total parallelism matches available CPU cores).
 
-### What are the operational differences between `Collectors.toList()` and Java 16's `Stream.toList()`?
-> **Answer:** There are three key architectural differences: (1) **Mutability:** `Collectors.toList()` makes no specification guarantees regarding list mutability (though in OpenJDK it returns a mutable `ArrayList`). In contrast, `Stream.toList()` guarantees that the returned list is strictly unmodifiable; calling `.add()` or `.set()` throws `UnsupportedOperationException`. (2) **Memory and Performance:** `Collectors.toList()` allocates an intermediate `Collector` instance, a supplier, an accumulator, and uses a standard `ArrayList` which resizes dynamically (wasting unused trailing capacity). `Stream.toList()` is a direct terminal operation implemented natively in the stream pipeline; if the upstream source is `SIZED`, it allocates an internal compact array sized to the exact element count with zero excess memory and zero intermediate collector allocation. (3) **Interoperability:** `Stream.toList()` produces compact `ListN` instances similar to `List.of()`, which are cache-friendly and consume significantly less heap memory than traditional `ArrayList` wrappers.
+```mermaid
+flowchart TD
+    source["Spliterator splits source data"] --> pool["ForkJoinPool.commonPool() (shared JVM-wide)"]
+    pool --> w1["Worker 1: supplier() -> accumulate -> partial A1"]
+    pool --> w2["Worker 2: supplier() -> accumulate -> partial A2"]
+    w1 --> comb["combiner(A1, A2) merges partial results"]
+    w2 --> comb
+    comb --> fin["finisher() produces final result"]
+```
+
+### When Parallel Streams Hurt Performance
+
+Adding `.parallelStream()` does not automatically speed up code. In many server applications, it makes throughput worse or causes outages:
+
+1. **Blocking I/O starves the entire JVM**: Because `ForkJoinPool.commonPool()` is shared by parallel streams and default `CompletableFuture` tasks across the whole application, running HTTP calls, JDBC queries, or file I/O inside a parallel stream parks those few common-pool threads and stalls unrelated work elsewhere in the service. For blocking I/O, use a dedicated `ExecutorService` or Java 21+ Virtual Threads instead.
+2. **Small datasets lose to coordination overhead**: Splitting tasks, scheduling threads, and merging partial containers with `combiner()` takes time. For small collections (hundreds or a few thousand simple items), a sequential stream is usually faster.
+3. **Poorly splittable sources**: `ArrayList`, arrays, and `IntStream.range` split in `O(1)` because their size and midpoint are known. `LinkedList`, `Stream.iterate`, and `BufferedReader.lines()` cannot jump to the midpoint, so splitting degrades into sequential traversal.
+4. **Shared mutable state causes race conditions**: Never write into a non-thread-safe collection like an external `ArrayList` inside `forEach` on a parallel stream. Always use `collect()` or `Collectors.groupingByConcurrent()` when order does not matter.
+5. **Ordering and stateful operations add synchronization**: Operations like `limit()`, `skip()`, and `findFirst()` on ordered parallel streams require extra coordination to preserve encounter order.
+
+### When Parallel Streams Actually Help
+
+Parallel streams earn their keep when all four conditions hold:
+
+- The work is **CPU-bound** (numeric simulations, parsing large in-memory buffers, cryptographic or statistical computations) with no blocking I/O.
+- The source splits cheaply (arrays, `ArrayList`, `IntStream.range`).
+- The dataset is large enough, or the per-element computation is heavy enough, to outweigh splitting and combining overhead.
+- You **benchmark with JMH** on realistic inputs rather than guessing.
+
+> [!TIP]
+> If you have a large `groupingBy()` on an unordered parallel stream, `Collectors.groupingByConcurrent()` uses a single `ConcurrentHashMap` with the `CONCURRENT` characteristic, avoiding the expensive step of merging multiple `HashMap` instances in `combiner()`.
+
+## Interview Questions
+
+### Why is `Stream.collect()` preferred over `Stream.reduce()` when building a `List` or `Map`?
+
+`reduce()` is designed for immutable values: its accumulator returns a new result on each step. Using it properly with a `List` requires copying the accumulated list on every element, causing `O(n^2)` copy overhead and heavy garbage collection. `collect()` creates a mutable container via `supplier()` and mutates it in place via `accumulator()` in `O(n)` total time, while still staying parallel-safe because each thread gets its own container and merges them via `combiner()`.
+
+### What happens if you include `Collector.Characteristics.IDENTITY_FINISH` on a custom collector that has a non-trivial `finisher()`?
+
+The stream runtime treats `IDENTITY_FINISH` as a promise that the accumulator type `A` can be cast directly to the final type `R` without running `finisher()`. As a result, `finisher()` is skipped completely. If your finisher converts the accumulator to a different type, you get a `ClassCastException`; if it wraps a mutable list into an unmodifiable list, you silently return a mutable list instead. Only specify `IDENTITY_FINISH` when `finisher()` is literally `Function.identity()`.
+
+### What are the practical differences between `Collectors.toList()`, `Collectors.toUnmodifiableList()`, and Java 16's `Stream.toList()`?
+
+`Collectors.toList()` makes no formal mutability guarantee (though OpenJDK returns a mutable `ArrayList`) and permits `null` elements. `Collectors.toUnmodifiableList()` (Java 10+) returns an unmodifiable list and rejects `null` elements with `NullPointerException`. `Stream.toList()` (Java 16+) returns an unmodifiable list, **does** permit `null` elements, and avoids allocating an intermediate `Collector` object while sizing the backing array directly when the stream size is known.
+
+### Why is running blocking HTTP or database calls inside `parallelStream()` dangerous in a backend service?
+
+Parallel streams execute on `ForkJoinPool.commonPool()`, which is shared across the entire JVM and normally has only `availableProcessors() - 1` worker threads (for example, 3 worker threads in a 4-core container). Blocking those threads on network or database I/O starves other parallel streams, `CompletableFuture` callbacks, and library tasks sharing the same pool. Blocking I/O should run on a dedicated thread pool or Java 21+ Virtual Threads instead.

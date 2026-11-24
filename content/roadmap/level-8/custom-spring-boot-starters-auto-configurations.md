@@ -1,33 +1,35 @@
-# Custom Spring Boot Starters and Auto-Configurations
-
-In early-stage startups, copying and pasting a security configuration, an HTTP logging filter, or a Redis serializer across three microservices is a minor annoyance. In an enterprise engineering organization with 80 microservices, it is an architectural catastrophe.
-
-When every team copies boilerplate, configurations diverge. One team configures an HTTP timeout of 2 seconds, another uses 60 seconds, and a third omits timeouts entirely. When an internal platform security vulnerability requires updating an authentication filter, engineers must create 80 pull requests across 80 repositories.
-
-The solution is **Platform Engineering with Custom Spring Boot Starters**. A well-engineered custom starter packages company-wide cross-cutting concerns—auditing, multi-tenancy, rate limiting, and observability—into plug-and-play JARs that configure themselves automatically when added to a project's `pom.xml` or `build.gradle`.
-
-In this guide, we will unpack how Spring Boot's auto-configuration engine evaluates beans, explore the modern Spring Boot 3 discovery mechanism, and build a production-grade enterprise starter from scratch.
-
+---
+title: "Custom Spring Boot Starters & Auto-Configurations"
+description: "Build reusable Spring Boot 3 starters using a two-module layout, AutoConfiguration.imports, conditional annotations, validated ConfigurationProperties, and ApplicationContextRunner tests."
+category: "level-8"
+date: "2026-10-29T10:00:00Z"
 ---
 
-## Anatomy of a Spring Boot Starter
+Copying an HTTP correlation filter, a Jackson configuration, or a company-standard security setup into two or three services is manageable. Copying the same boilerplate across forty services creates slow drift. One service sets an HTTP client timeout to 2 seconds, another sets it to 30 seconds, and a third forgets timeouts altogether. When a platform library needs a security patch or a new header convention, every team has to open a separate pull request.
 
-The Spring Boot team recommends decoupling starter artifacts into two distinct modules:
+Custom Spring Boot starters solve this by packaging shared infrastructure as versioned Maven or Gradle dependencies. A consuming team adds a single dependency, optionally overrides a few properties in `application.yml`, and gets consistent defaults without wiring beans by hand.
+
+## Anatomy of a Custom Starter
+
+The Spring Boot documentation recommends splitting a custom starter into two modules instead of shipping everything in one JAR:
+
+1. **The autoconfigure module (`<name>-spring-boot-autoconfigure`)**: Holds the actual Java code, including `@AutoConfiguration` classes, `@ConfigurationProperties` types, filters, service beans, and the `AutoConfiguration.imports` metadata file. Optional third-party libraries (for example, Jackson, Servlet API, or Micrometer) are declared with `<optional>true</optional>` in Maven or `compileOnly` in Gradle so they do not pollute consumers that do not need them.
+2. **The starter module (`<name>-spring-boot-starter`)**: Contains no Java code at all. It is an empty aggregator JAR whose `pom.xml` (or `build.gradle`) pulls in the autoconfigure module alongside the standard transitive dependencies required for that feature to work out of the box.
 
 ```mermaid
 flowchart TD
-    subgraph ClientApp["Consuming Microservice (e.g. Order Service)"]
-        POM["pom.xml: depends on acme-crypto-spring-boot-starter"]
+    subgraph ClientApp["Consuming Service (order-service)"]
+        POM["pom.xml depends on acme-tracing-spring-boot-starter"]
     end
 
-    subgraph StarterModule["acme-crypto-spring-boot-starter (Aggregator JAR)"]
-        Aggregator["Empty JAR<br/>Declares transitively needed dependencies:<br/>- acme-crypto-spring-boot-autoconfigure<br/>- bouncycastle-crypto<br/>- micrometer-core"]
+    subgraph StarterModule["acme-tracing-spring-boot-starter (Aggregator JAR)"]
+        Aggregator["No Java code<br/>Transitive dependencies:<br/>- acme-tracing-spring-boot-autoconfigure<br/>- spring-boot-starter<br/>- slf4j-api"]
     end
 
-    subgraph AutoconfigureModule["acme-crypto-spring-boot-autoconfigure (Logic JAR)"]
-        Props["@ConfigurationProperties (AcmeCryptoProperties)"]
-        AutoConf["@AutoConfiguration (AcmeCryptoAutoConfiguration)"]
-        Beans["Service Beans, Filters, Interceptors"]
+    subgraph AutoconfigureModule["acme-tracing-spring-boot-autoconfigure (Logic JAR)"]
+        Props["@ConfigurationProperties (AcmeTracingProperties)"]
+        AutoConf["@AutoConfiguration (AcmeTracingAutoConfiguration)"]
+        Beans["CorrelationIdFilter and supporting beans"]
         Imports["META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports"]
     end
 
@@ -35,203 +37,268 @@ flowchart TD
     StarterModule --> AutoconfigureModule
 ```
 
-### The Auto-Configure Module (`*-spring-boot-autoconfigure`)
-Contains the actual executable code: configuration classes, `@ConfigurationProperties`, condition evaluators, beans, and the discovery metadata file.
+This split pays off when an advanced consumer wants your auto-configuration logic but needs to swap out or exclude one of the transitive dependencies. They can depend directly on `acme-tracing-spring-boot-autoconfigure` and supply their own versions of the underlying libraries.
 
-### The Starter Module (`*-spring-boot-starter`)
-An empty aggregator JAR with no Java code. Its only job is to provide a clean, unified dependency descriptor in Maven/Gradle that pulls in the auto-configure module and any necessary third-party libraries (e.g., BouncyCastle, AWS SDK, or Jackson modules).
+### Starter Naming Conventions
 
-> **Naming Convention Rule:**
-> If you are building a custom starter outside the official Spring portfolio, never name it `spring-boot-starter-*`. That prefix is reserved for official Spring projects. Always name custom starters using the pattern: `yourproject-spring-boot-starter` (e.g., `acme-security-spring-boot-starter`).
+The Spring team reserves the `spring-boot-starter-<name>` prefix exclusively for official Spring projects (such as `spring-boot-starter-web` or `spring-boot-starter-data-jpa`). Internal platform teams and open-source libraries should put their own name first:
 
----
+- **Third-party / internal starter**: `<name>-spring-boot-starter` (for example, `acme-tracing-spring-boot-starter`)
+- **Third-party / internal autoconfigure module**: `<name>-spring-boot-autoconfigure` (for example, `acme-tracing-spring-boot-autoconfigure`)
 
-## The Auto-Configuration SPI: Spring Boot 2 vs Spring Boot 3
+In the starter module's `pom.xml`, the dependency block stays minimal:
 
-Understanding how Spring Boot discovers auto-configuration classes on the classpath is critical for platform developers.
+```xml
+<!-- acme-tracing-spring-boot-starter/pom.xml -->
+<dependencies>
+    <dependency>
+        <groupId>com.acme.platform</groupId>
+        <artifactId>acme-tracing-spring-boot-autoconfigure</artifactId>
+        <version>${project.version}</version>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter</artifactId>
+    </dependency>
+</dependencies>
+```
+
+Meanwhile, the autoconfigure module marks framework integrations that may or may not be present in every consumer (such as web servlet APIs or validation) as optional:
+
+```xml
+<!-- acme-tracing-spring-boot-autoconfigure/pom.xml -->
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-autoconfigure</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+        <optional>true</optional>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-validation</artifactId>
+        <optional>true</optional>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-configuration-processor</artifactId>
+        <optional>true</optional>
+    </dependency>
+</dependencies>
+```
+
+## Auto-Configuration Registration in Spring Boot 3
+
+Spring Boot loads auto-configuration classes through a classpath SPI rather than relying on `@ComponentScan`. In fact, auto-configuration classes should live in a package outside the consuming application's base scan package so `@ComponentScan` does not accidentally register them unconditionally as normal `@Configuration` classes.
 
 ```mermaid
 flowchart LR
-    subgraph Boot2["Spring Boot 2.x (Legacy)"]
+    subgraph Boot2["Spring Boot 2.x (Legacy Auto-Config)"]
         direction TB
         F1["META-INF/spring.factories"]
-        F2["Key: org.springframework.boot.autoconfigure.EnableAutoConfiguration"]
-        F3["Comma-separated list of configuration classes"]
+        F2["Key: EnableAutoConfiguration"]
+        F3["Comma-separated class list"]
         F1 --> F2 --> F3
     end
 
-    subgraph Boot3["Spring Boot 3.x (Modern Standard)"]
+    subgraph Boot3["Spring Boot 3.x (Current Standard)"]
         direction TB
-        I1["META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports"]
+        I1["META-INF/spring/...AutoConfiguration.imports"]
         I2["One fully qualified class name per line"]
-        I3["Faster parsing & GraalVM Native Image friendly"]
+        I3["Faster loading and AOT friendly"]
         I1 --> I2 --> I3
     end
 ```
 
-### The Death of `spring.factories`
+### Moving from `spring.factories` to `AutoConfiguration.imports`
 
-In Spring Boot 1.x and 2.x, auto-configurations were declared in `META-INF/spring.factories`:
+In Spring Boot 1.x and 2.x, auto-configurations were registered in `META-INF/spring.factories` under the `org.springframework.boot.autoconfigure.EnableAutoConfiguration` key:
 
 ```properties
-# DEPRECATED in Spring Boot 2.7, REMOVED in Spring Boot 3.0
+# Deprecated in Spring Boot 2.7; no longer loaded for auto-configurations in Spring Boot 3.0+
 org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-  com.acme.starter.audit.AuditAutoConfiguration,\
-  com.acme.starter.crypto.CryptoAutoConfiguration
+  com.acme.starter.tracing.autoconfigure.AcmeTracingAutoConfiguration,\
+  com.acme.starter.audit.autoconfigure.AcmeAuditAutoConfiguration
 ```
 
-This file was a monolithic property list used for multiple framework capabilities (listeners, context initializers, auto-configurations). Parsing this large file during application bootstrap caused unnecessary startup latency and complicated ahead-of-time (AOT) reflection analysis for GraalVM native images.
+Spring Boot 2.7 introduced a dedicated imports file, and Spring Boot 3.0 removed `EnableAutoConfiguration` support from `spring.factories` altogether. (Note that `spring.factories` is still used for certain other SPI hooks like `EnvironmentPostProcessor` or `ApplicationListener`, just not for auto-configuration classes.)
 
-### The Modern Standard: `AutoConfiguration.imports`
-
-Starting with Spring Boot 2.7 and enforced strictly in Spring Boot 3.x, auto-configuration classes are registered in a dedicated file located at:
+In Spring Boot 3, place your auto-configuration class names in:
 
 ```text
-META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
+src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
 ```
 
-This file contains plain, newline-delimited class names without property keys:
+The file contains one fully qualified class name per line, with `#` supported for comments:
 
 ```text
-com.acme.starter.audit.AuditAutoConfiguration
-com.acme.starter.crypto.CryptoAutoConfiguration
+com.acme.starter.tracing.autoconfigure.AcmeTracingAutoConfiguration
 ```
 
-### The `@AutoConfiguration` Annotation
+Separating auto-configurations into this plain imports file avoids parsing an unrelated multi-purpose properties file at startup and makes build-time discovery much simpler for Spring's Ahead-of-Time (AOT) processing and GraalVM native images.
 
-In Spring Boot 3, configuration classes designed for auto-configuration should be annotated with `@AutoConfiguration` instead of standard `@Configuration`:
+### Using `@AutoConfiguration`
 
-- `@AutoConfiguration` includes `@Configuration(proxyBeanMethods = false)`, ensuring that CGLIB method interception is disabled by default for faster startup and smaller memory footprint.
-- It provides built-in attributes for controlling order relative to other auto-configurations: `before`, `after`, and `beforeName`.
+Spring Boot 2.7 also introduced `@AutoConfiguration` to replace plain `@Configuration` on top-level auto-configuration classes. Using it gives you two practical benefits:
 
----
+- It meta-annotates `@Configuration(proxyBeanMethods = false)`, which skips generating CGLIB subclasses for the configuration class and avoids unnecessary proxy overhead during startup. Because `proxyBeanMethods` is `false`, do not invoke one `@Bean` method directly from another inside the class; inject dependent beans as method parameters instead.
+- It provides `before`, `beforeName`, `after`, and `afterName` attributes directly on the annotation, replacing separate `@AutoConfigureBefore` and `@AutoConfigureAfter` annotations in most cases.
 
-## The Arsenal of `@Conditional` Annotations
+```java
+@AutoConfiguration(after = DataSourceAutoConfiguration.class)
+public class AcmeAuditAutoConfiguration {
+    // Bean definitions here
+}
+```
 
-An auto-configuration class must never force its beans onto an application indiscriminately. It must act defensively: configuring beans only when prerequisite classes exist, when the user hasn't supplied their own implementation, or when specific configuration flags are enabled.
+> [!IMPORTANT]
+> Ordering attributes (`before`, `after`, `@AutoConfigureBefore`, `@AutoConfigureAfter`) only control ordering relative to other auto-configuration classes loaded through `AutoConfiguration.imports`. They do not affect regular `@Configuration` classes picked up by `@ComponentScan`.
+
+## Conditional Annotations
+
+A well-behaved starter stays out of the way when its prerequisites are missing or when the application wants custom behavior. Spring Boot evaluates `@Conditional*` annotations before creating any beans.
 
 ```mermaid
 flowchart TD
-    Scan["Auto-Configuration Evaluation"] --> CondProp{"@ConditionalOnProperty<br/>Is feature enabled in YAML?"}
-    CondProp -- No --> Skip["Skip Entire Auto-Configuration"]
-    CondProp -- Yes --> CondClass{"@ConditionalOnClass<br/>Are required SDK libraries on classpath?"}
-    CondClass -- No --> Skip
-    CondClass -- Yes --> CondBean{"@ConditionalOnMissingBean<br/>Did user define their own custom bean?"}
-    CondBean -- User Provided --> UseUser["Defer to User's Bean"]
-    CondBean -- Missing --> RegisterDefault["Register Starter Default Bean"]
+    Scan["Evaluate Auto-Configuration"] --> CondClass{"@ConditionalOnClass<br/>Are required types on classpath?"}
+    CondClass -->|"No"| Skip["Skip Auto-Configuration"]
+    CondClass -->|"Yes"| CondProp{"@ConditionalOnProperty<br/>Is feature enabled?"}
+    CondProp -->|"No"| Skip
+    CondProp -->|"Yes"| CondBean{"@ConditionalOnMissingBean<br/>Did the app define its own bean?"}
+    CondBean -->|"Yes"| Defer["Use Application Bean"]
+    CondBean -->|"No"| Register["Register Starter Default Bean"]
 ```
 
-### Class Conditions: `@ConditionalOnClass` and `@ConditionalOnMissingClass`
+### `@ConditionalOnClass` and `@ConditionalOnMissingClass`
 
-Verifies that specific classes are present on the application's runtime classpath:
+These annotations guard against missing optional dependencies on the runtime classpath:
 
 ```java
 @AutoConfiguration
 @ConditionalOnClass(name = "com.fasterxml.jackson.databind.ObjectMapper")
-public class JsonAuditingAutoConfiguration {
-    // Only instantiated if Jackson is on the application's classpath
+public class JsonAuditAutoConfiguration {
+    // Loaded only when Jackson is present
 }
 ```
 
-> **Bytecode Safety:** Always prefer using the class literal `@ConditionalOnClass(ObjectMapper.class)`. However, if the target class might not exist at compile time within your starter module, pass the String representation `name = "com.foo.Bar"` to avoid `NoClassDefFoundError` during class loading.
+You can pass a class literal (`@ConditionalOnClass(Filter.class)`) when the class is on your module's compile classpath. Spring Boot evaluates `@ConditionalOnClass` by inspecting bytecode metadata via ASM (`MetadataReader`) rather than calling `Class.forName()`, so a missing class on the consumer's classpath evaluates cleanly to `false` instead of throwing `NoClassDefFoundError`.
 
-### Bean Conditions: `@ConditionalOnMissingBean` and `@ConditionalOnBean`
+There is one subtle caveat: if you put `@ConditionalOnClass(SomeOptionalType.class)` on a `@Bean` method whose **return type** or **parameter type** also references `SomeOptionalType`, the JVM may still try to resolve that method signature when introspecting the enclosing `@AutoConfiguration` class. Keeping optional-library beans inside a dedicated static nested `@Configuration(proxyBeanMethods = false)` class annotated with `@ConditionalOnClass` avoids accidental `TypeNotPresentException` failures.
 
-The cornerstone of extensibility. It tells Spring: *"Provide this default bean only if the consuming developer hasn't created their own `@Bean` of this type."*
+### `@ConditionalOnProperty`
 
-```java
-@Bean
-@ConditionalOnMissingBean(AuditLogPublisher.class)
-public AuditLogPublisher defaultAuditLogPublisher() {
-    return new Slf4jAuditLogPublisher();
-}
-```
-
-If a developer writing a microservice defines their own `@Bean public AuditLogPublisher kafkaPublisher()`, Spring Boot detects it and silently suppresses `defaultAuditLogPublisher()`.
-
-### Property Conditions: `@ConditionalOnProperty`
-
-Controls activation via `application.yml` or `application.properties`:
+Property conditions let teams toggle features from `application.yml` or environment variables:
 
 ```java
 @AutoConfiguration
 @ConditionalOnProperty(
-    prefix = "acme.audit",
+    prefix = "acme.tracing",
     name = "enabled",
     havingValue = "true",
-    matchIfMissing = true // Active by default unless explicitly disabled
+    matchIfMissing = true
 )
-public class AuditAutoConfiguration { ... }
+public class AcmeTracingAutoConfiguration {
+    // Active by default; set acme.tracing.enabled=false to disable
+}
 ```
 
-### Web Application Conditions: `@ConditionalOnWebApplication`
+Setting `matchIfMissing = true` makes the starter active as soon as a service adds the dependency, while still giving teams a clean kill switch (`acme.tracing.enabled=false`) for specific environments or tests. For high-impact or opt-in features (like chaos injection or verbose body logging), leave `matchIfMissing = false` (the default).
 
-Ensures web-specific beans (like HTTP filters) are only registered inside actual web servers, not command-line batch jobs or CLI tools:
+### `@ConditionalOnMissingBean` and `@ConditionalOnBean`
+
+`@ConditionalOnMissingBean` is what makes Spring Boot starters customizable. Because Spring processes user-defined `@Configuration` classes from `@ComponentScan` before external auto-configurations, placing `@ConditionalOnMissingBean` on a starter's `@Bean` method guarantees that any bean declared by the consuming application wins automatically:
+
+```java
+@Bean
+@ConditionalOnMissingBean
+public CorrelationIdGenerator correlationIdGenerator() {
+    return () -> UUID.randomUUID().toString();
+}
+```
+
+When placed on a `@Bean` method without arguments, `@ConditionalOnMissingBean` checks the method's return type (`CorrelationIdGenerator`). If a consuming service declares its own `CorrelationIdGenerator` bean that produces ULIDs or reads from a custom gateway header, Spring Boot skips the starter's default without throwing a duplicate-bean error.
+
+### `@ConditionalOnWebApplication`
+
+If your starter registers a Servlet `Filter` or `HandlerInterceptor`, restrict it to servlet web applications so it does not break reactive WebFlux apps or non-web Spring Batch jobs:
 
 ```java
 @AutoConfiguration
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-public class WebTraceFilterAutoConfiguration { ... }
+public class AcmeTracingAutoConfiguration {
+    // Only applies to Servlet-based web apps
+}
 ```
 
----
+## Validated `@ConfigurationProperties`
 
-## Building a Production Starter: Enterprise Request Tracing
+Hardcoding `@Value("${acme.tracing.header-name:X-Correlation-ID}")` across multiple beans scatters defaults and provides no type safety or validation. `@ConfigurationProperties` binds a whole prefix into a strongly typed object and integrates with Jakarta Bean Validation.
 
-Let's build a complete, real-world enterprise starter: **`acme-tracing-spring-boot-starter`**.
-
-**Business Requirement:** Automatically generate a unique `X-Correlation-ID` for every inbound HTTP request, attach it to SLF4J MDC (Mapped Diagnostic Context) for structured logging, record request execution duration, and return the ID in the HTTP response headers.
-
-### Step 1: Define the Configuration Properties
+In Spring Boot 3, Java `record` types work cleanly with `@ConfigurationProperties`. Because a record has a single canonical constructor, Spring Boot automatically uses constructor binding without requiring `@ConstructorBinding`. Pairing the record with `@Validated` and `@DefaultValue` gives you immutable configuration that fails fast at startup when a value is invalid:
 
 ```java
 package com.acme.starter.tracing.properties;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
+import org.springframework.validation.annotation.Validated;
 
+@Validated
 @ConfigurationProperties(prefix = "acme.tracing")
-public class AcmeTracingProperties {
+public record AcmeTracingProperties(
+    @DefaultValue("true")
+    boolean enabled,
 
-    /**
-     * Whether request tracing and MDC correlation are enabled.
-     */
-    private boolean enabled = true;
+    @NotBlank
+    @DefaultValue("X-Correlation-ID")
+    String headerName,
 
-    /**
-     * The HTTP header name used to propagate correlation IDs across services.
-     */
-    private String headerName = "X-Correlation-ID";
+    @DefaultValue("true")
+    boolean logSlowRequests,
 
-    /**
-     * Whether to log slow requests that exceed a latency threshold.
-     */
-    private boolean logSlowRequests = true;
+    @Min(50)
+    @Max(60_000)
+    @DefaultValue("2000")
+    long slowRequestThresholdMs
+) {}
+```
 
-    /**
-     * Threshold in milliseconds after which a request is logged as a warning.
-     */
-    private long slowRequestThresholdMs = 2000L;
+If someone accidentally configures `acme.tracing.slow-request-threshold-ms: -10` or `acme.tracing.header-name: ""`, Spring Boot aborts startup with a `BindValidationException` pointing directly to the offending property instead of failing hours later on live traffic.
 
-    // Getters and Setters
-    public boolean isEnabled() { return enabled; }
-    public void setEnabled(boolean enabled) { this.enabled = enabled; }
+> [!NOTE]
+> `@Validated` only runs constraint checks if a Jakarta Bean Validation implementation (such as Hibernate Validator, pulled in via `spring-boot-starter-validation`) is present on the classpath. Without it, Spring Boot skips validation silently. If strict startup validation is required for your starter, declare `spring-boot-starter-validation` as a non-optional dependency in your starter aggregator module.
 
-    public String getHeaderName() { return headerName; }
-    public void setHeaderName(String headerName) { this.headerName = headerName; }
+### Generating IDE Autocomplete Metadata
 
-    public boolean isLogSlowRequests() { return logSlowRequests; }
-    public void setLogSlowRequests(boolean logSlowRequests) { this.logSlowRequests = logSlowRequests; }
+Adding `spring-boot-configuration-processor` as an optional dependency (or annotation processor in Gradle) generates `META-INF/spring-configuration-metadata.json` at compile time. IntelliJ IDEA and VS Code read this file from your JAR and give consuming developers property autocomplete, default values, Javadoc descriptions, and deprecation warnings directly inside `application.yml`.
 
-    public long getSlowRequestThresholdMs() { return slowRequestThresholdMs; }
-    public void setSlowRequestThresholdMs(long slowRequestThresholdMs) { this.slowRequestThresholdMs = slowRequestThresholdMs; }
+## Putting It Together: A Request Tracing Starter
+
+To see all pieces working together, suppose we are building `acme-tracing-spring-boot-starter`. Every inbound Servlet HTTP request should receive a correlation ID (read from an incoming header or generated if absent), place it into SLF4J's `MDC` for logging, echo it back in the response header, and log a warning if the request exceeds a latency threshold.
+
+First, define a small functional interface so consumers can swap out the ID generation strategy if needed:
+
+```java
+package com.acme.starter.tracing;
+
+@FunctionalInterface
+public interface CorrelationIdGenerator {
+    String generate();
 }
 ```
 
-### Step 2: The Core Domain Filter
+Next, write the servlet filter. Note the `finally` block: servlet containers reuse worker threads across requests, so forgetting `MDC.remove(...)` leaks one customer's correlation ID into the next request's logs.
 
 ```java
 package com.acme.starter.tracing.filter;
 
+import com.acme.starter.tracing.CorrelationIdGenerator;
 import com.acme.starter.tracing.properties.AcmeTracingProperties;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -243,56 +310,58 @@ import org.slf4j.MDC;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 public class CorrelationIdFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(CorrelationIdFilter.class);
-    private final AcmeTracingProperties properties;
+    private static final String MDC_KEY = "correlationId";
 
-    public CorrelationIdFilter(AcmeTracingProperties properties) {
+    private final AcmeTracingProperties properties;
+    private final CorrelationIdGenerator idGenerator;
+
+    public CorrelationIdFilter(AcmeTracingProperties properties,
+                               CorrelationIdGenerator idGenerator) {
         this.properties = properties;
+        this.idGenerator = idGenerator;
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
-        String headerName = properties.getHeaderName();
+        String headerName = properties.headerName();
         String correlationId = request.getHeader(headerName);
 
         if (correlationId == null || correlationId.isBlank()) {
-            correlationId = UUID.randomUUID().toString();
+            correlationId = idGenerator.generate();
         }
 
-        long startTime = System.currentTimeMillis();
-
-        // 1. Inject into SLF4J MDC so all logs in this thread automatically print [correlationId]
-        MDC.put("correlationId", correlationId);
+        long startNanos = System.nanoTime();
+        MDC.put(MDC_KEY, correlationId);
         response.setHeader(headerName, correlationId);
 
         try {
             filterChain.doFilter(request, response);
         } finally {
-            long duration = System.currentTimeMillis() - startTime;
-
-            if (properties.isLogSlowRequests() && duration > properties.getSlowRequestThresholdMs()) {
-                log.warn("SLOW REQUEST: {} {} took {}ms (threshold: {}ms)",
-                        request.getMethod(), request.getRequestURI(), duration, properties.getSlowRequestThresholdMs());
+            long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
+            if (properties.logSlowRequests() && durationMs > properties.slowRequestThresholdMs()) {
+                log.warn("Slow request: {} {} took {}ms (threshold: {}ms)",
+                        request.getMethod(), request.getRequestURI(),
+                        durationMs, properties.slowRequestThresholdMs());
             }
-
-            // 2. CRITICAL: Prevent memory leaks and cross-request contamination in pooled threads
-            MDC.remove("correlationId");
+            MDC.remove(MDC_KEY);
         }
     }
 }
 ```
 
-### Step 3: The Auto-Configuration Class
+Now wire the filter and default generator in the `@AutoConfiguration` class:
 
 ```java
 package com.acme.starter.tracing.autoconfigure;
 
+import com.acme.starter.tracing.CorrelationIdGenerator;
 import com.acme.starter.tracing.filter.CorrelationIdFilter;
 import com.acme.starter.tracing.properties.AcmeTracingProperties;
 import jakarta.servlet.Filter;
@@ -306,90 +375,151 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.Ordered;
 
+import java.util.UUID;
+
 @AutoConfiguration
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-@ConditionalOnClass({ Filter.class, CorrelationIdFilter.class })
-@ConditionalOnProperty(prefix = "acme.tracing", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnClass({ Filter.class, OncePerRequestFilter.class })
+@ConditionalOnProperty(
+    prefix = "acme.tracing",
+    name = "enabled",
+    havingValue = "true",
+    matchIfMissing = true
+)
 @EnableConfigurationProperties(AcmeTracingProperties.class)
 public class AcmeTracingAutoConfiguration {
 
     @Bean
+    @ConditionalOnMissingBean
+    public CorrelationIdGenerator correlationIdGenerator() {
+        return () -> UUID.randomUUID().toString();
+    }
+
+    @Bean
     @ConditionalOnMissingBean(name = "correlationIdFilterRegistration")
-    public FilterRegistrationBean<CorrelationIdFilter> correlationIdFilterRegistration(AcmeTracingProperties properties) {
-        FilterRegistrationBean<CorrelationIdFilter> registrationBean = new FilterRegistrationBean<>();
-        registrationBean.setFilter(new CorrelationIdFilter(properties));
-        
-        // Execute before any security or business filters to ensure MDC is populated
-        registrationBean.setOrder(Ordered.HIGHEST_PRECEDENCE);
-        registrationBean.addUrlPatterns("/*");
-        
-        return registrationBean;
+    public FilterRegistrationBean<CorrelationIdFilter> correlationIdFilterRegistration(
+            AcmeTracingProperties properties,
+            CorrelationIdGenerator idGenerator) {
+        FilterRegistrationBean<CorrelationIdFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(new CorrelationIdFilter(properties, idGenerator));
+        // Run before security and business filters so early logs already carry the correlation ID
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        registration.addUrlPatterns("/*");
+        return registration;
     }
 }
 ```
 
-### Step 4: Register via `AutoConfiguration.imports`
-
-Create the file in `src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`:
+Finally, register the class in `src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`:
 
 ```text
 com.acme.starter.tracing.autoconfigure.AcmeTracingAutoConfiguration
 ```
 
-### Step 5: IDE Configuration Metadata
+## Testing Auto-Configurations with `ApplicationContextRunner`
 
-To give developers rich autocompletion, type validation, and documentation hints inside IntelliJ IDEA or VS Code when writing `application.yml`, include the `spring-boot-configuration-processor`:
+Never rely on manual smoke testing in a separate demo project to verify a starter. Spring Boot provides `ApplicationContextRunner` (for non-web contexts), `WebApplicationContextRunner` (for Servlet contexts), and `ReactiveWebApplicationContextRunner` (for WebFlux contexts).
 
-```xml
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-configuration-processor</artifactId>
-    <optional>true</optional>
-</dependency>
+These runners create lightweight test contexts in milliseconds and let you test every conditional branch: default behavior, disabled properties, custom user beans, missing classes via `FilteredClassLoader`, and validation failures.
+
+```java
+package com.acme.starter.tracing.autoconfigure;
+
+import com.acme.starter.tracing.CorrelationIdGenerator;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.validation.ValidationAutoConfiguration;
+import org.springframework.boot.context.properties.bind.validation.BindValidationException;
+import org.springframework.boot.test.context.FilteredClassLoader;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class AcmeTracingAutoConfigurationTest {
+
+    private final WebApplicationContextRunner webRunner = new WebApplicationContextRunner()
+            .withConfiguration(AutoConfigurations.of(
+                    ValidationAutoConfiguration.class,
+                    AcmeTracingAutoConfiguration.class
+            ));
+
+    @Test
+    void registersFilterAndDefaultGeneratorInServletWebApp() {
+        webRunner.run(context -> {
+            assertThat(context).hasSingleBean(CorrelationIdGenerator.class);
+            assertThat(context).hasBean("correlationIdFilterRegistration");
+            assertThat(context.getBean("correlationIdFilterRegistration"))
+                    .isInstanceOf(FilterRegistrationBean.class);
+        });
+    }
+
+    @Test
+    void backsOffWhenDisabledByProperty() {
+        webRunner.withPropertyValues("acme.tracing.enabled=false")
+                .run(context -> {
+                    assertThat(context).doesNotHaveBean(CorrelationIdGenerator.class);
+                    assertThat(context).doesNotHaveBean("correlationIdFilterRegistration");
+                });
+    }
+
+    @Test
+    void defersToUserDefinedGeneratorBean() {
+        webRunner.withUserConfiguration(CustomGeneratorConfig.class)
+                .run(context -> {
+                    assertThat(context).hasSingleBean(CorrelationIdGenerator.class);
+                    assertThat(context.getBean(CorrelationIdGenerator.class).generate())
+                            .isEqualTo("custom-id");
+                });
+    }
+
+    @Test
+    void skipsRegistrationInNonWebApplication() {
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(AcmeTracingAutoConfiguration.class))
+                .run(context -> assertThat(context).doesNotHaveBean("correlationIdFilterRegistration"));
+    }
+
+    @Test
+    void skipsWhenServletApiIsMissingFromClasspath() {
+        webRunner.withClassLoader(new FilteredClassLoader(jakarta.servlet.Filter.class))
+                .run(context -> assertThat(context).doesNotHaveBean("correlationIdFilterRegistration"));
+    }
+
+    @Test
+    void failsStartupWhenPropertiesAreInvalid() {
+        webRunner.withPropertyValues("acme.tracing.slow-request-threshold-ms=10")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .hasRootCauseInstanceOf(BindValidationException.class);
+                });
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    static class CustomGeneratorConfig {
+        @Bean
+        CorrelationIdGenerator customGenerator() {
+            return () -> "custom-id";
+        }
+    }
+}
 ```
 
-During compilation, this processor reads `@ConfigurationProperties` and generates `META-INF/spring-configuration-metadata.json` automatically.
+Notice how `AutoConfigurations.of(...)` ensures Spring Boot processes `AcmeTracingAutoConfiguration` *after* `CustomGeneratorConfig`, reproducing the real evaluation order of a consuming application.
 
----
+## Diagnosing Auto-Configuration with the Conditions Evaluation Report
 
-## Auto-Configuration Ordering and Conflicts
-
-When developing multiple starters, configuration ordering becomes critical. For instance, an auditing auto-configuration might depend on a database `DataSource` or a `SecurityFilterChain` bean.
-
-```mermaid
-flowchart LR
-    A["@AutoConfigureAfter(DataSourceAutoConfiguration.class)"] --> B["AcmeAuditingAutoConfiguration"]
-    B --> C["Creates AuditingManager using existing DataSource"]
-```
-
-Use these annotations to orchestrate execution:
-- `@AutoConfigureAfter(DataSourceAutoConfiguration.class)`: Runs after the specified auto-configuration.
-- `@AutoConfigureBefore(SecurityAutoConfiguration.class)`: Runs before the specified auto-configuration.
-- `@AutoConfigureOrder(Ordered.LOWEST_PRECEDENCE)`: Direct priority ordering.
-
-> **Crucial Warning:** `@AutoConfigureBefore` and `@AutoConfigureAfter` only apply to auto-configuration classes loaded via `AutoConfiguration.imports`. They have zero effect on regular `@Configuration` classes scanned via `@ComponentScan`.
-
----
-
-## Diagnosing Auto-Configuration: The Conditions Evaluation Report
-
-When a bean is unexpectedly missing or an auto-configuration fails to trigger, how do you debug it?
-
-Never guess. Run the application with the `--debug` flag:
+When a starter does not activate as expected (or activates when it should have backed off), start the service with `--debug` or set `logging.level.org.springframework.boot.autoconfigure=DEBUG`:
 
 ```bash
 java -jar order-service.jar --debug
 ```
 
-Or configure logging in `application.yml`:
-
-```yaml
-logging:
-  level:
-    org.springframework.boot.autoconfigure: DEBUG
-```
-
-During startup, Spring Boot generates an exhaustive **Conditions Evaluation Report**:
+Spring Boot prints the **Conditions Evaluation Report** on startup, showing every auto-configuration class that matched and every class that did not, along with the exact condition that decided the outcome:
 
 ```text
 ============================
@@ -400,65 +530,32 @@ Positive matches:
 -----------------
    AcmeTracingAutoConfiguration matched:
       - @ConditionalOnWebApplication (required: SERVLET) matched (OnWebApplicationCondition)
+      - @ConditionalOnClass found required classes 'jakarta.servlet.Filter', 'org.springframework.web.filter.OncePerRequestFilter' (OnClassCondition)
       - @ConditionalOnProperty (acme.tracing.enabled=true) matched (OnPropertyCondition)
-      - @ConditionalOnClass found required classes: jakarta.servlet.Filter (OnClassCondition)
 
 Negative matches:
 -----------------
-   MongoAuditingAutoConfiguration:
+   AcmeTracingAutoConfiguration#correlationIdGenerator:
       Did not match:
-         - @ConditionalOnClass did not find required class 'com.mongodb.client.MongoClient' (OnClassCondition)
-
-Exclusions:
------------
-   None
-
-Unconditional classes:
-----------------------
-   org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration
+         - @ConditionalOnMissingBean (types: com.acme.starter.tracing.CorrelationIdGenerator; SearchStrategy: all) found beans of type 'com.acme.starter.tracing.CorrelationIdGenerator' customGenerator (OnBeanCondition)
 ```
 
-The report categorizes every auto-configuration on the classpath into **Positive matches** (why it ran) and **Negative matches** (the exact condition that caused it to be skipped).
+In production services with Spring Boot Actuator enabled, the same report is exposed through the `/actuator/conditions` endpoint, which is often the fastest way to verify why a bean was or was not wired in a deployed environment.
 
----
+## Practical Questions
 
-## Senior Engineer Interview Crucible
+### Why did Spring Boot 3 replace `spring.factories` with `AutoConfiguration.imports` for auto-configurations?
 
-### How did Spring Boot 3 fundamentally change the auto-configuration registration mechanism compared to Spring Boot 2.x, and why was this change made?
+`META-INF/spring.factories` was originally a catch-all properties file holding listeners, context initializers, failure analyzers, and auto-configuration classes under different keys. Moving auto-configurations into `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` gave Spring Boot a dedicated, newline-delimited list that loads faster and integrates cleanly with Spring 6's Ahead-of-Time (AOT) processing for GraalVM native images.
 
-In Spring Boot 1.x and 2.x, auto-configuration classes were registered in `META-INF/spring.factories` under the key `org.springframework.boot.autoconfigure.EnableAutoConfiguration`. 
+### Why should a custom starter be split into an `autoconfigure` module and a `starter` module?
 
-Spring Boot 3 deprecated and removed this mechanism for auto-configurations, replacing it with a dedicated file: `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`. This file contains a simple, newline-separated list of fully qualified class names.
+Splitting the two separates configuration logic from dependency aggregation. The `autoconfigure` module holds the code and marks optional integrations as `optional` (Maven) or `compileOnly` (Gradle), while the `starter` module is an empty POM/JAR that declares the standard transitive dependencies for most consumers. Teams that need custom library versions or want to exclude a transitive dependency can depend on `autoconfigure` directly without fighting dependency exclusions.
 
-The change was made for two key reasons:
-1. **Performance:** `spring.factories` was an overloaded property file storing listeners, initializers, and auto-configurations. Separating auto-configurations into a standalone text file eliminates multi-key parsing and reduces application startup latency.
-2. **Ahead-of-Time (AOT) and GraalVM Native Image Support:** The dedicated file enables Spring's AOT engine to discover auto-configuration classes during build time, compute reachability metadata, and register native reflection hints without requiring expensive classpath scanning at runtime.
+### Why does `@ConditionalOnMissingBean` work reliably for user beans, and when can it go wrong?
 
----
+Spring Boot registers user `@Configuration` beans discovered via `@ComponentScan` before evaluating auto-configurations from `AutoConfiguration.imports`. As a result, `@ConditionalOnMissingBean` in an auto-configuration reliably sees beans defined by the consuming application. Things go wrong when two different *auto-configuration* classes both use `@ConditionalOnMissingBean` for the same type without explicit ordering (`@AutoConfiguration(after = ...)` or `before = ...`), or when someone mistakenly places `@ConditionalOnMissingBean` inside a regular component-scanned `@Configuration` class where registration order is not guaranteed.
 
-### Why is the two-module architecture (`acme-spring-boot-starter` and `acme-spring-boot-autoconfigure`) recommended for custom starters instead of a single monolithic JAR?
+### How does `@ConditionalOnClass` check for missing libraries without throwing `NoClassDefFoundError`?
 
-The two-module separation strictly decouples **configuration logic** from **dependency management**:
-
-1. **The Autoconfigure Module:** Contains only the auto-configuration classes, `@Conditional` definitions, and properties. It declares third-party libraries (like BouncyCastle, Kafka clients, or Netty) as `optional` or `provided`.
-2. **The Starter Module:** An empty aggregator JAR with no Java code. Its sole purpose is to declare transitive dependencies so consuming microservices can add one dependency without managing complex dependency trees.
-
-This separation prevents dependency pollution. If an advanced consumer wants to use your auto-configuration classes but wants to manage their own specific versions of underlying libraries (or use an alternative logging provider), they can depend directly on the autoconfigure module without inheriting unnecessary transitive starter dependencies.
-
----
-
-### What is the exact execution order of `@ConditionalOnBean` vs `@ConditionalOnMissingBean`, and why does placing `@ConditionalOnMissingBean` on an auto-configuration class require careful ordering?
-
-`@ConditionalOnBean` and `@ConditionalOnMissingBean` depend entirely on the order in which bean definitions are registered in the `ApplicationContext`. 
-
-Spring evaluates user-defined `@Configuration` classes discovered via `@ComponentScan` **before** it processes external auto-configuration classes. Because user configurations run first, an auto-configuration using `@ConditionalOnMissingBean` can accurately detect whether the user has defined their own bean.
-
-However, if two separate auto-configuration classes both declare `@ConditionalOnMissingBean` for the same type, their execution order becomes non-deterministic unless explicitly controlled with `@AutoConfigureBefore` or `@AutoConfigureAfter`. Without explicit ordering, whichever auto-configuration happens to be parsed first registers its bean, causing the second to be skipped.
-
----
-
-### How does Spring Boot inspect `@ConditionalOnClass` without throwing `ClassNotFoundException` or `NoClassDefFoundError` when an optional dependency is missing from the consumer's classpath?
-
-Spring Boot avoids class loading errors by reading bytecode metadata directly using the **ASM library** and Java reflection metadata readers, rather than invoking `Class.forName()`.
-
-When Spring scans candidate configuration classes during bootstrap, its `OnClassCondition` evaluator inspects the constant pool and class annotations using a low-level `MetadataReader` (backed by ASM). It checks for the existence of the class name in the JVM's `ClassLoader` without resolving or linking the class bytecode into memory. If the class cannot be located by the class loader, the condition evaluates to `false` and the configuration class is excluded before the JVM ever attempts to link missing class definitions.
+Spring Boot's `OnClassCondition` reads class and annotation metadata using ASM (`MetadataReader`) rather than loading the referenced class directly through the JVM verifier. If the class is absent from the classpath, the condition evaluates to `false` before the configuration class is instantiated. To avoid subtle `TypeNotPresentException` issues, avoid returning or accepting an optional third-party type directly on `@Bean` methods inside the top-level auto-configuration class; isolate those methods in a nested `@Configuration(proxyBeanMethods = false)` class guarded by `@ConditionalOnClass`.

@@ -1,37 +1,41 @@
-# Full-Text Search with Elasticsearch
+---
+title: "Full-Text Search with Elasticsearch"
+description: "How inverted indexes, text analyzers, BM25 scoring, Lucene segments, Spring Data Elasticsearch, bulk indexing, and aggregations work in Java services."
+category: "level-7"
+date: "2026-10-29T10:00:00Z"
+---
 
-Every backend engineer eventually encounters this ticket: *"Users need to search products by typing partial names, typos, brand names, or descriptions, sorted by relevance."*
+At some point on almost every backend team, a ticket lands asking for real search: *"Users should be able to search products by partial names, descriptions, or typos, filter by category and price range, and see faceted counts sorted by relevance."*
 
-The naive first instinct is almost always an SQL query:
+The first instinct is usually SQL:
+
 ```sql
-SELECT * FROM products 
-WHERE description ILIKE '%ergonomic chair%' 
+SELECT * FROM products
+WHERE description ILIKE '%ergonomic chair%'
    OR name ILIKE '%ergonomic chair%';
 ```
 
-In staging with 500 rows, this query runs in 4 milliseconds. In production with 25 million rows, it triggers a catastrophic full-table scan. Because the pattern starts with a leading wildcard (`%`), standard B-Tree indexes are completely useless. Every single disk block must be read into memory, pinning the database CPU at 100% and causing query latency to explode to tens of seconds.
+On a staging database with 500 rows, that runs in a few milliseconds. On a production table with 20 million rows, a leading wildcard (`%`) disables standard B-Tree index lookups and forces a full sequential scan across disk. Even if you add PostgreSQL's built-in `tsvector` and `pg_trgm` indexes (which actually cover many modest search requirements nicely), once you need multi-field relevance tuning, custom linguistic analysis, synonyms, typo tolerance, real-time faceted aggregations across tens of millions of documents, and horizontal read scaling, a dedicated search engine like **Elasticsearch** (built on **Apache Lucene**) becomes the right tool.
 
-Relational databases were engineered for transactional integrity (ACID) and precise row lookups, not linguistic relevance. When your system requires linguistic stemming, typo tolerance, synonyms, multi-field relevance scoring, and sub-50ms query times across millions of records, you need a dedicated search engine built on **inverted indexes**: **Apache Lucene** and **Elasticsearch**.
+## Inverted Indexes and Tokenization
 
----
+A relational B-Tree index maps row identifiers or column prefixes to rows. It is great for `WHERE sku = 'CHAIR-42'` or `WHERE name LIKE 'Ergonomic%'`, because keys are sorted by prefix. It cannot efficiently find which rows contain `"chair"` in the middle of a paragraph.
 
-## Why B-Trees Fail and Inverted Indexes Triumph
-
-To understand why Elasticsearch dominates search, compare how a relational B-Tree index and an inverted index store textual data.
+An **inverted index** reverses the lookup direction. Instead of mapping documents to the words inside them, it maps each normalized **term** to a **postings list** of document IDs where that term appears, along with term frequencies and word positions (needed for phrase queries like `"ergonomic chair"`).
 
 ```mermaid
 flowchart TD
-    subgraph RelationalBTree["Relational B-Tree Index: Row -> Words"]
-        Doc1["Row 1: 'Java Concurrency in Practice'"]
-        Doc2["Row 2: 'Modern Java in Action'"]
-        Doc3["Row 3: 'Effective Java Programming'"]
+    subgraph SourceDocs["Source Documents"]
+        Doc1["Doc 1: 'Java Concurrency in Practice'"]
+        Doc2["Doc 2: 'Modern Java in Action'"]
+        Doc3["Doc 3: 'Effective Java Programming'"]
     end
 
-    subgraph AnalysisPipeline["Analysis Pipeline (Character Filter -> Tokenizer -> Stemmer)"]
-        Tokenizer["Tokenize, Lowercase, Remove Stop Words, Stem"]
+    subgraph Analysis["Text Analysis"]
+        Pipeline["Tokenize, lowercase, stem"]
     end
 
-    subgraph InvertedIndexTable["Inverted Index: Word (Term) -> Postings List"]
+    subgraph InvertedIndex["Inverted Index (Term -> Postings List)"]
         Action["'action' -> [Doc 2]"]
         Concurr["'concurr' -> [Doc 1]"]
         Effect["'effect' -> [Doc 3]"]
@@ -40,140 +44,191 @@ flowchart TD
         Program["'program' -> [Doc 3]"]
     end
 
-    Doc1 --> Tokenizer
-    Doc2 --> Tokenizer
-    Doc3 --> Tokenizer
-    Tokenizer --> InvertedIndexTable
+    Doc1 --> Pipeline
+    Doc2 --> Pipeline
+    Doc3 --> Pipeline
+    Pipeline --> InvertedIndex
 ```
 
-In a relational database, the table organizes rows by their Primary Key. Even if you place an index on `description`, the B-Tree organizes keys alphabetically by their prefix. It cannot answer questions like: *"Which documents contain the word 'concurrency' anywhere in their text?"* without checking every entry.
+When a user searches for `"Java Concurrency"`, Elasticsearch runs the query text through the same analysis pipeline, looks up `"java"` (`[Doc 1, Doc 2, Doc 3]`) and `"concurr"` (`[Doc 1]`) in the term dictionary, and intersects the sorted integer postings lists in memory.
 
-An **Inverted Index** flips the relationship upside down:
-- It decomposes every document into distinct linguistic **terms** (tokens).
-- For each term, it maintains a **Postings List**: a sorted list of Document IDs where that term appears, along with the term's frequency and positional offsets within each document.
+## Analyzers and Tokenizers
 
-When a user searches for `"Java Concurrency"`, Elasticsearch looks up `"java"` in memory (finding `[Doc 1, Doc 2, Doc 3]`) and `"concurr"` (finding `[Doc 1]`). It performs a rapid set intersection (`AND`) on the integer postings lists in microseconds, immediately identifying `Doc 1` as the primary match.
+Almost every confusing Elasticsearch bug ("why didn't my query match this document?") comes down to text analysis. Every `text` field passes through an **Analyzer** at index time, and your query string passes through an analyzer at search time. A document only matches when the indexed terms and the queried terms overlap.
 
----
+An analyzer always consists of three ordered stages:
 
-## The Text Analysis Pipeline: Under the Hood
-
-When a document is indexed in Elasticsearch, its raw text passes through an **Analyzer**. An analyzer is a pipeline composed of three sequential stages:
+1. **Character Filters (0 or more)**: Transform the raw character stream before splitting it into words. Common examples are `html_strip` (removes HTML markup), `mapping` (replaces `&` with ` and `, or normalizes emojis/punctuation), and `pattern_replace`.
+2. **Tokenizer (exactly 1)**: Splits the character stream into a sequence of tokens and records each token's `start_offset`, `end_offset`, and `position`.
+3. **Token Filters (0 or more)**: Modify, add, or drop tokens in sequence (lowercasing, removing stop words, stemming, ASCII folding, injecting synonyms, or generating edge n-grams).
 
 ```mermaid
 flowchart LR
-    Raw["Raw Text:<br/>'&lt;p&gt;Running fast!&lt;/p&gt;'"] --> CF["1. Char Filters<br/>(Strip HTML tags)"]
-    CF -->|"Running fast!"| TK["2. Tokenizer<br/>(Split on whitespace/punctuation)"]
-    TK -->|"['Running', 'fast']"| TF["3. Token Filters<br/>(Lowercase, Stemming, Stopwords)"]
-    TF -->|"['run', 'fast']"| Index[("Inverted Index Terms")]
+    Raw["Raw Text<br/>'Java-21: Running Fast &amp; Clean!'"] --> CF["Character Filters (0+)<br/>Strip HTML, map '&amp;' -> 'and'"]
+    CF --> TK["Tokenizer (Exactly 1)<br/>Split into word tokens"]
+    TK --> TF["Token Filters (0+)<br/>Lowercase, stem, synonyms"]
+    TF --> Terms[("Indexed Terms<br/>['java', '21', 'run', 'fast', 'and', 'clean']")]
 ```
 
-### Stage 1: Character Filters
+### Built-In Analyzers Compared
 
-Character filters preprocess the raw character stream before tokenization. They can strip HTML tags (`html_strip`), convert specific characters (e.g., mapping `&` to `and`), or apply regex pattern replacements.
+Seeing how built-in analyzers treat the exact same input string makes their differences concrete. Given `"<b>Java-21</b> Running Fast & Clean!"`:
 
-### Stage 2: Tokenizer
+| Analyzer | Tokenizer + Filters | Output Tokens | Typical Use |
+| :--- | :--- | :--- | :--- |
+| `standard` (default) | `standard` tokenizer + `lowercase` | `["b", "java", "21", "b", "running", "fast", "clean"]` | General-purpose text across most languages |
+| `simple` | `lowercase` tokenizer (splits on non-letters) | `["b", "java", "b", "running", "fast", "clean"]` | Simple word splitting (note: drops digits like `21`) |
+| `whitespace` | Splits only on whitespace | `["<b>Java-21</b>", "Running", "Fast", "&", "Clean!"]` | Preserving punctuation and case |
+| `english` | `standard` + possessive/lowercase/stop/stemmer | `["b", "java", "21", "b", "run", "fast", "clean"]` | English prose where `"running"` should match `"run"` |
+| `keyword` | No-op (emits entire string as one token) | `["<b>Java-21</b> Running Fast & Clean!"]` | Exact matching (usually better mapped as `keyword` type) |
 
-The tokenizer breaks the character stream into individual tokens.
-- **Standard Tokenizer:** Splits text on word boundaries according to Unicode text segmentation rules, discarding punctuation.
-- **Whitespace Tokenizer:** Splits purely on whitespace.
-- **Edge N-Gram Tokenizer:** Breaks words into progressive prefixes (e.g., `"java"` becomes `["j", "ja", "jav", "java"]`). This enables lightning-fast auto-complete search-as-you-type queries without expensive wildcard scans.
+Notice that `standard` does *not* strip HTML tags (`<b>` became the token `"b"`), and `simple` dropped the number `"21"`. That is why production search indexes usually define custom analyzers.
 
-### Stage 3: Token Filters
+### Custom Analyzers and Index-Time vs. Search-Time Analysis
 
-Token filters modify, add, or eliminate tokens produced by the tokenizer:
-- **Lowercase Filter:** Normalizes all tokens to lowercase so that `"JAVA"`, `"Java"`, and `"java"` resolve to the same index entry.
-- **Stop Token Filter:** Strips common function words with little semantic search value (e.g., `"the"`, `"is"`, `"at"`, `"which"`).
-- **Stemmer Filter (e.g., Porter or Snowball):** Reduces words to their linguistic root stem. `"running"`, `"runs"`, and `"ran"` all collapse into the common term `"run"`. A search for `"run"` matches a document discussing `"running shoes"`.
-- **Synonym Filter:** Injects alternative terms during indexing or querying (e.g., mapping `"laptop"` to also match `"notebook"`).
+When you want HTML stripping, accent folding (`café` -> `cafe`), English stemming, or prefix autocomplete, define custom analyzers in the index settings:
 
----
+```json
+PUT /products_v1
+{
+  "settings": {
+    "analysis": {
+      "filter": {
+        "english_stemmer": {
+          "type": "stemmer",
+          "language": "english"
+        },
+        "autocomplete_edge_ngram": {
+          "type": "edge_ngram",
+          "min_gram": 2,
+          "max_gram": 15
+        }
+      },
+      "analyzer": {
+        "catalog_text": {
+          "type": "custom",
+          "char_filter": ["html_strip"],
+          "tokenizer": "standard",
+          "filter": ["lowercase", "asciifolding", "english_stemmer"]
+        },
+        "autocomplete_index": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "asciifolding", "autocomplete_edge_ngram"]
+        },
+        "autocomplete_search": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "asciifolding"]
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "title": {
+        "type": "text",
+        "analyzer": "autocomplete_index",
+        "search_analyzer": "autocomplete_search",
+        "fields": {
+          "raw": { "type": "keyword" }
+        }
+      },
+      "description": {
+        "type": "text",
+        "analyzer": "catalog_text"
+      }
+    }
+  }
+}
+```
 
-## Lucene Segments, Immutability, and the Refresh Cycle
+Pay close attention to `analyzer` vs. `search_analyzer` on `title`. At index time, `"ergonomic"` is expanded by `edge_ngram` into `["er", "erg", "ergo", "ergon", ..., "ergonomic"]`. At search time, you **must not** apply `edge_ngram` to the user's query; otherwise searching for `"ergonomic"` would also emit `"er"` and falsely match `"eraser"` and `"error"`. Keeping `autocomplete_search` without `edge_ngram` makes `"erg"` match `"ergonomic"` cleanly and quickly without wildcard queries.
 
-Elasticsearch does not write directly to a single monolithic disk file. Under the hood, an Elasticsearch index is partitioned into physical **shards**, and each shard is an instance of an **Apache Lucene engine**.
+### Debugging Tokenization with the `_analyze` API
 
-Lucene organizes shards into smaller physical sub-indexes called **Segments**.
+Never guess what an analyzer produces. Elasticsearch provides the `_analyze` endpoint so you can inspect exact tokens, character offsets, and positions before deploying mappings:
+
+```http
+POST /products_v1/_analyze
+Content-Type: application/json
+
+{
+  "analyzer": "catalog_text",
+  "text": "<p>Café Running Shoes</p>"
+}
+```
+
+Response:
+
+```json
+{
+  "tokens": [
+    { "token": "cafe", "start_offset": 3, "end_offset": 7, "type": "<ALPHANUM>", "position": 0 },
+    { "token": "run",  "start_offset": 8, "end_offset": 15, "type": "<ALPHANUM>", "position": 1 },
+    { "token": "shoe", "start_offset": 16, "end_offset": 21, "type": "<ALPHANUM>", "position": 2 }
+  ]
+}
+```
+
+## Relevance Scoring with Okapi BM25
+
+Finding which 10,000 documents match a query is only half the job. Ranking the best 20 at the top is handled by **Okapi BM25**, Elasticsearch's default similarity algorithm.
+
+Older search engines used classic **TF-IDF** (Term Frequency multiplied by Inverse Document Frequency). Classic TF-IDF has two weaknesses: term frequency grows too aggressively (a spammy page repeating `"chair"` 80 times swamps a clean product listing mentioning `"chair"` 4 times), and it does not normalize document length gracefully.
+
+BM25 combines three signals:
+
+1. **Inverse Document Frequency (IDF)**: Rare terms across the index carry much more weight than common terms. Matching `"herman"` in a furniture catalog signals far more relevance than matching `"chair"`.
+2. **Term Frequency Saturation (`k1`, default `1.2`)**: Additional mentions of a term add diminishing score gains and flatten toward a ceiling. Going from 1 mention to 3 mentions matters a lot; going from 10 mentions to 50 barely changes the score.
+3. **Field Length Normalization (`b`, default `0.75`)**: A match in a 5-word `title` carries more weight than a match in a 600-word `description`, because BM25 scales term frequency against the field's length relative to the average length of that field across the index. Setting `b = 0` disables length normalization completely.
+
+```mermaid
+flowchart LR
+    Query["Matched Query Term"] --> IDF["IDF: Rare terms score higher"]
+    Query --> TF["TF Saturation (k1=1.2): Diminishing returns on repeats"]
+    Query --> Len["Length Norm (b=0.75): Shorter fields score higher"]
+    IDF --> Score["Final BM25 Document Score"]
+    TF --> Score
+    Len --> Score
+```
+
+> [!NOTE]
+> By default, Elasticsearch calculates IDF per shard rather than globally across the whole index. On large indexes with evenly distributed documents, shard-level IDF is accurate enough. On tiny dev or test indexes split across 5 shards, identical documents can get slightly different scores unless you use fewer shards (1 shard is plenty for small indexes) or pass `search_type=dfs_query_then_fetch` when debugging.
+
+## Lucene Segments and Near-Real-Time (NRT) Refresh
+
+Each Elasticsearch index is divided into primary **shards**, and each shard is an independent **Apache Lucene** instance made up of **immutable segments**.
+
+When your Java service indexes a document, it does not write directly into a searchable file on disk:
 
 ```mermaid
 flowchart TD
-    DocWrite["Document Write (Indexing Request)"] --> MemoryBuffer["In-Memory Indexing Buffer"]
-    DocWrite --> Translog["Transaction Log (Translog on Disk)"]
+    Write["Index Request"] --> Buffer["In-Memory Indexing Buffer"]
+    Write --> Translog["Append-Only Translog (Durability)"]
 
-    MemoryBuffer -->|"Every 1s (Refresh)"| PageCache["New Inverted Index Segment (OS Page Cache)"]
-    PageCache -.->|"Searchable immediately"| QueryEngine["Search Query Engine"]
+    Buffer -->|"Refresh (default every 1s)"| Segment["New Immutable Segment (OS Page Cache)"]
+    Segment -.->|"Now visible to search (NRT)"| Search["Search Queries"]
 
-    Translog -->|"Every 30m or 512MB (Flush)"| Disk["Fsync Segments to Permanent Physical Disk"]
-    
-    subgraph MergeProcess["Background Segment Merge"]
-        Seg1["Small Segment A"]
-        Seg2["Small Segment B"]
-        Seg3["Small Segment C"]
-        SegMerge["Merged Large Segment D (Garbage-collected tombstones)"]
-        Seg1 --> SegMerge
-        Seg2 --> SegMerge
-        Seg3 --> SegMerge
+    Translog -->|"Flush (fsync & clear translog)"| Disk[("Permanent Disk Storage")]
+
+    subgraph Merge["Background Segment Merge"]
+        S1["Small Segment 1"] --> Big["Merged Segment (Tombstones purged)"]
+        S2["Small Segment 2"] --> Big
+        S3["Small Segment 3"] --> Big
     end
 ```
 
-### The Power of Segment Immutability
+1. **Indexing buffer + Translog**: The document goes into an in-memory buffer and is appended to the shard's **translog** (Write-Ahead Log) for crash recovery. At this moment, the document is durable once the translog fsyncs, but **not yet searchable**.
+2. **Refresh (Near-Real-Time)**: Every `1s` by default (`index.refresh_interval`), Lucene builds a new immutable inverted-index segment from the buffer and opens it in the operating system's filesystem page cache. That is why Elasticsearch is called **near-real-time (NRT)**: a document written 50 ms ago may not appear in search results until the next 1-second refresh cycle.
+3. **Flush**: Periodically (based on translog size or age), Lucene fsyncs open segments to permanent disk and truncates the translog.
+4. **Immutable updates, deletes, and merges**: Because Lucene segments are never modified in place (which allows lock-free concurrent reads and friendly OS page caching), deleting a document writes its ID into a `.del` tombstone bitmap. Updating a document marks the old version deleted and writes a brand-new document into the buffer. Background **segment merges** combine small segments into larger ones and physically drop tombstoned documents to reclaim disk space.
 
-Once written, a Lucene segment is **strictly immutable**. It is never modified on disk.
+Avoid forcing `?refresh=true` on every write in production. Creating a tiny segment on every single document write slows down indexing dramatically and overwhelms background merging. Reserve explicit refreshes for integration tests, or use `?refresh=wait_for` only on rare user-facing workflows that must immediately read back what they just wrote.
 
-- **Lock-Free Reads:** Because segments never change, search queries do not require read locks. Thousands of concurrent reader threads can query the same segment without contention.
-- **Filesystem Page Cache Friendly:** Because segment files remain static, the operating system caches them in RAM indefinitely without cache invalidation overhead.
-- **Simpler Inverted Indexes:** An immutable index eliminates complex in-place block allocation and defragmentation algorithms.
+## Spring Data Elasticsearch Integration
 
-### How Updates and Deletes Actually Work
-
-If segments are immutable, how does Elasticsearch update a record?
-
-- **Deletions:** When you delete document 42, Elasticsearch does not erase bytes from the segment. It writes document ID 42 into a separate **`.del` tombstone bitmap file**. During search execution, Lucene matches the term in the segment, checks the `.del` bitmap, and filters out document 42 before returning results.
-- **Updates:** An update is an atomic two-step operation: Elasticsearch flags the old document ID in the `.del` bitmap file and indexes the updated document as a brand-new entry in a newly created segment.
-
-### The Background Segment Merge Process
-
-Over time, frequent indexing produces hundreds of tiny segments, and `.del` tombstones consume disk space. To maintain high search performance, Lucene runs an automated **Segment Merge** thread in the background:
-1. It selects several smaller segments and merges them into one larger segment.
-2. During the merge, any documents flagged in the `.del` bitmap are physically purged and excluded from the new segment.
-3. Once the merged segment is committed to disk, the old segments are deleted.
-
----
-
-## Relevance Scoring: From TF-IDF to Okapi BM25
-
-When a search query matches 10,000 documents, how does Elasticsearch decide which 10 appear on page one?
-
-In older versions of Elasticsearch, relevance scoring used **TF-IDF** (Term Frequency - Inverse Document Frequency). Today, Elasticsearch uses **Okapi BM25** (Best Matching 25) as its default scoring engine.
-
-### The Problem with Traditional TF-IDF
-
-TF-IDF assumes that the more times a query term appears in a document, the more relevant that document is. If document A mentions `"docker"` 5 times, and document B mentions `"docker"` 50 times, document B receives a massively higher score.
-
-In reality, relevance exhibits diminishing marginal returns: mentioning `"docker"` 50 times instead of 5 times usually indicates keyword stuffing or a repetitive manual, not a 10x increase in relevance.
-
-### How BM25 Improves Scoring
-
-BM25 introduces two critical refinements:
-
-```mermaid
-flowchart LR
-    subgraph BM25Dynamics["BM25 Scoring Dynamics"]
-        TermSat["1. Term Frequency Saturation: Score asymptotically approaches limit (k1 parameter)"]
-        DocLen["2. Document Length Normalization: Penalizes verbose docs, boosts concise titles (b parameter)"]
-    end
-```
-
-1. **Term Frequency Saturation:** In BM25, the contribution of term frequency approaches an asymptote controlled by a parameter `k1` (typically set to `1.2`). Once a term appears a handful of times, additional occurrences have negligible impact on the overall score.
-2. **Document Length Normalization:** A 200-word blog post mentioning `"Kubernetes"` twice is statistically much more focused on Kubernetes than a 100,000-word textbook mentioning `"Kubernetes"` twice in passing. BM25 divides the term frequency by the relative document length, controlled by parameter `b` (typically `0.75`). Concise documents receive a healthy relevance boost.
-
----
-
-## Spring Data Elasticsearch: Architecture and Mapping
-
-In a Spring Boot microservice, we integrate with Elasticsearch using **Spring Data Elasticsearch** and the official Java client.
-
-### Step 1: Maven Dependencies
+In Spring Boot 3.x, `spring-boot-starter-data-elasticsearch` integrates with the official **Elasticsearch Java API Client** (`co.elastic.clients:elasticsearch-java`), replacing the deprecated `RestHighLevelClient`.
 
 ```xml
 <dependency>
@@ -182,14 +237,14 @@ In a Spring Boot microservice, we integrate with Elasticsearch using **Spring Da
 </dependency>
 ```
 
-### Step 2: The Critical Distinction: `Text` vs `Keyword`
+### Mapping `text` vs. `keyword` and `@MultiField`
 
-The most common architectural bug in Elasticsearch integration is confusing `FieldType.Text` and `FieldType.Keyword`:
+One of the most frequent schema mistakes is choosing the wrong string field type:
 
-- **`FieldType.Text`:** The field passes through the full analysis pipeline (tokenized, lowercased, stemmed). It is optimized for **full-text search** (e.g., product descriptions, blog posts). You cannot perform sorting or exact aggregations on pure `text` fields without expensive fielddata loading.
-- **`FieldType.Keyword`:** The field is indexed as an unbroken, exact literal string without tokenization. It is optimized for **exact matching, filtering, sorting, and aggregations** (e.g., status codes, email addresses, tags, SKU codes).
+- **`FieldType.Text`**: Runs through an analyzer and is stored in the inverted index for full-text relevance queries. It does **not** build columnar Doc Values by default, so sorting or aggregating on a `text` field fails unless you enable `fielddata` (which loads the inverted index into JVM heap and is a common cause of `OutOfMemoryError`).
+- **`FieldType.Keyword`**: Stored verbatim without tokenization in both the inverted index and disk-backed columnar **Doc Values**. Use it for exact filters (`category`, `sku`, `status`), sorting, and aggregations.
 
-For rich search domains, use **multi-fields** (`@MultiField`) to index a field as both `text` (for search) and `keyword` (for sorting and faceting).
+When a field needs both full-text search *and* exact sorting or faceting (such as a product `title`), map it as a `@MultiField`:
 
 ```java
 package com.javahub.search.entity;
@@ -207,13 +262,12 @@ import java.time.Instant;
 import java.util.List;
 
 @Document(indexName = "products_v1")
-@Setting(shards = 3, replicas = 1)
+@Setting(shards = 2, replicas = 1)
 public class ProductIndexDocument {
 
     @Id
     private String id;
 
-    // Multi-field: Analyzed for full-text search, raw keyword for alphabetical sorting
     @MultiField(
         mainField = @Field(type = FieldType.Text, analyzer = "standard"),
         otherFields = {
@@ -243,41 +297,32 @@ public class ProductIndexDocument {
     @Field(type = FieldType.Date)
     private Instant createdAt;
 
-    // Constructors, Getters, and Setters
     public ProductIndexDocument() {}
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
-
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
-
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
-
     public String getSku() { return sku; }
     public void setSku(String sku) { this.sku = sku; }
-
     public String getCategory() { return category; }
     public void setCategory(String category) { this.category = category; }
-
     public BigDecimal getPrice() { return price; }
     public void setPrice(BigDecimal price) { this.price = price; }
-
     public List<String> getTags() { return tags; }
     public void setTags(List<String> tags) { this.tags = tags; }
-
     public boolean isInStock() { return inStock; }
     public void setInStock(boolean inStock) { this.inStock = inStock; }
-
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }
 ```
 
-### Step 3: High-Performance Search Service with Native Queries
+### Query Context vs. Filter Context with `ElasticsearchOperations`
 
-While `ElasticsearchRepository` provides standard CRUD methods, enterprise search requires constructing complex multi-match, fuzzy, and filtered queries with aggregations using `ElasticsearchOperations`:
+`ElasticsearchRepository` covers basic CRUD, but real search endpoints almost always combine boosted multi-field text search with structured filters using `ElasticsearchOperations` and `NativeQuery`:
 
 ```java
 package com.javahub.search.service;
@@ -289,7 +334,6 @@ import co.elastic.clients.elasticsearch._types.query_dsl.TextQueryType;
 import com.javahub.search.entity.ProductIndexDocument;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.elasticsearch.client.elc.NativeQuery;
-import org.springframework.data.elasticsearch.client.elc.NativeQueryBuilder;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
@@ -297,7 +341,6 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class ProductSearchService {
@@ -308,148 +351,275 @@ public class ProductSearchService {
         this.elasticsearchOperations = elasticsearchOperations;
     }
 
-    public List<ProductIndexDocument> searchCatalog(String userQuery, String categoryFilter, BigDecimal maxPrice, int page, int size) {
-        // Construct the Bool Query
-        BoolQuery.Builder boolQuery = new BoolQuery.Builder();
+    public List<ProductIndexDocument> searchCatalog(
+            String userQuery, String category, BigDecimal maxPrice, int page, int size) {
 
-        // 1. MUST: Full-text relevance match across multiple fields with boosting and typo tolerance
+        BoolQuery.Builder bool = new BoolQuery.Builder();
+
+        // Query context (must): calculates BM25 relevance score
         if (userQuery != null && !userQuery.isBlank()) {
-            boolQuery.must(m -> m.multiMatch(MultiMatchQuery.of(mm -> mm
+            bool.must(m -> m.multiMatch(MultiMatchQuery.of(mm -> mm
                     .query(userQuery)
-                    .fields("title^3.0", "description^1.0", "tags^2.0") // Boost title matches by 3x
+                    .fields("title^3.0", "tags^2.0", "description^1.0")
                     .type(TextQueryType.BestFields)
                     .operator(Operator.Or)
-                    .fuzziness("AUTO") // Automatically permits Levenshtein distance 1 or 2 for typos
+                    .fuzziness("AUTO")
             )));
         } else {
-            boolQuery.must(m -> m.matchAll(ma -> ma));
+            bool.must(m -> m.matchAll(ma -> ma));
         }
 
-        // 2. FILTER: Exact structured filters (does NOT affect relevance score, uses bitset caching)
-        if (categoryFilter != null && !categoryFilter.isBlank()) {
-            boolQuery.filter(f -> f.term(t -> t.field("category").value(categoryFilter)));
+        // Filter context: binary yes/no check, skips scoring and caches bitsets
+        if (category != null && !category.isBlank()) {
+            bool.filter(f -> f.term(t -> t.field("category").value(category)));
         }
-
         if (maxPrice != null) {
-            boolQuery.filter(f -> f.range(r -> r.number(n -> n.field("price").lte(maxPrice.doubleValue()))));
+            bool.filter(f -> f.range(r -> r.number(n -> n.field("price").lte(maxPrice.doubleValue()))));
         }
+        bool.filter(f -> f.term(t -> t.field("inStock").value(true)));
 
-        // Must be in stock
-        boolQuery.filter(f -> f.term(t -> t.field("inStock").value(true)));
-
-        // 3. Assemble Native Spring Data Query
-        NativeQuery query = new NativeQueryBuilder()
-                .withQuery(boolQuery.build()._toQuery())
+        NativeQuery query = NativeQuery.builder()
+                .withQuery(bool.build()._toQuery())
                 .withPageable(PageRequest.of(page, size))
                 .build();
 
-        // 4. Execute Search
-        SearchHits<ProductIndexDocument> hits = elasticsearchOperations.search(query, ProductIndexDocument.class);
+        SearchHits<ProductIndexDocument> hits =
+                elasticsearchOperations.search(query, ProductIndexDocument.class);
 
         return hits.getSearchHits().stream()
                 .map(SearchHit::getContent)
-                .collect(Collectors.toList());
+                .toList();
     }
 }
 ```
 
-### Notice the Filter vs Query Optimization:
+Separating `must` from `filter` matters for performance. Clauses inside `must` compute BM25 scores for every candidate document. Clauses inside `filter` skip scoring completely and are automatically cached by Elasticsearch as compact bitsets in memory.
 
-In the query above, notice the distinction between `must` and `filter`:
-- **`must` (Relevance scoring):** Calculates BM25 score for the search terms. Every hit receives a score indicating how closely its title and description match the query.
-- **`filter` (Binary inclusion):** Checks whether `inStock == true` and `price <= maxPrice`. Filter clauses do not calculate relevance scores. Elasticsearch caches filter results as reusable in-memory bitsets, accelerating subsequent queries.
+## Bulk Indexing
 
----
+Indexing documents one HTTP request at a time wastes most of its time on network round-trips and per-request overhead. Whenever you are backfilling an index, processing a Kafka consumer batch, or reindexing after a mapping change, use the **`_bulk` API**.
 
-## Data Synchronization: The Dual-Write Hazard
-
-In production, your relational database (PostgreSQL/MySQL) remains the **Single Source of Truth (SSOT)** for transactional data, while Elasticsearch acts as a read-optimized **Derived Data Store**.
-
-How do you keep them synchronized?
-
-### The Naive Anti-Pattern: Application Dual-Writes
+You can call `elasticsearchOperations.bulkIndex(indexQueries, IndexCoordinates.of("products_v1"))` for simple batches, or inject the underlying `ElasticsearchClient` directly when you want explicit per-item error inspection:
 
 ```java
-// DANGEROUS: Dual-Write Anti-Pattern!
-@Transactional
-public Product createProduct(ProductDto dto) {
-    Product entity = productRepository.save(new Product(dto));
-    
-    // What happens if Elasticsearch throws an exception or network drops right here?
-    // Or what happens if the DB transaction fails to commit after this line?
-    elasticsearchTemplate.save(toIndexDocument(entity));
-    
-    return entity;
+package com.javahub.search.service;
+
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch.core.BulkRequest;
+import co.elastic.clients.elasticsearch.core.BulkResponse;
+import co.elastic.clients.elasticsearch.core.bulk.BulkResponseItem;
+import com.javahub.search.entity.ProductIndexDocument;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+@Service
+public class ProductBulkIndexer {
+
+    private static final Logger log = LoggerFactory.getLogger(ProductBulkIndexer.class);
+    private static final String INDEX_NAME = "products_v1";
+
+    private final ElasticsearchClient client;
+
+    public ProductBulkIndexer(ElasticsearchClient client) {
+        this.client = client;
+    }
+
+    public List<String> bulkUpsert(List<ProductIndexDocument> batch) throws IOException {
+        if (batch.isEmpty()) {
+            return List.of();
+        }
+
+        BulkRequest.Builder request = new BulkRequest.Builder();
+        for (ProductIndexDocument doc : batch) {
+            request.operations(op -> op.index(idx -> idx
+                    .index(INDEX_NAME)
+                    .id(doc.getId())
+                    .document(doc)
+            ));
+        }
+
+        BulkResponse response = client.bulk(request.build());
+        List<String> failedIds = new ArrayList<>();
+
+        // Always inspect response.errors(): HTTP 200 can still contain per-item failures
+        if (response.errors()) {
+            for (BulkResponseItem item : response.items()) {
+                if (item.error() != null) {
+                    failedIds.add(item.id());
+                    log.error("Failed to index doc {}: {}", item.id(), item.error().reason());
+                }
+            }
+        }
+        return failedIds;
+    }
 }
 ```
 
-This naive pattern fails under real-world conditions:
-1. **Partial Failures:** If the database commit succeeds but the network connection to Elasticsearch times out, the search index is permanently missing records.
-2. **Rollback Desynchronization:** If Elasticsearch writes successfully but a subsequent Spring transaction step triggers a database rollback, Elasticsearch retains ghost documents that do not exist in the database.
-3. **Out-of-Order Concurrent Updates:** Thread A updates a product to price 100. Thread B updates the same product to price 120. If Thread B's database commit lands second, but Thread A's Elasticsearch HTTP request arrives after Thread B's due to network jitter, Elasticsearch ends up storing stale price 100 while PostgreSQL holds 120.
+A few operational guidelines for bulk indexing:
 
-### The Production Remedy: Change Data Capture (CDC) with Debezium
+- **Size batches by megabytes, not document count**: Aim for roughly **5 MB to 15 MB** per bulk request. For typical 1 KB product documents that is a few thousand docs per batch; for huge full-text articles it might be only 200 docs. Oversized batches create heap pressure on the coordinating node and trigger `429 Too Many Requests` rejections.
+- **Check `response.errors()`**: Elasticsearch returns HTTP `200 OK` even if 12 documents in a 1,000-document batch failed mapping validation. Inspect each item and route failures to a retry or dead-letter queue.
+- **Tune initial backfills**: During a large offline reindex into a brand-new index, temporarily set `index.refresh_interval` to `"-1"` and `index.number_of_replicas` to `0`, load all documents via bulk requests, and then restore `refresh_interval` (e.g., `"1s"`) and `number_of_replicas` (`1`).
 
-To maintain consistency without distributed two-phase locking, adopt **Change Data Capture (CDC)** using the database's native Write-Ahead Log (WAL):
+## Search Aggregations
+
+Aggregations compute analytics and faceted sidebar counts over the matched document set in the same round-trip as your search query. They fall into three categories:
+
+- **Bucket aggregations** group documents into buckets based on field values or ranges (`terms`, `range`, `date_histogram`).
+- **Metric aggregations** compute statistics over numeric values (`avg`, `min`, `max`, `stats`, `percentiles`).
+- **Pipeline aggregations** operate on the output of other aggregations (such as moving averages or bucket sorting).
+
+Here is how to run a search query alongside a `terms` facet on `category` and a `stats` metric on `price` using Spring Data Elasticsearch 5.x:
+
+```java
+package com.javahub.search.service;
+
+import co.elastic.clients.elasticsearch._types.aggregations.Aggregation;
+import co.elastic.clients.elasticsearch._types.aggregations.StatsAggregate;
+import co.elastic.clients.elasticsearch._types.aggregations.StringTermsBucket;
+import com.javahub.search.entity.ProductIndexDocument;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.elasticsearch.client.elc.ElasticsearchAggregations;
+import org.springframework.data.elasticsearch.client.elc.NativeQuery;
+import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
+import org.springframework.stereotype.Service;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class ProductFacetSearchService {
+
+    private final ElasticsearchOperations elasticsearchOperations;
+
+    public ProductFacetSearchService(ElasticsearchOperations elasticsearchOperations) {
+        this.elasticsearchOperations = elasticsearchOperations;
+    }
+
+    public record SearchWithFacets(
+            List<ProductIndexDocument> products,
+            Map<String, Long> categoryCounts,
+            double minPrice,
+            double maxPrice,
+            double avgPrice
+    ) {}
+
+    public SearchWithFacets searchWithFacets(String userQuery, int page, int size) {
+        NativeQuery query = NativeQuery.builder()
+                .withQuery(q -> q.bool(b -> b
+                        .must(m -> m.match(mt -> mt.field("title").query(userQuery)))
+                        .filter(f -> f.term(t -> t.field("inStock").value(true)))
+                ))
+                .withAggregation("by_category", Aggregation.of(a -> a
+                        .terms(t -> t.field("category").size(20))
+                ))
+                .withAggregation("price_stats", Aggregation.of(a -> a
+                        .stats(s -> s.field("price"))
+                ))
+                .withPageable(PageRequest.of(page, size))
+                .build();
+
+        SearchHits<ProductIndexDocument> hits =
+                elasticsearchOperations.search(query, ProductIndexDocument.class);
+
+        List<ProductIndexDocument> products = hits.getSearchHits().stream()
+                .map(SearchHit::getContent)
+                .toList();
+
+        Map<String, Long> categoryCounts = new LinkedHashMap<>();
+        double minPrice = 0.0;
+        double maxPrice = 0.0;
+        double avgPrice = 0.0;
+
+        if (hits.getAggregations() instanceof ElasticsearchAggregations aggs) {
+            var categoryAgg = aggs.get("by_category");
+            if (categoryAgg != null && categoryAgg.aggregation().getAggregate().isSterms()) {
+                for (StringTermsBucket bucket :
+                        categoryAgg.aggregation().getAggregate().sterms().buckets().array()) {
+                    categoryCounts.put(bucket.key().stringValue(), bucket.docCount());
+                }
+            }
+
+            var priceAgg = aggs.get("price_stats");
+            if (priceAgg != null && priceAgg.aggregation().getAggregate().isStats()) {
+                StatsAggregate stats = priceAgg.aggregation().getAggregate().stats();
+                minPrice = stats.min() != null ? stats.min() : 0.0;
+                maxPrice = stats.max() != null ? stats.max() : 0.0;
+                avgPrice = stats.avg() != null ? stats.avg() : 0.0;
+            }
+        }
+
+        return new SearchWithFacets(products, categoryCounts, minPrice, maxPrice, avgPrice);
+    }
+}
+```
+
+If you only need the aggregation results without returning any hit documents (for example, rendering an analytics dashboard), pass `.withMaxResults(0)` so Elasticsearch skips fetching `_source` payloads.
+
+## Keeping Elasticsearch in Sync with Your Database
+
+In most Java architectures, PostgreSQL remains the **system of record** and Elasticsearch is a **derived read index**. Keeping them synchronized is where many search integrations quietly break.
+
+### Why Application Dual-Writes Drift
+
+Writing to PostgreSQL and Elasticsearch inside the same service method looks simple, but it has no atomic transaction across the two systems:
+
+```java
+// Fragile: dual-write without atomic guarantees
+@Transactional
+public Product createProduct(ProductDto dto) {
+    Product saved = productRepository.save(new Product(dto));
+    elasticsearchOperations.save(toIndexDocument(saved));
+    return saved;
+}
+```
+
+Three failure modes creep in over time:
+
+1. **Partial failure**: PostgreSQL commits, then the network call to Elasticsearch times out. The product exists in the database but never appears in search.
+2. **Rollback ghost records**: Elasticsearch indexes the document, then a later step in the Spring `@Transactional` method throws an exception and rolls back PostgreSQL. Search now returns a product that does not exist.
+3. **Out-of-order updates**: Two concurrent threads update the same product's price to 100 and 120. If Thread 1's HTTP call reaches Elasticsearch after Thread 2's, Elasticsearch gets stuck showing 100 while PostgreSQL holds 120.
+
+### Production Sync: Change Data Capture (CDC) or Outbox
+
+To decouple writes from search indexing, write only to PostgreSQL and stream committed changes to Elasticsearch asynchronously:
 
 ```mermaid
 flowchart LR
-    App["Spring Boot Service"] -->|"1. Single Write (ACID)"| Postgres[(PostgreSQL Primary DB)]
-    Postgres -->|"2. Native Write-Ahead Log (WAL)"| Debezium["Debezium CDC Connector"]
-    Debezium -->|"3. Stream Row Deltas"| Kafka["Apache Kafka Topic: 'db.products'"]
-    Kafka -->|"4. Consume & Index"| Indexer["Elasticsearch Consumer Worker"]
-    Indexer -->|"5. Bulk Index Request"| ES[("Elasticsearch Cluster")]
+    App["Spring Boot Service"] -->|"1. ACID Write"| Postgres[("PostgreSQL Primary")]
+    Postgres -->|"2. WAL Stream"| Debezium["Debezium CDC"]
+    Debezium -->|"3. Ordered Events"| Kafka["Kafka Topic: 'db.products'"]
+    Kafka -->|"4. Batch Consume"| Worker["Indexer Consumer"]
+    Worker -->|"5. _bulk Upsert"| ES[("Elasticsearch Cluster")]
 ```
 
-1. The Spring Boot application writes strictly to PostgreSQL within a standard ACID transaction.
-2. PostgreSQL writes the row modifications to its append-only **Write-Ahead Log (WAL)**.
-3. **Debezium** tails the PostgreSQL WAL stream asynchronously and publishes change events (insert, update, delete) to an **Apache Kafka** topic.
-4. An Elasticsearch indexer worker consumes from Kafka and batches updates directly into Elasticsearch via the `_bulk` API.
-5. If Elasticsearch or the worker crashes, Kafka retains the offset. Once recovered, the worker resumes exactly where it left off, ensuring eventual consistency without data loss.
+- **Change Data Capture (Debezium + Kafka)**: Debezium tails PostgreSQL's Write-Ahead Log (WAL) and publishes ordered row changes to Kafka. A consumer reads batches of events and pushes them to Elasticsearch via the `_bulk` API using the primary key as document ID (making retries idempotent).
+- **Transactional Outbox**: If you do not run Debezium, write an outbox row in the same PostgreSQL transaction as the domain change, then have a lightweight poller batch-publish outbox events to Elasticsearch (or Kafka) and mark them processed.
 
----
+Either way, if Elasticsearch goes down for maintenance or a reindex, PostgreSQL stays completely unaffected and the consumer catches up cleanly once the cluster returns.
 
-## Senior Engineer Interview Crucible
+## Practical Questions
 
-### What is the fundamental difference between `text` and `keyword` field types in Elasticsearch, and what happens under the hood if you run an aggregation on a `text` field?
+### What is the difference between `text` and `keyword` fields, and why does aggregating on a `text` field fail by default?
 
-The `text` field type is designed for full-text search. During ingestion, its contents pass through the text analysis pipeline (character filters, tokenizer, token filters) to produce individual stemmed terms stored in an inverted index. Because the text is split into terms, you cannot perform exact matching or range comparisons.
+A `text` field runs through an analyzer at index time so full-text queries can match stemmed, lowercased words in the inverted index. It does not store Doc Values (disk-backed columnar values). A `keyword` field skips analysis and stores the exact string in both the inverted index and Doc Values, making it fast for exact filters, sorting, and aggregations. Running a `terms` aggregation on a `text` field fails with `Fielddata is disabled on text fields by default` because computing buckets over an analyzed field would require un-inverting the inverted index into JVM heap memory (`fielddata`), which causes severe GC pressure and OOM crashes. Map fields that need both search and aggregations as `@MultiField`.
 
-The `keyword` field type bypasses analysis. It is stored as an exact, unsegmented string in both the inverted index and **Doc Values** (a columnar, disk-backed data structure). It is optimized for exact filtering, sorting, and aggregations.
+### Why should an autocomplete field using `edge_ngram` define a separate `search_analyzer`?
 
-If you attempt to run an aggregation on a `text` field, Elasticsearch by default throws an exception: `Fielddata is disabled on text fields by default`. Because `text` fields lack doc values, computing aggregations requires loading the entire inverted index into heap memory as an un-inverted data structure called **Fielddata**. In production, enabling fielddata on large text fields causes severe JVM heap exhaustion, massive garbage collection pauses, and cluster instability.
+At index time, `edge_ngram` turns `"keyboard"` into `["ke", "key", "keyb", "keybo", "keyboa", "keyboar", "keyboard"]`. If you used the same analyzer at search time, a user typing `"keyb"` would generate `["ke", "key", "keyb"]`, causing documents containing `"kettle"` or `"kernel"` (which share `"ke"`) to match. Setting a plain `standard` + `lowercase` `search_analyzer` searches for the exact prefix `"keyb"` directly in the inverted index.
 
----
+### How does Elasticsearch handle document updates and deletions if Lucene segments are immutable?
 
-### Explain why Lucene segments are immutable. How does Elasticsearch perform document updates or deletions, and what is segment merging?
+Deletions append the document ID to a `.del` tombstone bitmap associated with that segment, and search queries filter out tombstoned IDs at read time. Updates perform a soft delete of the old document in `.del` and index the updated version as a new document in the in-memory buffer, which becomes searchable on the next refresh cycle (default 1 second). Background segment merges later combine smaller segments into larger ones and physically discard tombstoned documents.
 
-Lucene segments are immutable to enable lock-free concurrent searches and leverage the operating system's filesystem page cache without invalidation overhead.
+### Why is `BulkResponse.errors()` important to check even when the HTTP call succeeds?
 
-Because segments cannot be changed:
-- **Deletions** are handled by writing the document ID to a separate `.del` tombstone bitmap file. During searches, matching documents that exist in the `.del` bitmap are filtered out of the results.
-- **Updates** are implemented as a soft delete followed by an insert: the existing document is flagged in the `.del` bitmap, and the updated version is indexed as a new document in a newly created segment.
-
-As small segments and deleted tombstones accumulate, Lucene's background **Segment Merge** process automatically merges multiple small segments into a single larger segment. During this merge, documents marked as deleted are permanently discarded, reclaiming disk space and reducing the number of segments queried during searches.
-
----
-
-### Why is the dual-write pattern (`save` to DB then `save` to Elasticsearch) an anti-pattern in distributed systems, and what is the standard production remedy?
-
-Dual-writing lacks atomic distributed transaction guarantees. If the database transaction commits but the network call to Elasticsearch fails, the two stores diverge permanently. Conversely, if Elasticsearch succeeds and a downstream exception rolls back the database transaction, Elasticsearch contains a phantom record. Furthermore, concurrent updates can arrive out of order at Elasticsearch due to network latency, overwriting fresher data with stale data.
-
-The production remedy is **Change Data Capture (CDC)** or the **Transactional Outbox Pattern**:
-1. The application writes only to the database, ensuring ACID atomicity.
-2. Changes are captured directly from the database's Write-Ahead Log (WAL) via tools like **Debezium**, or by polling a dedicated outbox table.
-3. Change events are published to an event streaming platform (e.g., Apache Kafka), where dedicated consumer workers batch updates into Elasticsearch using idempotent operations. This decouples the operational database from the search engine and guarantees eventual consistency.
-
----
-
-### Walk through the BM25 algorithm. How does it improve upon traditional TF-IDF, particularly regarding term saturation and document length?
-
-Traditional TF-IDF multiplies Term Frequency (how often a term appears in a document) by Inverse Document Frequency (how rare the term is across the entire index). Its primary flaw is that Term Frequency grows linearly: a document containing a term 100 times scores substantially higher than one containing it 10 times, making it vulnerable to keyword stuffing.
-
-Okapi BM25 introduces two major improvements:
-
-1. **Term Frequency Saturation:** BM25 uses a hyperbolic curve with a configurable parameter `k1` (usually 1.2). As term frequency increases, the score gain diminishes and asymptotically approaches a ceiling. An occurrence count of 20 yields roughly the same relevance contribution as an occurrence count of 100.
-2. **Document Length Normalization:** Long documents naturally contain more words and thus have a higher probability of matching query terms by chance. BM25 divides the term frequency by a factor proportional to the document's length relative to the average document length in the index, controlled by parameter `b` (usually 0.75). Shorter, more focused documents receive higher scores than long, rambling documents with the same term count.
-
+Elasticsearch's `_bulk` endpoint returns HTTP `200 OK` as long as the bulk request itself was parsed and executed, even if individual items inside the batch failed due to mapping conflicts, version conflicts, or malformed fields. If your indexer only catches `IOException` or `ElasticsearchException`, partial indexing failures go silently unnoticed and your search index drifts out of sync with PostgreSQL.

@@ -1,48 +1,41 @@
 ---
 title: "Behavioral Patterns"
-description: "Master the Gang of Four behavioral patterns in modern Java 21: Strategy, Observer, Command, State, and Template Method. Learn state machine design, event buses, and sealed pattern matching."
+description: "How to structure runtime behavior and object communication in Java 21 using Strategy, Observer, Command, State, and Template Method, including where lambdas replace classic class hierarchies."
 category: "level-6"
 date: "2026-10-29T10:00:00Z"
 ---
 
-If creational patterns govern how objects are born, and structural patterns define their physical anatomy, **behavioral patterns** orchestrate how objects communicate, make decisions, and distribute control flow at runtime.
+Creational patterns control how objects get constructed, and structural patterns shape how they are composed. Behavioral patterns deal with what happens once those objects are alive: how they make decisions, notify each other of state changes, and pass control around at runtime.
 
-Without behavioral patterns, enterprise code rapidly degrades into procedural sprawl:
-- A single 1,000-line method filled with 15 nested `if-else` and `switch` blocks inspecting internal object flags.
-- Tightly coupled components where changing how an order is taxed forces changes to how it is shipped and archived.
-- Fire-and-forget callback chains that leak memory because listeners are never garbage collected.
+In Java codebases that grow without these patterns, control flow usually piles up in a few familiar ways. You end up with a 500-line service method full of `if-else` chains checking status enums and carrier strings, or a checkout workflow that directly calls email, inventory, and analytics services in a single rigid sequence. Adding one new requirement forces you to edit code that already works.
 
-Behavioral patterns decouple the **sender of a request** from the **receiver of the request**, and separate **what** needs to be done from **how** it is executed.
+Modern Java changes how you implement several of these Gang of Four patterns. Lambdas and functional interfaces remove most of the class boilerplate that Strategy, Observer, and simple Commands used to require in Java 5. At the same time, State machines and Template Method workflows still benefit from explicit types, and Java 21's sealed interfaces and pattern matching make state transitions much safer than they used to be.
 
 ```mermaid
 flowchart TD
-    subgraph "Behavioral Coordination Matrix"
-        Req["Select Runtime Behavior"] --> Q1{"Interchangeable Algorithm?"}
-        
-        Q1 -->|"Yes"| S["Strategy (Dynamic Policies / Functional Interfaces)"]
-        Q1 -->|"No"| Q2{"1-to-Many Event Notification?"}
-        
-        Q2 -->|"Yes"| O["Observer (Event Buses / Flow API)"]
-        Q2 -->|"No"| Q3{"Encapsulate Action for Queue / Undo?"}
-        
-        Q3 -->|"Yes"| C["Command (Task Queues / CQRS / Compensating Sagas)"]
-        Q3 -->|"No"| Q4{"Behavior Varies with Internal State?"}
-        
-        Q4 -->|"Yes"| ST["State (Finite State Machine / Sealed Records)"]
-        Q4 -->|"No"| TM["Template Method (Stable Algorithm Skeleton)"]
-    end
+    Req["Need to organize runtime behavior"] --> Q1{"Swap an algorithm dynamically?"}
+
+    Q1 -->|"Yes"| S["Strategy (Functional interface or DI beans)"]
+    Q1 -->|"No"| Q2{"Notify multiple listeners of events?"}
+
+    Q2 -->|"Yes"| O["Observer (Event bus, listeners, Flow API)"]
+    Q2 -->|"No"| Q3{"Queue, log, or undo an action?"}
+
+    Q3 -->|"Yes"| C["Command (Runnable or stateful command objects)"]
+    Q3 -->|"No"| Q4{"Does behavior depend on lifecycle state?"}
+
+    Q4 -->|"Yes"| ST["State (Sealed interfaces and switch or state classes)"]
+    Q4 -->|"No"| TM["Template Method (Fixed workflow with hooks)"]
 ```
 
----
+## Strategy: Swapping Algorithms Without Branch Sprawl
 
-## Strategy: Decoupling Algorithms from Workflows
+The Strategy pattern encapsulates a family of interchangeable algorithms behind a common contract so the calling code does not need to know which variant it is running.
 
-> *"Define a family of algorithms, encapsulate each one, and make them interchangeable. Strategy lets the algorithm vary independently from clients that use it."* — Gang of Four
-
-In traditional code, varying an algorithm results in sprawling conditional statements:
+Without Strategy, code that varies by policy tends to accumulate conditional branches every time the business adds a new rule:
 
 ```java
-// CODE SMELL: Violates Open/Closed Principle
+// Hard to extend: every new carrier forces edits to this method
 public BigDecimal calculateShipping(Order order, String carrier) {
     if ("FEDEX".equalsIgnoreCase(carrier)) {
         return calculateFedExRates(order);
@@ -51,18 +44,17 @@ public BigDecimal calculateShipping(Order order, String carrier) {
     } else if ("DHL".equalsIgnoreCase(carrier)) {
         return calculateDhlRates(order);
     }
-    throw new IllegalArgumentException("Unknown carrier");
+    throw new IllegalArgumentException("Unknown carrier: " + carrier);
 }
 ```
 
-The **Strategy** pattern extracts each algorithm into its own class implementing a common interface.
+### Functional Strategies With Lambdas
 
-### Modern Java 21: Functional Strategies and Lambdas
-
-In modern Java, you do not always need a verbose hierarchy of strategy classes. Because the strategy interface is usually a single-method `@FunctionalInterface`, you can pass lambdas and method references directly:
+In older Java, extracting each pricing or shipping rule meant writing a separate concrete class for every policy, even when the rule was three lines of math. Because a strategy contract usually has a single abstract method, a `@FunctionalInterface` lets callers pass lambdas or method references directly:
 
 ```java
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Objects;
 
 @FunctionalInterface
@@ -78,73 +70,105 @@ public class OrderCheckout {
     }
 
     public BigDecimal process(BigDecimal basePrice) {
-        return pricingStrategy.computeTotal(basePrice);
+        return pricingStrategy.computeTotal(basePrice).setScale(2, RoundingMode.HALF_UP);
     }
 
     public static void main(String[] args) {
-        // Strategy 1: Regular pricing (Pass-through lambda)
-        OrderCheckout regular = new OrderCheckout(price -> price);
+        PricingStrategy regular = price -> price;
+        PricingStrategy seasonalDiscount = price -> price.multiply(new BigDecimal("0.80"));
+        PricingStrategy vipFixedOff = price ->
+            price.subtract(new BigDecimal("15.00")).max(BigDecimal.ZERO);
 
-        // Strategy 2: Black Friday 20% discount strategy
-        OrderCheckout blackFriday = new OrderCheckout(price -> 
-            price.multiply(BigDecimal.valueOf(0.80)));
+        BigDecimal cartValue = new BigDecimal("100.00");
 
-        // Strategy 3: VIP Member fixed fee reduction
-        OrderCheckout vip = new OrderCheckout(price -> 
-            price.subtract(BigDecimal.valueOf(15.00)).max(BigDecimal.ZERO));
-
-        BigDecimal cartValue = BigDecimal.valueOf(100.00);
-        System.out.println("Regular: " + regular.process(cartValue));
-        System.out.println("Black Friday: " + blackFriday.process(cartValue));
-        System.out.println("VIP: " + vip.process(cartValue));
+        System.out.println("Regular: " + new OrderCheckout(regular).process(cartValue));
+        System.out.println("Seasonal: " + new OrderCheckout(seasonalDiscount).process(cartValue));
+        System.out.println("VIP: " + new OrderCheckout(vipFixedOff).process(cartValue));
     }
 }
 ```
 
-When a strategy requires rich state, dependencies (such as an external tax API), or complex configuration, promote it to a dedicated concrete class managed via Spring Dependency Injection.
+### When a Strategy Should Still Be a Class
 
----
+Lambdas work well for stateless formulas, comparators (`Comparator.comparing(...)`), and small policies. Once a strategy needs injected collaborators (an HTTP client for live FedEx quotes, a rate table from Redis, or retry configuration), promote it to a concrete class.
+
+In Spring or plain Java, a common pattern is pairing named strategy implementations with a lookup map so selection happens cleanly at runtime without an `if-else` chain:
+
+```java
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+public interface ShippingRateStrategy {
+    String carrierCode();
+    BigDecimal quote(BigDecimal weightKg, String destinationZip);
+}
+
+public class ShippingCalculator {
+    private final Map<String, ShippingRateStrategy> strategiesByCarrier;
+
+    public ShippingCalculator(List<ShippingRateStrategy> strategies) {
+        this.strategiesByCarrier = strategies.stream()
+            .collect(Collectors.toUnmodifiableMap(
+                s -> s.carrierCode().toUpperCase(),
+                Function.identity()
+            ));
+    }
+
+    public BigDecimal calculate(String carrier, BigDecimal weightKg, String destinationZip) {
+        ShippingRateStrategy strategy = strategiesByCarrier.get(carrier.toUpperCase());
+        if (strategy == null) {
+            throw new IllegalArgumentException("Unsupported carrier: " + carrier);
+        }
+        return strategy.quote(weightKg, destinationZip);
+    }
+}
+```
+
+Adding a new carrier now means registering a new `ShippingRateStrategy` bean or passing another instance into the constructor. `ShippingCalculator` never changes.
 
 ## Observer: Decoupled Event Notification
 
-> *"Define a one-to-many dependency between objects so that when one object changes state, all its dependents are notified and updated automatically."* — Gang of Four
-
-The Observer pattern is the foundation of event-driven architecture, UI toolkits, Spring Application Events, and reactive message streaming.
-
-A **Subject (Publisher)** maintains an internal registry of **Observers (Subscribers)**. When a domain event occurs (such as `OrderPlacedEvent`), the publisher broadcasts the event to all registered observers without knowing their concrete identities.
+The Observer pattern sets up a one-to-many notification relationship. A publisher (historically called the Subject) keeps track of interested subscribers (Observers). When something meaningful happens, the publisher notifies every registered subscriber without knowing their concrete types or what they do with the event.
 
 ```mermaid
 flowchart TD
-    Subject["OrderPlacementService (Subject)"]
-    
+    Subject["OrderEventPublisher (Subject)"]
+
     subgraph "Registered Observers"
         O1["InventoryReservationListener"]
-        O2["CustomerEmailNotificationListener"]
-        O3["FraudDetectionAnalyticsListener"]
+        O2["CustomerEmailListener"]
+        O3["AnalyticsListener"]
     end
 
-    Subject -->|"1. notifyObservers(event)"| O1
-    Subject -->|"2. notifyObservers(event)"| O2
-    Subject -->|"3. notifyObservers(event)"| O3
+    Subject -->|"1. notify (OrderPlacedEvent)"| O1
+    Subject -->|"2. notify (OrderPlacedEvent)"| O2
+    Subject -->|"3. notify (OrderPlacedEvent)"| O3
 ```
 
-### The Lapsed Listener Memory Leak
+Because an observer interface usually has one callback method (`onEvent(T event)`), Java lambdas remove the need for anonymous inner classes when registering lightweight listeners. Java's standard library also offers `java.util.concurrent.Flow` (introduced in Java 9) when you need asynchronous streams with backpressure, and Spring provides `ApplicationEventPublisher` with `@EventListener` and `@TransactionalEventListener` for application-wide events.
 
-The most dangerous production pitfall in the Observer pattern is the **Lapsed Listener Problem**.
+### The Lapsed Listener Problem
 
-If a long-lived publisher holds a strong reference to a short-lived subscriber, the Java Garbage Collector cannot reclaim the subscriber, even if the application has discarded all other references to it! In high-throughput systems, this causes continuous heap bloat and eventual out-of-memory crashes.
+The most common bug in hand-rolled Observer implementations is a memory leak known as the Lapsed Listener Problem.
 
-### Production Implementation with Safe Registration
+Suppose a singleton event publisher holds a `List<OrderListener>`. A short-lived component (a UI panel, a per-session handler, or a temporary worker) subscribes to that publisher and later goes out of scope without unsubscribing. Because the publisher still holds a strong reference to the listener, the garbage collector cannot reclaim it. Over hours or days in a busy JVM, those unreachable listeners accumulate on the heap.
 
-Use an `AutoCloseable` subscription token and `CopyOnWriteArrayList` to ensure thread-safe registration and deterministic unsubscription:
+### Thread-Safe Publisher With Explicit Unsubscription
+
+A clean way to prevent leaked listeners is to return an `AutoCloseable` subscription handle from `subscribe(...)` and store listeners in a `CopyOnWriteArrayList`. `CopyOnWriteArrayList` makes iteration safe if one listener subscribes or unsubscribes during a broadcast, which is a common trade-off when reads (event publications) far outnumber writes (subscriptions).
 
 ```java
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class OrderEventPublisher {
-    public record OrderPlacedEvent(String orderId, String customerEmail, double amount) {}
+
+    public record OrderPlacedEvent(String orderId, String customerEmail, BigDecimal amount) {}
 
     @FunctionalInterface
     public interface OrderListener {
@@ -153,78 +177,97 @@ public class OrderEventPublisher {
 
     public interface Subscription extends AutoCloseable {
         @Override
-        void close(); // Guarantees unsubscription
+        void close();
     }
 
-    // Thread-safe list prevents ConcurrentModificationException during broadcast
     private final List<OrderListener> listeners = new CopyOnWriteArrayList<>();
 
     public Subscription subscribe(OrderListener listener) {
-        Objects.requireNonNull(listener);
+        Objects.requireNonNull(listener, "Listener must not be null");
         listeners.add(listener);
-        
-        // Return a deterministic unsubscription handle
         return () -> listeners.remove(listener);
     }
 
     public void publish(OrderPlacedEvent event) {
+        Objects.requireNonNull(event, "Event must not be null");
         for (OrderListener listener : listeners) {
             try {
                 listener.onOrderPlaced(event);
-            } catch (Exception ex) {
-                // Defensive isolation: One failing listener must NEVER prevent other listeners from running!
-                System.err.printf("[ERROR] Listener %s failed: %s%n", 
-                    listener.getClass().getSimpleName(), ex.getMessage());
+            } catch (RuntimeException ex) {
+                // Isolate failures so one broken listener does not block the rest
+                System.err.printf("Listener %s failed for order %s: %s%n",
+                    listener.getClass().getSimpleName(), event.orderId(), ex.getMessage());
             }
         }
     }
 }
 ```
 
-### Using Subscription Tokens Cleanly
+Callers can pass a lambda and manage its lifetime deterministically with `try-with-resources`, or keep the `Subscription` handle and call `close()` during component shutdown:
 
 ```java
+import java.math.BigDecimal;
+
 public class ObserverDemo {
     public static void main(String[] args) {
         OrderEventPublisher publisher = new OrderEventPublisher();
 
-        // Register a temporary analytics listener using try-with-resources
-        try (var sub = publisher.subscribe(event -> 
-                System.out.println("Analytics: Captured order " + event.orderId()))) {
-            
-            publisher.publish(new OrderEventPublisher.OrderPlacedEvent("ORD-101", "alice@test.com", 250.0));
-        } // Automatically unsubscribes here!
+        // Long-lived listener
+        OrderEventPublisher.Subscription auditSub = publisher.subscribe(
+            event -> System.out.println("Audit log: " + event.orderId())
+        );
 
-        // Subsequent publish does NOT invoke the analytics listener; zero memory leak!
-        publisher.publish(new OrderEventPublisher.OrderPlacedEvent("ORD-102", "bob@test.com", 80.0));
+        // Short-lived listener scoped to a block
+        try (var tempAnalyticsSub = publisher.subscribe(
+                event -> System.out.println("Temp analytics: " + event.amount()))) {
+            publisher.publish(new OrderEventPublisher.OrderPlacedEvent(
+                "ORD-101", "alice@example.com", new BigDecimal("250.00")));
+        }
+
+        // Only the audit listener receives this event; tempAnalyticsSub was removed
+        publisher.publish(new OrderEventPublisher.OrderPlacedEvent(
+            "ORD-102", "bob@example.com", new BigDecimal("80.00")));
+
+        auditSub.close();
     }
 }
 ```
 
----
+Note one important detail about synchronous observers: `publish(...)` runs every listener on the caller's thread. If an email listener blocks on an external SMTP server for five seconds, checkout slows down by five seconds too. For slow or failure-prone side effects, hand the work off to an executor, a message queue, or an asynchronous listener.
 
-## Command: Encapsulating Requests as Objects
+## Command: Modeling Operations as Objects
 
-> *"Encapsulate a request as an object, thereby letting you parameterize clients with different requests, queue or log requests, and support undoable operations."* — Gang of Four
+The Command pattern turns an action into a standalone object containing everything needed to run it later. That separation lets you queue commands on a thread pool, log them for auditing, retry them after transient failures, or maintain an undo stack.
 
-The Command pattern decouples the object that invokes an operation from the objects that know how to execute it. It models operations as first-class citizens.
-
-The pattern relies on four collaborators:
-1. **Command Interface**: Declares `execute()` and optional `undo()`.
-2. **Concrete Command**: Binds a specific action to a Receiver.
-3. **Receiver**: The worker that executes the actual business logic (e.g., Database, FileSystem, PaymentApi).
-4. **Invoker**: Holds commands and coordinates their execution history, queueing, or scheduling.
+Four roles participate in a classic Command design:
+- **Command**: The contract declaring `execute()` (and `undo()` if reversible).
+- **Concrete Command**: Captures the parameters and target receiver for one specific action.
+- **Receiver**: The domain object or service that performs the real work.
+- **Invoker**: Schedules, executes, or tracks history of commands without knowing their details.
 
 ```mermaid
 flowchart LR
-    Client["Client Code"] --> Invoker["CommandManager (Invoker)"]
-    Invoker -->|pushes to history & executes| Command["<<interface>><br/>Command"]
-    
-    ConcreteCmd["TransferFundsCommand"] -.->|implements| Command
-    ConcreteCmd -->|calls debit/credit on| Receiver["BankAccount (Receiver)"]
+    Client["Client Code"] --> Invoker["TransactionManager (Invoker)"]
+    Invoker -->|"executes and pushes to stack"| Command["AccountCommand (Interface)"]
+
+    ConcreteCmd["TransferCommand"] -.->|"implements"| Command
+    ConcreteCmd -->|"calls debit and credit"| Receiver["BankAccount (Receiver)"]
 ```
 
-### Production Implementation: Undoable Transaction Ledger
+### When Lambdas Are Enough vs When You Need Command Objects
+
+If you only need deferred execution (such as submitting tasks to an `ExecutorService` or scheduling callbacks), you do not need custom command classes. Java's `Runnable` and `Callable<V>` are already the Command pattern:
+
+```java
+ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+executor.submit(() -> invoiceService.generatePdf(orderId));
+```
+
+A dedicated command class (or record) becomes worthwhile when the operation carries extra responsibilities that a single lambda cannot express cleanly: undo state, idempotency keys, retry counts, serialization to a database or queue, or structured audit logs.
+
+### Stateful Undoable Command Example
+
+Here is an in-memory ledger where each transfer encapsulates both execution and rollback:
 
 ```java
 import java.math.BigDecimal;
@@ -232,17 +275,19 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Objects;
 
-// 1. The Receiver: Owns the domain business logic
 public class BankAccount {
     private final String accountId;
     private BigDecimal balance;
 
     public BankAccount(String accountId, BigDecimal initialBalance) {
-        this.accountId = accountId;
-        this.balance = initialBalance;
+        this.accountId = Objects.requireNonNull(accountId);
+        this.balance = Objects.requireNonNull(initialBalance);
     }
 
     public void debit(BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Debit amount must be positive");
+        }
         if (balance.compareTo(amount) < 0) {
             throw new IllegalStateException("Insufficient funds in account " + accountId);
         }
@@ -250,6 +295,9 @@ public class BankAccount {
     }
 
     public void credit(BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Credit amount must be positive");
+        }
         balance = balance.add(amount);
     }
 
@@ -257,13 +305,11 @@ public class BankAccount {
     public String getAccountId() { return accountId; }
 }
 
-// 2. The Command Interface
 public interface AccountCommand {
     void execute();
     void undo();
 }
 
-// 3. Concrete Command: Encapsulates state needed for execution AND rollback
 public class TransferCommand implements AccountCommand {
     private final BankAccount fromAccount;
     private final BankAccount toAccount;
@@ -278,6 +324,9 @@ public class TransferCommand implements AccountCommand {
 
     @Override
     public void execute() {
+        if (executed) {
+            throw new IllegalStateException("TransferCommand has already been executed");
+        }
         fromAccount.debit(amount);
         toAccount.credit(amount);
         executed = true;
@@ -285,61 +334,57 @@ public class TransferCommand implements AccountCommand {
 
     @Override
     public void undo() {
-        if (!executed) throw new IllegalStateException("Cannot undo a command that was never executed");
+        if (!executed) {
+            throw new IllegalStateException("Cannot undo a command that was not executed");
+        }
         toAccount.debit(amount);
         fromAccount.credit(amount);
         executed = false;
     }
 }
 
-// 4. The Invoker: Manages execution pipeline and undo history stack
 public class TransactionManager {
     private final Deque<AccountCommand> history = new ArrayDeque<>();
 
-    public void executeTransaction(AccountCommand command) {
+    public void execute(AccountCommand command) {
         command.execute();
         history.push(command);
     }
 
     public void rollbackLast() {
         if (!history.isEmpty()) {
-            AccountCommand lastCommand = history.pop();
-            lastCommand.undo();
+            history.pop().undo();
         }
     }
 }
 ```
 
 > [!WARNING]
-> **Undo vs Compensating Transactions**:
-> You can easily undo state inside JVM memory. But you **cannot** physically undo an external network I/O call (such as a sent email, an SMS notification, or a charge processed through an external payment gateway). For distributed actions, use the **Saga Pattern**: execute a new *compensating transaction* (e.g., issuing an explicit refund) rather than pretending you can turn back time.
+> **In-memory undo does not work for external side effects.** You can reverse a field update in JVM memory, but you cannot un-send an email or un-charge a credit card at a remote payment provider. Across service boundaries, model reversals as explicit compensating actions (such as issuing a refund transaction) rather than pretending an external call can be undone.
 
----
+## State: Explicit Lifecycle Transitions
 
-## State: Finite State Machines without Switch Spaghetti
-
-> *"Allow an object to alter its behavior when its internal state changes. The object will appear to change its class."* — Gang of Four
-
-When an entity transitions through multiple lifecycles (e.g., `Draft -> Submitted -> Approved -> Shipped -> Delivered`), junior engineers write methods like this:
+Objects with lifecycles (orders, support tickets, payment authorizations, network connections) behave differently depending on their current state. A naive implementation stores an enum field and scatters state checks across every method:
 
 ```java
-// STATE MACHINE SPAGHETTI:
 public void approveOrder() {
     if (this.status == Status.SHIPPED || this.status == Status.DELIVERED) {
-        throw new IllegalStateException("Already finished!");
+        throw new IllegalStateException("Order is already finalized");
     } else if (this.status == Status.DRAFT) {
-        throw new IllegalStateException("Must submit before approving!");
+        throw new IllegalStateException("Submit the order before approving");
     } else if (this.status == Status.SUBMITTED) {
         this.status = Status.APPROVED;
     }
 }
 ```
 
-Every new status adds dozens of checks across every method. The **State** pattern encapsulates each state as an independent class, delegating actions to the active state object.
+When you have six states and eight operations, those checks quickly drift out of sync. Adding a seventh state means hunting through every method in the class to make sure nothing was missed.
 
-### Modern Java 21: Sealed Interfaces & Pattern Matching for FSMs
+Unlike Strategy, State does not collapse cleanly into lambdas because each state typically carries state-specific data (a `Paid` order has a `transactionId`; a `Shipped` order has a `trackingNumber`; a `Created` order has neither) and governs which transitions are legal.
 
-In modern Java 21, you can implement bulletproof Finite State Machines using **Sealed Interfaces** and **Pattern Matching**. The Java compiler guarantees that all possible states are exhaustively checked without needing fallback defaults!
+### Modern Java 21: Sealed Interfaces and Pattern Matching
+
+Java 21 gives you a clean way to build finite state machines using a `sealed interface` of `record` states and exhaustive `switch` expressions. Each state holds only the data that actually exists in that state, eliminating nullable fields that only make sense halfway through an object's lifecycle.
 
 ```mermaid
 flowchart LR
@@ -350,176 +395,227 @@ flowchart LR
 ```
 
 ```java
-public class OrderFsm {
-    // 1. Sealed Hierarchy: Closed set of valid states
-    public sealed interface OrderState 
-        permits OrderState.Created, OrderState.Paid, OrderState.Shipped, OrderState.Cancelled {}
+import java.util.Objects;
 
-    public record Created(String orderId) implements OrderState {}
-    public record Paid(String orderId, String transactionId) implements OrderState {}
-    public record Shipped(String orderId, String trackingNumber) implements OrderState {}
-    public record Cancelled(String orderId, String reason) implements OrderState {}
+public class OrderWorkflow {
+
+    public sealed interface OrderState
+        permits OrderState.Created, OrderState.Paid, OrderState.Shipped,
+                OrderState.Cancelled, OrderState.Refunded {
+
+        String orderId();
+
+        record Created(String orderId) implements OrderState {}
+        record Paid(String orderId, String transactionId) implements OrderState {}
+        record Shipped(String orderId, String transactionId, String trackingNumber) implements OrderState {}
+        record Cancelled(String orderId, String reason) implements OrderState {}
+        record Refunded(String orderId, String transactionId, String reason) implements OrderState {}
+    }
 
     private OrderState currentState;
 
-    public OrderFsm(String orderId) {
-        this.currentState = new Created(orderId);
+    public OrderWorkflow(String orderId) {
+        this.currentState = new OrderState.Created(Objects.requireNonNull(orderId));
     }
 
-    // 2. State-driven Transitions with Compiler-Enforced Exhaustiveness
-    public void pay(String txId) {
+    public void pay(String transactionId) {
+        Objects.requireNonNull(transactionId);
         currentState = switch (currentState) {
-            case Created c -> new Paid(c.orderId(), txId);
-            case Paid p -> throw new IllegalStateException("Order is already paid!");
-            case Shipped s -> throw new IllegalStateException("Cannot pay an order that is already shipped!");
-            case Cancelled c -> throw new IllegalStateException("Cannot pay a cancelled order!");
+            case OrderState.Created c -> new OrderState.Paid(c.orderId(), transactionId);
+            case OrderState.Paid p -> throw new IllegalStateException("Order is already paid");
+            case OrderState.Shipped s -> throw new IllegalStateException("Order is already shipped");
+            case OrderState.Cancelled c -> throw new IllegalStateException("Cannot pay a cancelled order");
+            case OrderState.Refunded r -> throw new IllegalStateException("Cannot pay a refunded order");
         };
     }
 
-    public void ship(String trackingNum) {
+    public void ship(String trackingNumber) {
+        Objects.requireNonNull(trackingNumber);
         currentState = switch (currentState) {
-            case Paid p -> new Shipped(p.orderId(), trackingNum);
-            case Created c -> throw new IllegalStateException("Cannot ship an unpaid order!");
-            case Shipped s -> throw new IllegalStateException("Order is already shipped!");
-            case Cancelled c -> throw new IllegalStateException("Cannot ship a cancelled order!");
+            case OrderState.Paid p -> new OrderState.Shipped(p.orderId(), p.transactionId(), trackingNumber);
+            case OrderState.Created c -> throw new IllegalStateException("Cannot ship an unpaid order");
+            case OrderState.Shipped s -> throw new IllegalStateException("Order is already shipped");
+            case OrderState.Cancelled c -> throw new IllegalStateException("Cannot ship a cancelled order");
+            case OrderState.Refunded r -> throw new IllegalStateException("Cannot ship a refunded order");
         };
     }
 
-    public OrderState getCurrentState() { return currentState; }
+    public void cancel(String reason) {
+        Objects.requireNonNull(reason);
+        currentState = switch (currentState) {
+            case OrderState.Created c -> new OrderState.Cancelled(c.orderId(), reason);
+            case OrderState.Paid p -> throw new IllegalStateException("Use refund() for a paid order");
+            case OrderState.Shipped s -> throw new IllegalStateException("Cannot cancel a shipped order");
+            case OrderState.Cancelled c -> throw new IllegalStateException("Order is already cancelled");
+            case OrderState.Refunded r -> throw new IllegalStateException("Order is already refunded");
+        };
+    }
+
+    public void refund(String reason) {
+        Objects.requireNonNull(reason);
+        currentState = switch (currentState) {
+            case OrderState.Paid p -> new OrderState.Refunded(p.orderId(), p.transactionId(), reason);
+            case OrderState.Created c -> throw new IllegalStateException("Cannot refund an unpaid order");
+            case OrderState.Shipped s -> throw new IllegalStateException("Shipped orders require a return first");
+            case OrderState.Cancelled c -> throw new IllegalStateException("Cannot refund a cancelled order");
+            case OrderState.Refunded r -> throw new IllegalStateException("Order is already refunded");
+        };
+    }
+
+    public OrderState getCurrentState() {
+        return currentState;
+    }
 }
 ```
 
-By leveraging Java 21 sealed types, invalid transitions are rejected explicitly, and adding a new state forces the compiler to flag every single `switch` in the codebase that needs to handle it.
+Because `OrderState` is sealed and none of the `switch` expressions have a `default` branch, adding a new state (say, `Delivered`) causes a compile error in every transition method until you decide explicitly what `pay`, `ship`, `cancel`, and `refund` should do for that state.
 
----
+When each state also carries heavy behavior of its own (dozens of lines of logic per state rather than simple transitions), the classic object-oriented State pattern (putting methods directly on the `OrderState` interface and implementing them in concrete state classes) keeps `OrderWorkflow` small and places each state's behavior next to its data.
 
-## Template Method: Invariant Workflows with Subclass Hooks
+## Template Method: Fixed Workflows With Extension Hooks
 
-> *"Define the skeleton of an algorithm in an operation, deferring some steps to subclasses. Template Method lets subclasses redefine certain steps of an algorithm without changing the algorithm's structure."* — Gang of Four
+Sometimes multiple workflows follow the exact same sequence of steps, and only a couple of steps vary. For example, every batch data importer in a system must authenticate, fetch raw data, verify the payload is non-empty, parse it into domain records, save the result, and write an audit log entry.
 
-The Template Method embodies the **Hollywood Principle**: *"Don't call us, we'll call you."*
-
-When multiple classes share a fixed, mandatory sequence of operations (such as data ingestion: `Authenticate -> Read -> Validate -> Parse -> Persist -> Audit`), you define the algorithm skeleton in a base class method marked **`final`**. Subclasses override specific hook methods to provide customized step logic.
+The Template Method pattern puts the fixed skeleton in a `final` method on an abstract base class and delegates the varying steps to `protected` hook methods. Subclasses cannot accidentally skip authentication or reorder the audit step because the skeleton method cannot be overridden.
 
 ```mermaid
 flowchart TD
-    Base["DataIngestionPipeline (Base Class)"]
-    Base -->|"1. authenticate() [final]"| S1["Step 1: Auth"]
-    Base -->|"2. extractData() [abstract hook]"| S2["Step 2: Extract (Subclass)"]
-    Base -->|"3. validate() [final]"| S3["Step 3: Invariant Validation"]
-    Base -->|"4. transform() [abstract hook]"| S4["Step 4: Transform (Subclass)"]
-    Base -->|"5. logAudit() [final]"| S5["Step 5: Audit Log"]
+    Base["DataIngestionPipeline (runPipeline final)"]
+    Base --> S1["1. authenticate (private)"]
+    S1 --> S2["2. extractRawData (protected abstract)"]
+    S2 --> S3["3. validateNonEmpty (private)"]
+    S3 --> S4["4. parseAndTransform (protected abstract)"]
+    S4 --> S5["5. persistEntities (protected abstract)"]
+    S5 --> S6["6. logAuditTrail (private)"]
 ```
 
-### Production Implementation: Safe Ingestion Pipeline
+### Implementing a Template Method Pipeline
 
 ```java
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
 public abstract class DataIngestionPipeline<T> {
-    // The Template Method: Marked final to prevent subclasses from altering the sequence!
+
+    // Marked final so subclasses cannot bypass validation or auditing
     public final void runPipeline(String sourceUri) {
+        Objects.requireNonNull(sourceUri, "sourceUri must not be null");
         authenticate(sourceUri);
         byte[] rawBytes = extractRawData(sourceUri);
-        
-        if (rawBytes.length == 0) {
-            throw new IllegalArgumentException("Ingestion source is empty: " + sourceUri);
-        }
-
-        List<T> domainEntities = parseAndTransform(rawBytes);
-        persistEntities(domainEntities);
-        logAuditTrail(sourceUri, domainEntities.size());
+        validateNonEmpty(sourceUri, rawBytes);
+        List<T> records = parseAndTransform(rawBytes);
+        persistEntities(records);
+        logAuditTrail(sourceUri, records.size());
     }
 
-    // Invariant step 1
     private void authenticate(String uri) {
-        System.out.println("[AUTH] Verifying cryptographic credentials for: " + uri);
+        System.out.println("[AUTH] Checking credentials for " + uri);
     }
 
-    // Subclass hook step 2
+    private void validateNonEmpty(String uri, byte[] rawBytes) {
+        if (rawBytes == null || rawBytes.length == 0) {
+            throw new IllegalArgumentException("Ingestion source is empty: " + uri);
+        }
+    }
+
     protected abstract byte[] extractRawData(String uri);
-
-    // Subclass hook step 3
     protected abstract List<T> parseAndTransform(byte[] rawData);
-
-    // Subclass hook step 4
     protected abstract void persistEntities(List<T> entities);
 
-    // Invariant step 5
     private void logAuditTrail(String uri, int count) {
-        System.out.printf("[AUDIT] Successfully ingested %d records from %s%n", count, uri);
+        System.out.printf("[AUDIT] Ingested %d records from %s%n", count, uri);
+    }
+}
+
+public class CsvProductIngestionPipeline extends DataIngestionPipeline<String> {
+
+    @Override
+    protected byte[] extractRawData(String uri) {
+        // In production, read from S3, SFTP, or disk
+        return "SKU-100\nSKU-200\nSKU-300".getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Override
+    protected List<String> parseAndTransform(byte[] rawData) {
+        String content = new String(rawData, StandardCharsets.UTF_8);
+        return Arrays.stream(content.split("\\R"))
+            .filter(line -> !line.isBlank())
+            .toList();
+    }
+
+    @Override
+    protected void persistEntities(List<String> entities) {
+        System.out.println("Persisting products: " + entities);
     }
 }
 ```
 
-### The Constructor Antipattern in Template Method
+### Pitfall: Calling Overridable Methods From Constructors
 
-A catastrophic bug in Java occurs when an abstract base class invokes an overridable method inside its constructor:
+Inheritance introduces a subtle trap when writing abstract base classes. Never invoke an overridable method from a superclass constructor:
 
 ```java
-// SEVERE BUG IN TEMPLATE METHOD:
+// Bug: calling an overridable method during superclass construction
 public abstract class BaseService {
-    public BaseService() {
-        init(); // DANGEROUS! Calls overridden subclass method!
+    protected BaseService() {
+        init(); // Dispatches to the subclass before subclass fields are initialized
     }
 
     protected abstract void init();
 }
 
 public class DatabaseService extends BaseService {
-    private String connectionUrl = "jdbc:postgresql://localhost:5432/prod";
+    private final String connectionUrl = "jdbc:postgresql://localhost:5432/app";
 
     @Override
     protected void init() {
-        // Runs BEFORE connectionUrl is initialized!
-        System.out.println("Connecting to: " + connectionUrl.toUpperCase()); 
-        // THROWS NullPointerException because connectionUrl is null at this point!
+        // Throws NullPointerException: connectionUrl is still null here
+        System.out.println("Connecting to " + connectionUrl.toUpperCase());
     }
 }
 ```
 
-In Java, superclass constructors execute **before** subclass field initializers run. When `BaseService` calls `init()`, `DatabaseService.connectionUrl` has not been initialized yet and evaluates to `null`, causing an immediate `NullPointerException`!
+According to the Java Language Specification, superclass constructors finish before subclass field initializers and subclass constructors run. When `BaseService()` calls `init()`, dynamic dispatch invokes `DatabaseService.init()`, where `connectionUrl` still holds its default value of `null`.
 
 > [!CAUTION]
-> **Never call overridable methods inside a constructor**. Keep constructors purely for assigning final fields.
+> Keep superclass constructors limited to assigning fields and validating arguments. If initialization requires subclass behavior, provide an explicit `start()` or `initialize()` lifecycle method called after construction finishes.
 
----
+### Template Method vs Composition With Functional Hooks
 
-## Behavioral Patterns Comparison Matrix
+Template Method relies on inheritance, which locks subclasses into a single parent class and makes it harder to mix and match individual steps (for instance, reusing S3 extraction with both CSV and JSON parsers). In Java, if the hooks are small and independent, you can often replace the abstract base class with a `final` coordinator class that accepts functional interfaces (such as `Function<String, byte[]> extractor`, `Function<byte[], List<T>> parser`, and `Consumer<List<T>> persister`). Use inheritance-based Template Method when subclasses share protected helper utilities, stateful lifecycle hooks, or a framework contract like Spring's `OncePerRequestFilter`.
 
-| Pattern | Primary Intent | Modern Java 21 Mechanism |
+## Choosing the Right Pattern
+
+| Pattern | Core Problem Solved | Modern Java Implementation |
 | :--- | :--- | :--- |
-| **Strategy** | Swap algorithms dynamically without altering workflow. | Lambdas, `@FunctionalInterface`, Method References |
-| **Observer** | Broadcast state changes to multiple listeners without coupling. | `java.util.concurrent.Flow`, Spring Events, `CopyOnWriteArrayList` |
-| **Command** | Encapsulate operations as objects for queueing and undo. | `Runnable`, `Callable`, Records, CQRS command buses |
-| **State** | Vary behavior dynamically based on internal state transitions. | Sealed Interfaces + Pattern Matching `switch` |
-| **Template Method** | Define an immutable execution skeleton with subclass hooks. | Abstract base class with `final` template method |
+| **Strategy** | Swap an algorithm without branching in the caller | `@FunctionalInterface` and lambdas, or DI-managed classes in a lookup map |
+| **Observer** | Broadcast events to decoupled subscribers | Functional listeners with `AutoCloseable` handles, `CopyOnWriteArrayList`, Spring Events, `Flow` |
+| **Command** | Decouple invocation from execution; queue, audit, or undo | `Runnable`/`Callable` for simple tasks; dedicated classes/records when undo or metadata is needed |
+| **State** | Enforce valid transitions and state-dependent behavior | `sealed interface` + `record` states + exhaustive `switch`, or concrete state classes |
+| **Template Method** | Enforce a fixed multi-step workflow with customizable hooks | Abstract class with `final` template method, or a final coordinator taking functional hooks |
 
----
+## Interview Questions
 
-## Senior Engineer Interview Crucible
+### Strategy and State look almost identical in a UML diagram. How do they differ in practice?
 
-### Compare Strategy and State patterns: both share virtually identical class diagrams, so how do their intents and state transition ownership differ?
-While both patterns use composition and delegation to swap behavior at runtime, their architectural intents are completely distinct:
-1. **Strategy**: The client typically chooses and configures the strategy once (e.g., injecting a `PricingStrategy` at startup). Strategies are usually independent, stateless algorithms that know nothing about one another. The context rarely changes its own strategy during execution.
-2. **State**: The context transitions between different states dynamically during its operational lifecycle. Concrete state classes frequently know about each other and trigger transitions to the next state (e.g., `PaidState` transitions the context to `ShippedState`). The client interacts with the context, unaware of the internal state machine.
+Both rely on composition and delegation to vary behavior at runtime, so their class diagrams look nearly identical. The difference is intent and who drives the change.
 
-### What is the Lapsed Listener Problem in the Observer pattern, and how does weak referencing or explicit lifecycle unsubscription remediate it?
-The Lapsed Listener Problem occurs when a short-lived subscriber registers itself with a long-lived publisher (e.g., a singleton event bus). Because the publisher maintains a strong object reference to the subscriber in its listener list, the subscriber cannot be garbage collected even after the rest of the application has discarded it.
+With **Strategy**, the caller selects an algorithm (for example, injecting a `ShippingRateStrategy` or passing a `Comparator`) and the strategies do not know about one another. The context rarely switches its own strategy mid-operation. With **State**, the object moves through a lifecycle, and transitions depend on what state it is currently in. Either the context's transition methods or the state objects themselves decide the next valid state, while callers simply invoke domain operations like `pay()` or `ship()`.
 
-To remediate this:
-1. **Explicit Subscription Tokens**: Have `subscribe()` return an `AutoCloseable` or `Subscription` handle so callers can deterministically unregister inside `finally` or `try-with-resources`.
-2. **Weak References**: Store listeners inside `java.lang.ref.WeakReference` or a `WeakHashMap`. If no other strong references to the subscriber exist, the GC reclaims it, and the publisher drops the dead reference during the next broadcast cycle.
+### What causes the Lapsed Listener Problem in Observer, and how do you avoid it?
 
-### Why is calling an overridable method from an abstract base class constructor a dangerous antipattern in the Template Method pattern?
-In Java's object lifecycle specification, a superclass constructor must execute in full before the subclass constructor and subclass field initializers run. 
+It happens when a long-lived publisher keeps strong references to short-lived subscribers. Even after the rest of the application drops all references to a subscriber, the publisher's listener list keeps it reachable, so the garbage collector cannot reclaim it.
 
-If the base class constructor invokes an overridable hook method (`init()`), polymorphism resolves the call to the subclass's overridden implementation. Because the subclass fields have not yet been initialized by the JVM, any field access in the overridden method will read default uninitialized values (`null`, `0`, or `false`), frequently triggering unexpected `NullPointerException` or corrupting initialization state.
+There are two standard ways to prevent it. First, return an explicit `Subscription` handle (ideally `AutoCloseable`) from `subscribe(...)` so callers unsubscribe deterministically in `try-with-resources` or shutdown hooks. Second, if callers cannot reliably manage lifecycles, store listeners via `WeakReference` and prune cleared references during publication, though weak references do not work well with inline lambdas that have no other strong reference keeping them alive.
 
-### In modern Java 21, how do Sealed Interfaces paired with Pattern Matching in switch provide a compelling alternative to the traditional Gang of Four State pattern?
-The traditional Gang of Four State pattern requires creating a separate class for every single state, which distributes domain transition logic across dozens of files and makes visualizing the entire state machine difficult.
+### Why is calling an overridable method from a superclass constructor dangerous in Java?
 
-In Java 21, modeling states as records permitted by a **Sealed Interface** centralizes state transitions into concise, functional pattern matching `switch` expressions. 
+Java initializes objects top-down: the superclass constructor runs completely before the subclass's field initializers and constructor body execute. If the superclass constructor calls a non-final, non-private method that a subclass overrides, JVM dynamic dispatch invokes the subclass method while all subclass fields still hold default zero values (`null`, `0`, `false`). That commonly causes `NullPointerException` or silently corrupts invariants.
 
-The Java compiler enforces **exhaustiveness checking**: if a new state (e.g., `Refunded`) is added to the sealed interface, the compiler immediately flags an error on every single `switch` expression in the codebase that fails to handle the new state. This guarantees compile-time verification of your finite state machine without runtime type casts or class proliferation.
+### When do Java 21 sealed interfaces improve on the classic GoF State pattern, and when are classic state classes still better?
+
+Sealed interfaces paired with records and pattern matching `switch` shine when states hold different fields and you want all transition rules visible in one place with compiler-checked exhaustiveness. Adding a new state immediately flags every `switch` expression that has not been updated, so missing cases become compile errors instead of runtime surprises.
+
+Classic polymorphic state classes still make sense when each state has substantial, distinct behavior across many methods. Putting each state's logic into its own class avoids turning every method on the context into a huge `switch` block.

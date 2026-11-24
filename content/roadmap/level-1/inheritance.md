@@ -1,321 +1,399 @@
 ---
 title: "Inheritance"
-description: "Master the 'is-a' relationship: HotSpot heap layout for subclasses, constructor chaining mechanics, covariant return types, method overriding invariants, and the cosmic Object root."
+description: "Learn how Java inheritance works with extends, super constructor chaining, method overriding versus overloading, single inheritance rules, and the methods inherited from java.lang.Object."
 category: "level-1"
 date: "2026-06-21T10:00:00Z"
 ---
 
-Every developer remembers their first encounter with Object-Oriented Inheritance. It feels like magic. 
+When two classes share common state and behavior, duplicating the same fields and methods across both files quickly creates maintenance drift. Java's **inheritance** mechanism lets one class (the **subclass** or child) extend another class (the **superclass** or parent), inheriting its accessible fields and methods while adding or specializing behavior of its own.
 
-You write a base class with fifty lines of logic, write a child class with `extends`, and suddenly your child class inherits everything for free. You feel like you've discovered the ultimate secret of code reuse.
+Inheritance is genuinely useful when one type is a true specialization of another, such as `CheckingAccount` extending `BankAccount` or `FileNotFoundException` extending `IOException`. At the same time, overusing inheritance purely to share helper code produces deep, tangled hierarchies where a small change in a base class breaks subclasses unexpectedly. Knowing both how inheritance works mechanically and where its boundaries lie will keep your designs clean.
 
-Then, two years later, you inherit a production codebase with an inheritance tree six layers deep: `BaseEntity` extends `AuditableEntity` extends `TenantScopedEntity` extends `VersionedDomainModel` extends `AbstractOrder` extends `PurchaseOrder`. 
+## The `extends` Keyword and the "Is-A" Test
 
-A developer changes one line in `BaseEntity` to fix a logging quirk, and three completely unrelated billing modules fail in production.
+You declare an inheritance relationship in Java using `extends`:
 
-**Inheritance is the most powerful—and most dangerous—relationship in Object-Oriented design.**
+```java
+public class Vehicle {
+    private final String brand;
+    private int speedKmh;
 
-When applied correctly, it establishes clean, polymorphic domain models. When abused, it creates brittle, tightly-coupled hierarchies that collapse under their own weight.
+    public Vehicle(String brand) {
+        this.brand = brand;
+        this.speedKmh = 0;
+    }
 
-Let's examine how inheritance actually works inside the JVM: how memory is carved out on the Heap for child objects, why constructor chaining is strictly enforced, and how to master method overriding without falling into common architectural traps.
+    public String getBrand() {
+        return brand;
+    }
 
----
+    public int getSpeedKmh() {
+        return speedKmh;
+    }
 
-## The "Is-A" Test: When Inheritance Is Justified
+    public void accelerate(int deltaKmh) {
+        if (deltaKmh <= 0) {
+            throw new IllegalArgumentException("Acceleration must be positive.");
+        }
+        this.speedKmh += deltaKmh;
+    }
 
-Before typing the `extends` keyword, you must subject your domain model to the strict **"Is-A" Rule**.
+    public void start() {
+        System.out.println(brand + " is starting.");
+    }
+}
 
-- A `SavingsAccount` **is a** `BankAccount`. (Valid inheritance)
-- A `SportsCar` **is a** `Vehicle`. (Valid inheritance)
-- A `Car` **is an** `Engine`. (❌ Invalid! A car *has an* engine; this is **Composition**, not Inheritance)
+public class ElectricCar extends Vehicle {
+    private final int batteryCapacityKwh;
+
+    public ElectricCar(String brand, int batteryCapacityKwh) {
+        super(brand);
+        this.batteryCapacityKwh = batteryCapacityKwh;
+    }
+
+    public int getBatteryCapacityKwh() {
+        return batteryCapacityKwh;
+    }
+
+    public void charge() {
+        System.out.println("Charging " + getBrand() + " (" + batteryCapacityKwh + " kWh).");
+    }
+}
+```
+
+Before reaching for `extends`, apply the **"is-a"** test (more formally, the Liskov Substitution Principle): can an instance of the subclass safely stand in anywhere the superclass is expected?
+
+- An `ElectricCar` **is a** `Vehicle`. Anywhere code expects a `Vehicle`, an `ElectricCar` makes sense.
+- A `Car` **is not an** `Engine`. A car *has an* engine, which calls for **composition** (holding an `Engine` field inside `Car`), not inheritance.
 
 ```mermaid
 classDiagram
     direction TB
     class Vehicle {
-        +String brand
-        +int currentSpeed
+        -String brand
+        -int speedKmh
         +start() void
-        +accelerate(int delta) void
+        +accelerate(int deltaKmh) void
     }
-    
     class ElectricCar {
-        +int batteryCapacityKwh
-        +chargeBattery() void
-        +accelerate(int delta) void
+        -int batteryCapacityKwh
+        +charge() void
+        +start() void
     }
-
-    class DieselTruck {
-        +double cargoCapacityTons
-        +hitchTrailer() void
+    class CargoTruck {
+        -double maxPayloadTons
+        +loadCargo(double tons) void
     }
-
-    Vehicle <|-- ElectricCar : "extends (is-a)"
-    Vehicle <|-- DieselTruck : "extends (is-a)"
+    Vehicle <|-- ElectricCar : "extends"
+    Vehicle <|-- CargoTruck : "extends"
 ```
 
-In Java, this relationship is declared using the `extends` keyword:
+### Single Inheritance and Avoiding the Diamond Problem
+
+In Java, a class can extend **at most one** superclass:
 
 ```java
-// The Superclass (Parent)
-public class Vehicle {
-    protected String brand;
-    protected int currentSpeed;
-
-    public Vehicle(String brand) {
-        this.brand = brand;
-        this.currentSpeed = 0;
-    }
-
-    public void start() {
-        System.out.println(brand + " engine humming.");
-    }
-}
-
-// The Subclass (Child)
-public class ElectricCar extends Vehicle {
-    private int batteryCapacityKwh;
-
-    public ElectricCar(String brand, int batteryCapacityKwh) {
-        super(brand); // Must initialize the superclass first!
-        this.batteryCapacityKwh = batteryCapacityKwh;
-    }
-
-    public void chargeBattery() {
-        System.out.println("Charging battery to " + batteryCapacityKwh + " kWh.");
-    }
-}
+// Compile error: Java does not allow multiple class inheritance
+public class AmphibiousVehicle extends Car, Boat { }
 ```
 
----
-
-## Memory Internals: The Subclass Heap Layout
-
-When you call `new ElectricCar("Tesla", 100)`, how many objects does the JVM allocate on the Heap? 
-
-Beginners often imagine that the JVM creates two separate objects—one `Vehicle` object and one `ElectricCar` object—and links them together.
-
-**That is completely false. The JVM allocates exactly ONE single object on the Heap.**
+Java restricts classes to single inheritance to avoid the **diamond problem** of inherited state: if both `Car` and `Boat` extended `Vehicle` and each maintained or modified inherited fields differently, an `AmphibiousVehicle` extending both would face ambiguous field layout and conflicting implementations.
 
 ```mermaid
 flowchart TD
-    subgraph Stack ["Thread Stack"]
-        Ref["ElectricCar car = 0x6000<br/>(Pointer to Heap)"]
-    end
+    v["Vehicle (state: maxSpeed)"]
+    c["Car extends Vehicle"]
+    b["Boat extends Vehicle"]
+    a["AmphibiousVehicle extends Car, Boat?<br/>Ambiguous state and method inheritance"]
 
-    subgraph Heap ["JVM Heap: Single Contiguous Object (0x6000)"]
-        direction TB
-        Header["Object Header (16 Bytes)<br/>• Mark Word (8B)<br/>• Klass Pointer to ElectricCar.class (4B)<br/>• Padding (4B)"]
-        SuperFields["Superclass Fields (Vehicle)<br/>• String brand (Reference: 8B)<br/>• int currentSpeed (4B)"]
-        SubFields["Subclass Fields (ElectricCar)<br/>• int batteryCapacityKwh (4B)"]
-        Padding["8-Byte Alignment Padding (4B)"]
-        
-        Header --- SuperFields --- SubFields --- Padding
-    end
-
-    Ref --> Header
-
-    style Stack fill:#0f172a,stroke:#3b82f6,color:#f8fafc
-    style Heap fill:#064e3b,stroke:#10b981,color:#f8fafc
-    style Header fill:#1e293b,stroke:#64748b,color:#f8fafc
-    style SuperFields fill:#312e81,stroke:#818cf8,color:#f8fafc
-    style SubFields fill:#022c22,stroke:#34d399,color:#f8fafc
-    style Padding fill:#334155,stroke:#94a3b8,color:#f8fafc
+    v --> c
+    v --> b
+    c --> a
+    b --> a
 ```
 
-Notice what this layout reveals:
-1. **Memory Allocation vs. Access Rights:** Even if a superclass field is marked `private`, it is **still physically allocated space inside the child object on the Heap**! The private modifier merely tells the compiler: *"Do not allow child class methods to directly reference this memory slot by name."*
-2. **Atomic Allocation:** Because the parent and child fields sit contiguously in memory, garbage collection, pointer indexing, and cache line prefetching treat the entire inheritance chain as a single, cohesive memory block.
+Instead, Java supports **single inheritance of implementation (classes)** and **multiple inheritance of type (interfaces)**, which you will explore in the Abstraction lesson.
 
----
+### What Happens in Memory for a Subclass Instance
 
-## Constructor Chaining: The Foundation Before the Roof
+When you run `new ElectricCar("Rivian", 135)`, the JVM does **not** allocate two separate objects (a `Vehicle` object and an `ElectricCar` object). It allocates **one single object** on the Heap that contains all fields from `Object`, `Vehicle`, and `ElectricCar` together.
 
-You cannot paint the walls or install windows on a house whose foundation has not yet been poured. 
+Notice an important detail about `private` fields: `brand` and `speedKmh` are `private` in `Vehicle`, yet they **still occupy memory inside every `ElectricCar` instance**. The `private` modifier is an access restriction enforced by the compiler and JVM access checks, not a memory-exclusion rule. `ElectricCar` interacts with those fields indirectly through `Vehicle`'s constructors and methods (`getBrand()`, `accelerate(...)`).
 
-Similarly, the JVM strictly mandates that **before a child class constructor executes, the parent class constructor MUST finish first.**
+*(Implementation note: In HotSpot JVM on 64-bit platforms, a single object consists of an object header—typically 12 bytes with compressed class pointers or 16 bytes without—followed by superclass fields, subclass fields, and alignment padding to an 8-byte boundary. Exact field ordering and padding are JVM implementation details, not Java language guarantees.)*
 
-This rule is enforced by constructor chaining via the **`super()`** keyword:
+## The `super` Keyword and Constructor Chaining
+
+The `super` keyword lets a subclass interact directly with its immediate parent class in two ways: invoking a superclass constructor (`super(...)`) and calling an overridden method or accessing a hidden member (`super.method()`).
+
+### Constructor Chaining with `super(...)`
+
+A subclass object cannot be initialized until its superclass portion is initialized first. For that reason, every constructor in Java begins by executing a superclass constructor (unless it chains to another constructor in the same class using `this(...)`, which will itself call `super(...)`).
 
 ```java
 public class BaseEntity {
     private final String id;
-    private final long createdAt;
 
     public BaseEntity(String id) {
         this.id = id;
-        this.createdAt = System.currentTimeMillis();
-        System.out.println("1. BaseEntity constructor executed for ID: " + id);
+        System.out.println("1. BaseEntity initialized: " + id);
+    }
+
+    public String getId() {
+        return id;
     }
 }
 
-public class User extends BaseEntity {
-    private final String username;
+public class Account extends BaseEntity {
+    private final String owner;
 
-    public User(String id, String username) {
-        super(id); // MUST BE THE VERY FIRST STATEMENT!
-        this.username = username;
-        System.out.println("2. User constructor executed for username: " + username);
+    public Account(String id, String owner) {
+        super(id); // Must run before subclass fields are initialized
+        this.owner = owner;
+        System.out.println("2. Account initialized for: " + owner);
     }
 }
 ```
 
-```java
-User u = new User("usr-101", "alice");
-```
-
-**Output:**
-```text
-1. BaseEntity constructor executed for ID: usr-101
-2. User constructor executed for username: alice
-```
-
-### The Automatic Implicit `super()` Trap
-If your superclass defines a parameterless constructor (or defines no constructors at all, allowing Java to inject the default one), you do not need to write `super()`. The compiler invisibly injects `super();` as the first line of every child constructor.
-
-**However, here is the trap:**
-If the parent class defines **only a parameterized constructor** (like `BaseEntity(String id)`), the parent no longer has a default constructor. If the child class omits `super(id)`, the compiler will fail with an error:
+Creating `new Account("acc-42", "Maya")` prints:
 
 ```text
-Constructor BaseEntity in class BaseEntity cannot be applied to given types;
+1. BaseEntity initialized: acc-42
+2. Account initialized for: Maya
+```
+
+### The Implicit `super()` Rule and a Common Compile Error
+
+If you do not write an explicit `super(...)` or `this(...)` call in a subclass constructor, the compiler automatically inserts `super();` (calling the parent's no-args constructor).
+
+That works fine as long as the parent has an accessible no-args constructor. If the parent defines **only parameterized constructors** (like `BaseEntity(String id)` above), there is no no-args `BaseEntity()` constructor, and omitting `super(id)` causes a compile error:
+
+```text
+constructor BaseEntity in class BaseEntity cannot be applied to given types;
   required: java.lang.String
-  found: no arguments
+  found:    no arguments
 ```
 
----
+*(Version note: Prior to JEP 447/482 preview in Java 22-24 and JEP 513 finalized in Java 25, `super(...)` had to be the very first statement in a constructor. Modern Java 25 allows validating arguments or preparing local variables before `super(...)`, as long as the code does not read `this` before the superclass constructor finishes.)*
 
-## Method Overriding & Covariant Return Types
+### Calling Parent Behavior with `super.method()`
 
-Method overriding allows a subclass to provide a specialized implementation of a method defined in its superclass:
+When a subclass overrides a method, it often wants to *extend* the parent's behavior rather than replace it completely. Use `super.methodName(...)` to delegate to the parent's implementation:
 
 ```java
-public class PaymentGateway {
-    public void process(double amount) {
-        System.out.println("Processing standard credit card payment of $" + amount);
+public class LoggingElectricCar extends ElectricCar {
+    public LoggingElectricCar(String brand, int batteryCapacityKwh) {
+        super(brand, batteryCapacityKwh);
     }
-}
 
-public class CryptoPaymentGateway extends PaymentGateway {
     @Override
-    public void process(double amount) {
-        System.out.println("Executing blockchain transaction for $" + amount);
+    public void start() {
+        super.start(); // Runs superclass behavior first
+        System.out.println("Battery telemetry online.");
     }
 }
 ```
 
-### The 4 Invariants of Method Overriding:
-1. **Identical Name and Arguments:** The method signature must match exactly.
-2. **Access Level Cannot Be Reduced:** You can expand visibility (`protected` -> `public`), but you **cannot narrow it** (`public` -> `protected` or `private`). Why? Doing so would break polymorphism (the Liskov Substitution Principle).
-3. **Checked Exceptions Cannot Be Expanded:** An overriding method can throw the same checked exceptions, fewer exceptions, or subclasses of those exceptions. It **cannot throw new or broader checked exceptions** that the parent caller did not anticipate.
-4. **Covariant Return Types (Java 5+):** The overriding method can return a **subclass** of the type returned by the parent method!
+Note that `super` only reaches one level up; Java does not allow `super.super.start()` because bypassing an immediate parent could violate invariants that the parent maintains.
 
-### Covariant Return Types in Action:
-```java
-public class AnimalShelter {
-    public Animal adopt() {
-        return new Animal();
-    }
-}
+## Method Overriding vs. Method Overloading
 
-public class DogShelter extends AnimalShelter {
-    @Override
-    public Dog adopt() { // Covariant Return! Dog is a subclass of Animal
-        return new Dog();
-    }
-}
-```
-Callers interacting with `DogShelter` receive a strongly-typed `Dog` directly, eliminating the need for awkward downcasting: `Dog d = (Dog) shelter.adopt()`.
+Method **overriding** and method **overloading** sound similar and are tested constantly in Java interviews, yet they are completely different mechanisms.
 
-> [!TIP]
-> **Always Use `@Override`:**
-> The `@Override` annotation is not just documentation. It instructs the compiler to verify that you are truly overriding a superclass method. If you make a typo (e.g., writing `pubic void proccess(double a)` with two 'c's), the compiler will immediately catch the mistake rather than treating it as an unintended new method!
+- **Overloading** defines multiple methods with the **same name** and **different parameter lists** (usually in the same class, though a subclass can also add a new overload alongside an inherited method). The compiler picks which overload to call at **compile time** using the declared argument types.
+- **Overriding** redefines an inherited instance method in a **subclass** with the **exact same name and parameter list**. The JVM picks which implementation to run at **runtime** based on the actual object type on the Heap (**dynamic dispatch** via `invokevirtual`).
 
----
-
-## The Single Inheritance Limitation & The Diamond Problem
-
-Unlike C++, which permits multiple inheritance of classes (`class C : public A, public B`), **Java strictly forbids a class from extending more than one parent.**
-
-```java
-// ❌ COMPILE ERROR! Java forbids multiple class inheritance
-public class FlyingCar extends Car, Airplane { }
-```
-
-Why did James Gosling and the Java team make this restriction? To eliminate the dreaded **Diamond Problem of State**:
-
-```mermaid
-flowchart TD
-    Top["Class Animal<br/>int age = 10"]
-    Left["Class Herbivore extends Animal<br/>age = 15"]
-    Right["Class Carnivore extends Animal<br/>age = 20"]
-    Bottom["Class Omnivore extends Herbivore, Carnivore<br/>💥 Which 'age' does Omnivore inherit?!"]
-
-    Top --> Left
-    Top --> Right
-    Left --> Bottom
-    Right --> Bottom
-
-    style Top fill:#0f172a,stroke:#3b82f6,color:#f8fafc
-    style Left fill:#1e293b,stroke:#64748b,color:#f8fafc
-    style Right fill:#1e293b,stroke:#64748b,color:#f8fafc
-    style Bottom fill:#7f1d1d,stroke:#f87171,color:#f8fafc
-```
-
-If both `Herbivore` and `Carnivore` modify or inherit fields from `Animal`, and `Omnivore` inherits from both, how much memory should the JVM allocate on the Heap? Which version of a method should execute? 
-
-In C++, resolving this requires complex virtual base classes and pointer-offset gymnastics. 
-Java solved this by establishing a clear rule: **Single inheritance of state (classes), but multiple inheritance of type (interfaces).**
-
----
-
-## The Cosmic Root: `java.lang.Object`
-
-In the Java type system, all roads lead to Rome. **Every single class you ever create implicitly extends `java.lang.Object`.**
-
-If you write:
-```java
-public class Employee { }
-```
-The compiler silently translates it into:
-```java
-public class Employee extends java.lang.Object { }
-```
-
-Because of this universal ancestry, every object on the JVM Heap inherits eleven foundational methods:
-
-| Method | Purpose | Should You Override It? |
+| Feature | Method Overloading | Method Overriding |
 | :--- | :--- | :--- |
-| `equals(Object obj)` | Tests logical value equality rather than memory address identity. | **YES** (whenever comparing value objects) |
-| `hashCode()` | Returns an integer hash representation for hash tables (`HashMap`, `HashSet`). | **YES** (mandatory if you override `equals`) |
-| `toString()` | Human-readable string representation of the object. | **YES** (for logging and debugging) |
-| `getClass()` | Returns the runtime `java.lang.Class<?>` mirror object in Metaspace. | **NO** (`final` method) |
-| `clone()` | Creates a field-by-field shallow copy. | **NO** (avoid; use Copy Constructors) |
-| `wait()`, `notify()`, `notifyAll()` | Low-level thread synchronization primitives based on intrinsic monitors. | **NO** (`final` methods) |
-| `finalize()` | Legacy garbage collector callback. | **NEVER** (deprecated in Java 9, removed/disabled) |
+| Where it happens | Same class (or subclass adding a new parameter list) | Subclass redefining an inherited superclass method |
+| Method name | Same | Same |
+| Parameter list | **Must differ** (count, types, or order) | **Must match exactly** |
+| Return type | Can be anything (not part of overload signature) | Same type, or a **covariant subtype** (Java 5+) |
+| Access modifier | Any | Cannot be more restrictive (can widen, e.g. `protected` to `public`) |
+| Checked exceptions | Independent per overload | Cannot declare new or broader checked exceptions |
+| Binding time | **Compile time** (static binding) | **Runtime** (dynamic dispatch) |
+| Applies to `static` / `private` / `final`? | Yes, you can overload them | No (`static` hides; `private` is invisible; `final` fails to compile) |
 
----
+### Seeing Both Side by Side
 
-## Summary & Mental Model Checkpoint
+```java
+class NotificationService {
+    // Method 1: Base version
+    public void send(String message) {
+        System.out.println("Generic notification: " + message);
+    }
 
-1. **The "Is-A" Contract**: Use inheritance only when the subclass represents a genuine, substitutable specialization of the superclass.
-2. **Single Heap Allocation**: A subclass instance is a single, contiguous memory block on the Heap containing both parent and child fields.
-3. **Constructor Chaining**: `super()` must execute before child constructor logic to guarantee parent invariants are established.
-4. **Covariant Returns**: Overriding methods can narrow the return type to any subclass of the parent's return type.
-5. **No Multiple Inheritance of State**: Java forbids extending multiple classes to avoid the Diamond Problem and memory alignment chaos.
-6. **Cosmic Root**: Every object in Java inherits from `java.lang.Object`, receiving fundamental contracts for equality, hashing, and representation.
+    // Overloaded method: same name, different parameter list (compile-time choice)
+    public void send(String message, int priority) {
+        System.out.println("Generic notification [priority=" + priority + "]: " + message);
+    }
+}
 
----
+class EmailNotificationService extends NotificationService {
+    // Overridden method: same name and parameter list as superclass (runtime choice)
+    @Override
+    public void send(String message) {
+        System.out.println("Email sent: " + message);
+    }
+}
 
-## 🎯 Senior Engineer Interview Questions
+public class DispatchDemo {
+    public static void main(String[] args) {
+        NotificationService service = new EmailNotificationService();
 
-### What happens in Heap memory when a subclass inherits a `private` field from its superclass?
-> **Answer:** The private field is physically allocated memory space directly inside the single contiguous object instance allocated on the Heap. The subclass object physically contains the field and its data. However, the Java compiler enforces access-control checks that prevent bytecode within the subclass from referencing the field name directly. The subclass can only manipulate this private memory slot indirectly through inherited `public` or `protected` methods of the superclass.
+        // Runtime dispatch calls EmailNotificationService.send(String)
+        service.send("Order shipped");
 
-### Explain the rules of method overriding regarding checked exceptions and access visibility. Why do these rules exist?
-> **Answer:** An overriding method cannot reduce access visibility (e.g. `public` cannot become `protected`), and it cannot declare new or broader checked exceptions than the superclass method. These rules preserve the **Liskov Substitution Principle (LSP)**: any caller holding a reference to the superclass must be able to invoke the method without facing unexpected access security exceptions or unhandled checked exceptions that were not declared in the superclass contract.
+        // Compile-time overload resolution picks send(String, int), inherited from NotificationService
+        service.send("Server down", 1);
+    }
+}
+```
 
-### What is the "Fragile Base Class" problem in Object-Oriented inheritance?
-> **Answer:** The Fragile Base Class problem occurs when changes to a superclass inadvertently break the functionality or invariants of its subclasses. Because subclasses often depend on the internal execution order and self-use of methods within the parent, altering a parent method's implementation can trigger infinite recursion, unintended side-effects, or corrupted state in subclasses without producing compile-time warnings.
+Output:
 
-### Why does overriding `equals(Object)` strictly require overriding `hashCode()` in Java?
-> **Answer:** The `Object` contract mandates that **if two objects are equal according to `equals()`, they MUST produce the exact same integer `hashCode()`**. Hash-based collections (`HashMap`, `HashSet`) use the hash code to determine which bucket stores an object. If two objects are logically equal but produce different hash codes, the collection will search the wrong bucket during `.get()`, resulting in lost data, duplicate set elements, and silent collection lookup failures.
+```text
+Email sent: Order shipped
+Generic notification [priority=1]: Server down
+```
+
+### Rules of Method Overriding
+
+Java enforces four rules on overriding methods so that any subclass remains safely substitutable for its superclass:
+
+1. **Exact signature match:** Method name and parameter types must match the superclass method.
+2. **Access level cannot be narrowed:** You can widen visibility (`protected` to `public`), because callers who already had access still have access. Narrowing visibility (`public` to `protected` or `private`) is a compile error.
+3. **Checked exceptions cannot be broadened:** An overriding method may throw the same checked exceptions, narrower subclasses of them, or none at all. It cannot add new checked exceptions that callers holding a superclass reference did not catch. (Unchecked `RuntimeException`s have no such compile-time restriction.)
+4. **Covariant return types (Java 5+):** If the parent method returns a reference type (for example `Vehicle`), the overriding method may return a more specific subtype (for example `ElectricCar`):
+
+```java
+class VehicleFactory {
+    public Vehicle create(String brand) {
+        return new Vehicle(brand);
+    }
+}
+
+class ElectricCarFactory extends VehicleFactory {
+    @Override
+    public ElectricCar create(String brand) { // Covariant return type
+        return new ElectricCar(brand, 100);
+    }
+}
+```
+
+Callers working directly with `ElectricCarFactory` get an `ElectricCar` back without casting, while callers working with a `VehicleFactory` reference still receive a valid `Vehicle`. (Covariant returns do not apply to primitive return types: you cannot override a method returning `long` with one returning `int`.)
+
+### Always Use `@Override` to Catch Accidental Overloading
+
+One of the easiest bugs to introduce in Java is intending to override a method but accidentally overloading it instead. The classic example is writing `equals`:
+
+```java
+public class Book {
+    private final String isbn;
+
+    public Book(String isbn) {
+        this.isbn = isbn;
+    }
+
+    // Bug: parameter is Book, NOT Object! This OVERLOADS Object.equals instead of overriding it.
+    // Adding @Override here immediately catches the bug at compile time!
+    public boolean equals(Book other) {
+        return other != null && this.isbn.equals(other.isbn);
+    }
+}
+```
+
+If you put `Book` instances into a `HashSet<Book>` or `List<Book>`, collections call `Object.equals(Object)`, never `equals(Book)`. Your custom equality check silently does nothing. Putting `@Override` above every intended override turns silent runtime bugs like this into immediate compile errors.
+
+### Why Constructors Should Never Call Overridable Methods
+
+Be careful never to call a non-`final`, non-`private` method from a superclass constructor. Because the superclass constructor runs *before* the subclass constructor has initialized the subclass's fields, an overridden method invoked during superclass construction will run against uninitialized subclass state (seeing `0`, `false`, or `null` even for `final` fields).
+
+## The Cosmic `Object` Class
+
+Every class in Java implicitly extends `java.lang.Object` if it does not declare another superclass with `extends`. That means every object in a Java program inherits a core set of methods from `Object`.
+
+| Method | What It Does | Override Guidance |
+| :--- | :--- | :--- |
+| `toString()` | Returns a string summary of the object (default: `ClassName@hexHashCode`). | Override for readable logs and debugging. |
+| `equals(Object obj)` | Compares logical equality (default: reference identity `this == obj`). | Override for value-based classes. |
+| `hashCode()` | Returns an `int` hash used by `HashMap`, `HashSet`, and `Hashtable`. | **Must** override whenever you override `equals`. |
+| `getClass()` | Returns the runtime `java.lang.Class<?>` mirror object (stored on the Heap in HotSpot). | Cannot override (`final`). |
+| `clone()` | Performs a `protected` shallow copy if `Cloneable` is implemented. | Avoid; prefer copy constructors or factories. |
+| `wait()`, `notify()`, `notifyAll()` | Low-level monitor coordination primitives for threads. | Cannot override (`final`). |
+| `finalize()` | Legacy GC hook; deprecated in Java 9 and deprecated for removal in Java 18 (JEP 421). | Never override; use `AutoCloseable` / `try-with-resources`. |
+
+### Implementing `equals`, `hashCode`, and `toString` Properly
+
+By default, `Object.equals` only returns `true` if two references point to the exact same object in memory (`a == b`), and `Object.toString()` prints unhelpful strings like `Order@5f184fc6`. For value objects and domain identifiers, override all three consistently:
+
+```java
+import java.util.Objects;
+
+public final class ProductCode {
+    private final String region;
+    private final String sku;
+
+    public ProductCode(String region, String sku) {
+        this.region = Objects.requireNonNull(region);
+        this.sku = Objects.requireNonNull(sku);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof ProductCode other)) {
+            return false;
+        }
+        return region.equals(other.region) && sku.equals(other.sku);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(region, sku);
+    }
+
+    @Override
+    public String toString() {
+        return "ProductCode[region=" + region + ", sku=" + sku + "]";
+    }
+}
+```
+
+*(If a class is simply a transparent data carrier like `ProductCode`, a Java 16+ `record ProductCode(String region, String sku)` generates `equals`, `hashCode`, and `toString` automatically.)*
+
+### The `equals` and `hashCode` Contract
+
+Whenever you override `equals`, you must honor two contracts defined by `java.lang.Object`:
+
+1. **`equals` must be an equivalence relation:** reflexive (`x.equals(x)` is `true`), symmetric (`x.equals(y)` matches `y.equals(x)`), transitive, consistent while unmodified, and `x.equals(null)` must return `false`.
+2. **Equal objects must have equal hash codes:** If `a.equals(b)` is `true`, then `a.hashCode() == b.hashCode()` **must** be `true`. (The reverse is not required: two unequal objects may share a hash code, known as a hash collision.)
+
+Watch what breaks if you override `equals` without overriding `hashCode`:
+
+```java
+Set<ProductCode> catalog = new HashSet<>();
+catalog.add(new ProductCode("US", "KB-900"));
+
+// With matching hashCode(): returns true
+// Without overriding hashCode(): HashSet checks a different bucket and returns false!
+boolean found = catalog.contains(new ProductCode("US", "KB-900"));
+```
+
+`HashMap` and `HashSet` first compute `hashCode()` to choose a bucket, and only call `equals()` against entries inside that bucket. If two equal objects return different hash codes, hash-based collections fail to find existing keys and allow duplicate entries in sets.
+
+## Practical Questions
+
+### What is the key runtime difference between method overloading and method overriding?
+Method overloading is resolved at **compile time** based on the declared reference type and the compile-time types of the arguments. Method overriding is resolved at **runtime** via dynamic dispatch (`invokevirtual`) based on the actual class of the object on the Heap.
+
+### Why can't an overriding method reduce visibility or throw broader checked exceptions?
+Because a subclass must remain usable anywhere code expects the superclass (the Liskov Substitution Principle). If a caller holds a `Vehicle` reference and invokes a `public` method that declares no checked exceptions, substituting a subclass whose overridden method is `private` or throws `IOException` would break the caller's compile-time guarantees.
+
+### When a subclass extends a superclass with `private` fields, are those fields still allocated inside the subclass instance?
+Yes. The JVM allocates a single object on the Heap containing both the superclass's fields (including `private` ones) and the subclass's fields. The `private` modifier restricts direct access by name in the subclass's source code and bytecode, so the subclass works with those fields through inherited constructors and accessible methods.
+
+### Why does overriding `equals(Object)` require overriding `hashCode()`?
+Hash-based collections like `HashMap` and `HashSet` use `hashCode()` to locate the bucket where an element belongs before comparing elements with `equals()`. If two objects are equal according to `equals()` but inherit `Object.hashCode()` (which is derived from object identity), they will usually hash to different buckets, causing lookups to return `null`/`false` and sets to store duplicates.

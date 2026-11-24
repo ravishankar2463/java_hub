@@ -1,144 +1,142 @@
-# Resilient Event Processing and Dead Letter Queues
-
-In synchronous REST APIs, when an unexpected exception occurs, handling it is straightforward: catch the exception, log the stack trace, and return an HTTP `500 Internal Server Error` to the caller. The calling client handles the error, and the server thread is immediately returned to the pool to process other requests.
-
-In asynchronous event streaming with Apache Kafka, errors are significantly more dangerous.
-
-Because a Kafka partition is a strictly ordered commit log, **a consumer cannot simply "skip" offset 42 without committing it**. If a consumer encounters a malformed message, throws an unhandled exception, and crashes, it rolls back its offset. Upon restarting, it reads offset 42 again. It crashes again.
-
-This creates an infinite **Poison Pill Crash Loop**: a single corrupted message completely halts all event processing on that partition, starving all subsequent valid messages indefinitely.
-
-To build production-grade event streaming systems, you must classify errors into **transient** vs **non-transient**, implement **non-blocking retry topics**, and route unprocessable records into **Dead Letter Queues (DLT / DLQ)** with rich debugging context.
-
+---
+title: "Resilient Event Processing and Dead Letter Queues"
+description: "Build fault-tolerant Spring Kafka consumers using DefaultErrorHandler, non-blocking @RetryableTopic flows, Dead Letter Topic replay, and circuit-breaker backpressure."
+category: "level-10"
+date: "2026-10-29T10:00:00Z"
 ---
 
-## Anatomy of the Poison Pill Problem
+In a synchronous REST API, an unhandled exception has a small blast radius: the controller logs the error, returns HTTP `500` to the caller, and hands the thread back to Tomcat or Jetty for the next request.
+
+In an Apache Kafka consumer, an unhandled exception behaves very differently. Because a Kafka partition is an ordered commit log, a consumer cannot silently skip offset `42` without committing it. If offset `42` contains malformed JSON or triggers a `NullPointerException`, the consumer aborts, never commits the offset, and restarts. On the next `poll()`, Kafka serves offset `42` again. The consumer fails again.
+
+Left unhandled, a single bad message locks up an entire partition in an endless **poison pill loop**, stalling every healthy event behind it. Worse, if you try to work around transient outages with a naive `Thread.sleep()` inside your listener, the consumer stops calling `poll()`, crosses `max.poll.interval.ms`, gets evicted by the group coordinator, and triggers repeated rebalances across every pod in the consumer group.
+
+Resilient Kafka consumers separate transient failures from permanent ones, handle retries without destabilizing the consumer group, route unprocessable records to a **Dead Letter Topic (DLT)** with diagnostic headers, and pause consumption cleanly when a downstream dependency goes down.
+
+## Classifying Failures: Transient vs Permanent
+
+Before choosing a retry mechanism, classify the exceptions your consumer can encounter into two buckets:
 
 ```mermaid
 flowchart TD
-    subgraph PartitionLog["Topic Partition (Ordered Commit Log)"]
-        M40["Offset 40: Valid Order"]
-        M41["Offset 41: Valid Order"]
-        M42["Offset 42: POISON PILL (Malformed JSON / NullPointer)"]
-        M43["Offset 43: Valid Order (BLOCKED)"]
-        M44["Offset 44: Valid Order (BLOCKED)"]
-    end
+    Fail["Listener Throws Exception"] --> Kind{"Transient or Permanent?"}
 
-    subgraph ConsumerLoop["Consumer Processing Thread"]
-        Read["consumer.poll() reads Offset 42"]
-        Process["Throws Unhandled Exception!"]
-        Crash["Pod Crashes or rolls back offset"]
-        Restart["Pod restarts -> reads Offset 42 AGAIN!"]
-        
-        Read --> Process --> Crash --> Restart --> Read
-    end
+    Kind -->|"Transient (503, DB timeout, lock conflict)"| Retry["Retry with Backoff"]
+    Retry -->|"Succeeds"| Commit["Commit Offset"]
+    Retry -->|"Retries Exhausted"| Dlt["Publish to Dead Letter Topic (DLT)"]
 
-    M42 --> Read
+    Kind -->|"Permanent (Bad JSON, validation error, NPE)"| SkipRetry["Skip Retries -> Publish Directly to DLT"]
+    SkipRetry --> Advance["Commit Main Offset and Continue"]
 ```
 
-When a poison pill lands in a partition:
-1. The consumer crashes and restarts repeatedly, creating continuous group rebalances.
-2. Partition lag increases relentlessly as new orders arrive at offsets 43, 44, and beyond, completely blocked behind the poison pill.
-3. If an engineer attempts to solve this by adding a naive `try { Thread.sleep(5000); } catch (...)` retry loop inside the consumer, the time between `poll()` calls exceeds `max.poll.interval.ms`. The Kafka broker evicts the pod from the group, triggering a cluster-wide **Rebalance Storm**.
+- **Transient failures** are temporary infrastructure issues that often clear up within seconds: database connection pool exhaustion (`TransientDataAccessException`), downstream HTTP `503 Service Unavailable` or `429 Too Many Requests`, socket timeouts, or optimistic locking conflicts. These deserve bounded retries with backoff.
+- **Permanent failures (poison pills)** will fail on every attempt no matter how long you wait: broken serialization (`DeserializationException`), invalid business fields (`ConstraintViolationException`, `IllegalArgumentException`), or missing required attributes. Retrying them wastes time and blocks the partition; they should go straight to the DLT so the partition moves forward.
 
----
+## Error Handling in Spring Kafka: Blocking Retries with `DefaultErrorHandler`
 
-## Error Categorization: Transient vs Non-Transient
+Spring Kafka's default error handler is `DefaultErrorHandler`. When a listener throws an exception, `DefaultErrorHandler` seeks the partition back to the failed offset and retries locally on the same consumer thread according to a configured `BackOff`. Once attempts are exhausted, it delegates the record to a `ConsumerRecordRecoverer`, typically `DeadLetterPublishingRecoverer`.
 
-Resilient architecture begins by categorizing errors into two distinct categories:
-
-```mermaid
-flowchart TD
-    Error["Exception Thrown During Processing"] --> Classify{"Is the error transient or non-transient?"}
-    
-    Classify -- Transient --> Retry["Retry with Exponential Backoff<br/>(Max 3-5 attempts)"]
-    Retry -- Succeeds --> Commit["Commit Offset (Success)"]
-    Retry -- Exhausted --> DLT["Route to Dead Letter Topic (DLT)"]
-
-    Classify -- Non-Transient --> ImmediateDLT["Skip Retries! Route IMMEDIATELY to DLT"]
-    ImmediateDLT --> NextOffset["Acknowledge Main Offset & Resume Next Message"]
-```
-
-### Transient Failures (Retryable)
-Temporary environmental or network blips that are likely to resolve themselves within seconds:
-- Downstream database connection pool timeouts (`TransientDataAccessException`).
-- Remote HTTP microservice returning `503 Service Unavailable` or `429 Too Many Requests`.
-- Optimistic locking failures (`OptimisticLockException`).
-
-**Remedy:** Retry with exponential backoff and randomized jitter.
-
-### Non-Transient Failures (Fatal / Poison Pills)
-Defects in data structure, logic, or schema that will **never succeed**, regardless of how many times they are retried:
-- JSON deserialization errors (`DeserializationException`).
-- Schema validation failures (e.g., negative payment amount, missing mandatory fields).
-- Business invariant violations (e.g., referencing a non-existent customer ID).
-
-**Remedy:** Do NOT retry. Retrying burns CPU cycles and delays the pipeline. Route the record immediately to the Dead Letter Topic and commit the main partition offset to unblock subsequent traffic.
-
----
-
-## The Non-Blocking Multi-Tier Retry Architecture
-
-Why can't we simply sleep inside the consumer thread between retries?
-
-If you sleep for 10 seconds to wait for a database to recover, you block the entire partition. Worse, if multiple messages fail, the accumulated sleep time will exceed `max.poll.interval.ms`, causing the Kafka broker to evict your consumer and reassign the partition to another pod.
-
-The enterprise solution is **Non-Blocking Multi-Tier Retry Topics**:
-
-```mermaid
-flowchart TD
-    MainTopic[("fintech.orders.v1 (Main Topic)")] -->|"1. Initial Consumption"| MainConsumer["Main Consumer Pod"]
-    
-    MainConsumer -->|"Fails with Transient Error"| Retry1Topic[("fintech.orders.v1-retry-1s (Delay: 1s)")]
-    
-    Retry1Topic -->|"2. Retry Consumer"| Retry1Consumer["Retry Consumer 1"]
-    Retry1Consumer -->|"Fails again"| Retry2Topic[("fintech.orders.v1-retry-10s (Delay: 10s)")]
-    
-    Retry2Topic -->|"3. Retry Consumer"| Retry2Consumer["Retry Consumer 2"]
-    Retry2Consumer -->|"Fails again"| Retry3Topic[("fintech.orders.v1-retry-60s (Delay: 60s)")]
-    
-    Retry3Topic -->|"4. Final Exhaustion"| DLTopic[("fintech.orders.v1-DLT (Dead Letter Topic)")]
-    
-    DLTopic --> Alert["PagerDuty Alert / Sentry Incident"]
-    DLTopic --> Inspection["Dead Letter Dashboard (Manual Triage / Replay)"]
-```
-
-### How Non-Blocking Retries Work:
-1. When a transient failure occurs on `orders.v1`, the consumer publishes the failed event to a dedicated retry topic (`orders.v1-retry-1s`) and **commits the offset on the main topic immediately**.
-2. The main consumer instantly moves on to process offset 43. No partition blocking occurs.
-3. A separate consumer listens to `orders.v1-retry-1s` with a configured delay of 1 second.
-4. If it fails again, it promotes the message to `orders.v1-retry-10s`.
-5. If all retries are exhausted, the message is routed to the final **Dead Letter Topic (`.DLT`)**.
-
-> **Trade-Off Warning:** Non-blocking retries sacrifice strict ordering for failed records. While message 42 is being delayed on the retry topic, message 43 is processed on the main topic. If strict causal ordering is mandatory for that entity, you must use **blocking retries with an in-memory buffer** or quarantine the specific entity ID.
-
----
-
-## Implementing `@RetryableTopic` in Spring Boot 3
-
-Spring for Apache Kafka provides turnkey non-blocking retries and dead letter queuing via the `@RetryableTopic` annotation:
-
-### Step 1: Configuration (`application.yml`)
+There is one subtle prerequisite: **deserialization failures happen inside `KafkaConsumer.poll()`, before your listener method is ever called.** If you use raw `JsonDeserializer` or `KafkaAvroDeserializer`, a corrupted payload throws an exception during polling and never reaches `DefaultErrorHandler` unless you wrap the deserializer with `ErrorHandlingDeserializer`. `ErrorHandlingDeserializer` catches the exception, sets the record value to `null`, attaches the raw bytes and exception details in Kafka headers, and hands the record to `DefaultErrorHandler`, which recognizes `DeserializationException` as non-retryable and routes it directly to the DLT.
 
 ```yaml
 spring:
   kafka:
     bootstrap-servers: kafka-broker:9092
     consumer:
-      group-id: payment-billing-consumer
+      group-id: ledger-posting-service
       enable-auto-commit: false
       auto-offset-reset: earliest
+      key-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.key.delegate.class: org.apache.kafka.common.serialization.StringDeserializer
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: "com.javahub.ledger.events"
     listener:
-      ack-mode: MANUAL_IMMEDIATE
+      ack-mode: RECORD
 ```
 
-### Step 2: The Production `@RetryableTopic` Consumer
+Here is a Spring Kafka 3.x configuration that pairs `DefaultErrorHandler` with exponential backoff, a custom DLT routing destination, and an explicit list of non-retryable exceptions:
 
 ```java
 package com.javahub.kafka.resilience;
 
+import jakarta.validation.ValidationException;
+import org.apache.kafka.common.TopicPartition;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.kafka.listener.DefaultErrorHandler;
+import org.springframework.kafka.support.ExponentialBackOffWithMaxRetries;
+import org.springframework.kafka.support.serializer.DeserializationException;
+import org.springframework.messaging.converter.MessageConversionException;
+
+@Configuration
+public class BlockingRetryKafkaConfig {
+
+    @Bean
+    public DefaultErrorHandler defaultErrorHandler(KafkaTemplate<Object, Object> kafkaTemplate) {
+        // Route failed records to <original-topic>.DLT, preserving the partition number
+        // (ensure the DLT has at least as many partitions as the source topic)
+        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
+                kafkaTemplate,
+                (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition())
+        );
+
+        // 3 retries with exponential backoff: 500ms, 1000ms, 2000ms
+        ExponentialBackOffWithMaxRetries backOff = new ExponentialBackOffWithMaxRetries(3);
+        backOff.setInitialInterval(500L);
+        backOff.setMultiplier(2.0);
+        backOff.setMaxInterval(5_000L);
+
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
+
+        // Route permanent errors straight to the DLT without burning retry attempts
+        errorHandler.addNotRetryableExceptions(
+                DeserializationException.class,
+                MessageConversionException.class,
+                ValidationException.class,
+                IllegalArgumentException.class
+        );
+
+        // Commit the offset after the recoverer successfully publishes to the DLT
+        errorHandler.setCommitRecovered(true);
+        return errorHandler;
+    }
+}
+```
+
+### When Blocking Retries Are the Right Choice
+
+Blocking retries with `DefaultErrorHandler` preserve **strict per-partition ordering**. Record `43` will never be processed while record `42` is still retrying. That makes `DefaultErrorHandler` the right default for short backoff windows (hundreds of milliseconds to a few seconds) and domains where state transitions for the same entity must stay strictly ordered, such as account ledgers or inventory reservations.
+
+The catch is headroom against `max.poll.interval.ms`. If `max.poll.records` is 500 and many records in a batch trigger multi-second blocking retries, total retry time can exceed `max.poll.interval.ms` and force a rebalance. When you need retry delays measured in tens of seconds or minutes, switch to non-blocking retry topics.
+
+## Non-Blocking Retries with `@RetryableTopic`
+
+Non-blocking retry topics move failed records off the main topic onto dedicated delayed retry topics, then commit the main partition offset immediately so healthy records continue flowing at full speed.
+
+```mermaid
+flowchart LR
+    Main[("fintech.orders.v1")] --> MainCons["Main Listener"]
+    MainCons -->|"Transient failure"| R0[("fintech.orders.v1-retry-0 (1s delay)")]
+    R0 --> R0Cons["Retry Consumer 0"]
+    R0Cons -->|"Fails again"| R1[("fintech.orders.v1-retry-1 (5s delay)")]
+    R1 --> R1Cons["Retry Consumer 1"]
+    R1Cons -->|"Fails again"| R2[("fintech.orders.v1-retry-2 (25s delay)")]
+    R2 --> R2Cons["Retry Consumer 2"]
+    R2Cons -->|"Exhausted"| DLT[("fintech.orders.v1-dlt")]
+    MainCons -->|"Permanent failure"| DLT
+```
+
+Spring Kafka 3.x implements this pattern through `@RetryableTopic` and `@DltHandler`. Behind the scenes, Spring creates separate listener containers for each retry topic; each retry consumer checks the scheduled execution timestamp header (`retry_topic-backoff-timestamp`) and pauses that retry partition briefly until the delay elapses, without blocking the main topic or starving `poll()`.
+
+```java
+package com.javahub.kafka.resilience;
+
+import jakarta.validation.ValidationException;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.common.errors.SerializationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.TransientDataAccessException;
@@ -147,169 +145,311 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.annotation.RetryableTopic;
 import org.springframework.kafka.retrytopic.DltStrategy;
 import org.springframework.kafka.retrytopic.TopicSuffixingStrategy;
-import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.ResourceAccessException;
 
-import java.net.SocketTimeoutException;
+import java.math.BigDecimal;
 
 @Service
 public class ResilientPaymentConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(ResilientPaymentConsumer.class);
     private final PaymentBillingService billingService;
+    private final DeadLetterAuditRepository auditRepository;
 
-    public ResilientPaymentConsumer(PaymentBillingService billingService) {
+    public ResilientPaymentConsumer(PaymentBillingService billingService,
+                                    DeadLetterAuditRepository auditRepository) {
         this.billingService = billingService;
+        this.auditRepository = auditRepository;
     }
 
     @RetryableTopic(
-        attempts = "4", // 1 initial attempt + 3 retries
-        backoff = @Backoff(delay = 1000, multiplier = 2.0, maxDelay = 10000), // 1s, 2s, 4s exponential backoff
-        topicSuffixingStrategy = TopicSuffixingStrategy.SUFFIX_WITH_INDEX_VALUE, // orders-retry-0, orders-retry-1...
-        dltStrategy = DltStrategy.FAIL_ON_ERROR,
-        include = {
-            TransientDataAccessException.class,
-            SocketTimeoutException.class
-        },
-        exclude = {
-            IllegalArgumentException.class,
-            SerializationException.class,
-            NullPointerException.class
-        }
+            attempts = "4", // 1 initial attempt + 3 non-blocking retry topics
+            backoff = @Backoff(delay = 1_000, multiplier = 5.0, maxDelay = 30_000),
+            topicSuffixingStrategy = TopicSuffixingStrategy.SUFFIX_WITH_INDEX_VALUE,
+            dltStrategy = DltStrategy.FAIL_ON_ERROR,
+            autoCreateTopics = "false", // Provision retry and DLT topics via Terraform/IaC in prod
+            include = {
+                    TransientDataAccessException.class,
+                    ResourceAccessException.class
+            }
     )
-    @KafkaListener(topics = "fintech.orders.v1", groupId = "payment-billing-consumer")
-    public void processPayment(ConsumerRecord<String, PaymentEvent> record, Acknowledgment ack) {
-        log.info("Processing payment from Topic: {}, Partition: {}, Offset: {}, OrderId: {}",
-                record.topic(), record.partition(), record.offset(), record.key());
-
+    @KafkaListener(
+            id = "payment-billing-listener",
+            topics = "fintech.orders.v1",
+            groupId = "payment-billing-consumer"
+    )
+    public void processPayment(ConsumerRecord<String, PaymentEvent> record) {
         PaymentEvent event = record.value();
-
-        // Fatal validation: routed immediately to DLT without retries
-        if (event.amount() <= 0) {
-            throw new IllegalArgumentException("Invalid payment amount: " + event.amount());
+        if (event == null || event.amount().compareTo(BigDecimal.ZERO) <= 0) {
+            // Not in 'include', so Spring sends it directly to fintech.orders.v1-dlt
+            throw new ValidationException("Invalid payment payload for key=" + record.key());
         }
 
-        // Business execution (may throw transient network/db exceptions)
         billingService.executeTransaction(event);
-
-        ack.acknowledge();
     }
 
-    // Handles messages that have exhausted all retries and landed in the DLT
     @DltHandler
-    public void handleDeadLetterMessage(ConsumerRecord<String, PaymentEvent> record,
-                                        @Header(KafkaHeaders.ORIGINAL_TOPIC) String originalTopic,
-                                        @Header(KafkaHeaders.ORIGINAL_OFFSET) long originalOffset,
-                                        @Header(KafkaHeaders.EXCEPTION_FQCN) String exceptionClass,
-                                        @Header(KafkaHeaders.EXCEPTION_MESSAGE) String exceptionMessage,
-                                        Acknowledgment ack) {
-        log.error("CRITICAL: Message permanently failed and landed in DLT! OriginalTopic: {}, OriginalOffset: {}, " +
-                  "Key: {}, Exception: {} - {}", 
-                originalTopic, originalOffset, record.key(), exceptionClass, exceptionMessage);
+    public void handleDeadLetter(
+            ConsumerRecord<String, PaymentEvent> record,
+            @Header(KafkaHeaders.RECEIVED_TOPIC) String dltTopic,
+            @Header(KafkaHeaders.ORIGINAL_TOPIC) String originalTopic,
+            @Header(KafkaHeaders.ORIGINAL_PARTITION) int originalPartition,
+            @Header(KafkaHeaders.ORIGINAL_OFFSET) long originalOffset,
+            @Header(KafkaHeaders.EXCEPTION_FQCN) String exceptionClass,
+            @Header(KafkaHeaders.EXCEPTION_MESSAGE) String exceptionMessage) {
 
-        // 1. Publish metrics / trigger PagerDuty alert
-        // 2. Persist failure record into dead-letter audit store
-        
-        ack.acknowledge();
+        log.error("Payment event moved to {} from {}[{}:{}] key={} cause={} ({})",
+                dltTopic, originalTopic, originalPartition, originalOffset,
+                record.key(), exceptionClass, exceptionMessage);
+
+        auditRepository.saveFailure(
+                originalTopic, originalPartition, originalOffset,
+                record.key(), exceptionClass, exceptionMessage
+        );
     }
 
-    public record PaymentEvent(String orderId, String customerId, double amount, String currency) {}
+    public record PaymentEvent(String orderId, String customerId, BigDecimal amount, String currency) {}
 }
 ```
 
----
+> [!WARNING]
+> **Ordering Trade-Off of Non-Blocking Retries:** Non-blocking retry topics break strict per-key ordering for failed records. If `OrderCreated` (offset 42) fails temporarily and moves to `orders-retry-0`, `OrderCancelled` (offset 43) for the same `orderId` will be processed on the main topic right away, before `OrderCreated` retries. If your consumer cannot tolerate out-of-order events for the same key (for example, through version checks or idempotent state machines), use blocking retries or route related events through an ordered state store.
 
-## Anatomy of Dead Letter Context Headers
+## Dead Letter Topic Routing and Safe Reprocessing
 
-When Spring Kafka's `DeadLetterPublishingRecoverer` routes a message to a DLT, it automatically injects diagnostic metadata into the Kafka headers:
+When `DeadLetterPublishingRecoverer` (or `@RetryableTopic`) publishes a failed record to a DLT, it preserves the original key and value bytes and attaches diagnostic Kafka headers. Depending on whether you use `DeadLetterPublishingRecoverer` directly (`kafka_dlt-*` headers) or `@RetryableTopic` (`kafka_original-*` / `kafka_exception-*` headers), the metadata includes:
 
-```text
-kafka_original-topic:      fintech.orders.v1
-kafka_original-partition:  2
-kafka_original-offset:     42
-kafka_original-timestamp:  1793261500000
-kafka_exception-fqcn:      org.springframework.dao.DataIntegrityViolationException
-kafka_exception-message:   duplicate key value violates unique constraint "orders_pkey"
-kafka_exception-stacktrace: org.springframework.dao.DataIntegrityViolationException: ...
+- Original topic, partition, offset, and timestamp
+- Consumer group ID
+- Exception fully qualified class name (`EXCEPTION_FQCN`), message (`EXCEPTION_MESSAGE`), and stack trace (`EXCEPTION_STACKTRACE`)
+
+These headers let operators triage incidents straight from the DLT without hunting through log aggregators.
+
+### Replaying DLT Messages Safely
+
+Moving records to a DLT protects partition throughput, but those business transactions still need to be recovered once the underlying bug or vendor outage is resolved. Blindly piping a DLT back into the main topic is risky: if the bug is not actually fixed, records loop straight back into the DLT and create an infinite replay loop; if 50,000 records are replayed at once, they can overload your database.
+
+A controlled replay job follows four rules:
+
+1. **Bound the replay to a snapshot of current end offsets** so any record that fails again and lands back in the DLT during replay is not re-read in the same run.
+2. **Strip exception and DLT metadata headers** before republishing to the main topic.
+3. **Throttle publish rate** so downstream databases and rate-limited APIs absorb the backlog smoothly.
+4. **Rely on idempotent consumers** (such as a processed-event table or natural unique key) in case a record partially executed side effects before originally failing.
+
+```java
+package com.javahub.kafka.resilience;
+
+import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.header.Header;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+
+@Service
+public class DeadLetterReplayService {
+
+    private static final Logger log = LoggerFactory.getLogger(DeadLetterReplayService.class);
+
+    private final ConsumerFactory<byte[], byte[]> rawConsumerFactory;
+    private final KafkaTemplate<byte[], byte[]> rawKafkaTemplate;
+
+    public DeadLetterReplayService(ConsumerFactory<byte[], byte[]> rawConsumerFactory,
+                                   KafkaTemplate<byte[], byte[]> rawKafkaTemplate) {
+        this.rawConsumerFactory = rawConsumerFactory;
+        this.rawKafkaTemplate = rawKafkaTemplate;
+    }
+
+    public int replayBounded(String dltTopic, String targetTopic, int maxRecordsPerSecond) {
+        int replayed = 0;
+        long delayMs = Math.max(1L, 1_000L / maxRecordsPerSecond);
+
+        try (Consumer<byte[], byte[]> consumer = rawConsumerFactory.createConsumer("dlt-replay-job", "manual")) {
+            List<TopicPartition> partitions = consumer.partitionsFor(dltTopic).stream()
+                    .map(info -> new TopicPartition(dltTopic, info.partition()))
+                    .toList();
+            consumer.assign(partitions);
+
+            // Snapshot the end offsets up front so newly failed records are not re-read infinitely
+            Map<TopicPartition, Long> endOffsets = consumer.endOffsets(partitions);
+            consumer.seekToBeginning(partitions);
+
+            while (hasRemaining(consumer, endOffsets)) {
+                ConsumerRecords<byte[], byte[]> batch = consumer.poll(Duration.ofSeconds(1));
+                for (ConsumerRecord<byte[], byte[]> record : batch) {
+                    long endOffset = endOffsets.getOrDefault(
+                            new TopicPartition(record.topic(), record.partition()), 0L);
+                    if (record.offset() >= endOffset) {
+                        continue;
+                    }
+
+                    ProducerRecord<byte[], byte[]> cleanRecord =
+                            new ProducerRecord<>(targetTopic, null, record.key(), record.value());
+
+                    // Keep business headers (e.g., correlationId), drop Spring DLT/retry error headers
+                    for (Header header : record.headers()) {
+                        String key = header.key();
+                        if (!key.startsWith("kafka_dlt-")
+                                && !key.startsWith("kafka_exception-")
+                                && !key.startsWith("retry_topic-")) {
+                            cleanRecord.headers().add(header);
+                        }
+                    }
+
+                    rawKafkaTemplate.send(cleanRecord).join();
+                    replayed++;
+                    throttle(delayMs);
+                }
+            }
+        }
+
+        log.info("Replayed {} records from {} to {}", replayed, dltTopic, targetTopic);
+        return replayed;
+    }
+
+    private boolean hasRemaining(Consumer<byte[], byte[]> consumer, Map<TopicPartition, Long> endOffsets) {
+        return endOffsets.entrySet().stream()
+                .anyMatch(entry -> consumer.position(entry.getKey()) < entry.getValue());
+    }
+
+    private void throttle(long delayMs) {
+        try {
+            Thread.sleep(delayMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("DLT replay interrupted", e);
+        }
+    }
+}
 ```
 
-This diagnostic payload is essential for triage:
-- On-call engineers can see the exact root cause without digging through gigabytes of distributed application logs.
-- The original offset and partition are preserved, allowing automated scripts to verify whether the source record was committed.
+Using raw `byte[]` serializers for replay avoids deserializing and re-serializing domain payloads (which also lets you replay records even when the replay tool does not carry every domain class or Avro schema on its classpath).
 
----
+## Backpressure and Circuit Breakers for Event Consumers
 
-## The DLQ Reprocessing and Replay Pattern
+Retry topics and DLTs solve **message-level** errors, but they behave poorly during a **system-level** outage.
 
-Moving poisoned messages to a Dead Letter Topic prevents system outages, but the business problem remains: **those transactions were not processed**.
+Suppose your downstream payment processor goes completely offline for 15 minutes. If your Kafka consumer keeps polling at 2,000 messages per second, every valid order hits the dead gateway, fails, floods the retry topics, exhausts attempts, and lands in the DLT. When the payment processor recovers 15 minutes later, you now have 500,000 perfectly valid orders sitting in the DLT waiting for manual replay.
 
-Once engineers identify the root cause (e.g., deploying a hotfix for a bug or resolving a third-party API outage), how do you reprocess the 20,000 messages sitting in the Dead Letter Topic?
+You do not want to send healthy orders to a DLT just because a downstream API is down. You want the consumer to **apply backpressure and pause consumption** until the dependency recovers, leaving unread messages safely buffered in Kafka where they belong.
+
+### Tuning Kafka Consumer Backpressure Controls
+
+Before adding a circuit breaker, make sure the consumer's poll batch matches the downstream service's realistic processing latency:
+
+- **`max.poll.records`** (default `500`): Lower this (for example, to `25` or `50`) when each event triggers an external HTTP or database call. Smaller batches keep processing time per poll predictable and far below `max.poll.interval.ms`.
+- **`max.poll.interval.ms`** (default `300000` / 5 minutes): The maximum wall-clock time allowed between `poll()` calls before Kafka evicts the consumer. Ensure `max.poll.records * worst_case_record_time < max.poll.interval.ms`.
+- **`fetch.max.bytes` and `max.partition.fetch.bytes`**: Cap memory held in-flight inside the consumer buffer.
+
+### Pausing a `@KafkaListener` Container with Resilience4j
+
+To stop pulling messages during a downstream outage without losing consumer group membership, connect a **Resilience4j `CircuitBreaker`** to Spring Kafka's **`KafkaListenerEndpointRegistry`**.
 
 ```mermaid
-flowchart LR
-    DLT[("fintech.orders.v1-DLT")] --> ReplayWorker["DLQ Replay CLI / Spring Batch Job"]
-    ReplayWorker -->|"1. Strip DLT error headers"| CleanRecord["Sanitized Clean Record"]
-    CleanRecord -->|"2. Publish to Main Topic or Dedicated Recovery Topic"| MainTopic[("fintech.orders.v1")]
-    MainTopic --> Consumer["Production Consumer"]
+stateDiagram-v2
+    [*] --> CLOSED
+    CLOSED --> OPEN: "Failure rate exceeds threshold -> container.pause()"
+    OPEN --> HALF_OPEN: "Wait duration elapses (auto-transition) -> container.resume()"
+    HALF_OPEN --> CLOSED: "Probe calls succeed -> stay resumed"
+    HALF_OPEN --> OPEN: "Probe calls fail -> container.pause()"
 ```
 
-### Production Replay Rules:
-1. **Never Replay into Production Before Fixing the Bug:** Replaying unhandled records before deploying the bugfix merely causes them to fail again, flooding the retry topics and creating duplicate alerts.
-2. **Strip Error Headers Before Replay:** When republishing records from the DLT back to the main topic, strip the `kafka_exception-*` headers to prevent confusion during downstream monitoring.
-3. **Enforce Consumer Idempotency:** Because messages in the DLT may have partially completed some side-effects before failing, your consumer must implement the **Transactional Inbox** or idempotent check before replaying messages at scale.
+Why is `MessageListenerContainer.pause()` safe in Kafka? Under the hood, Spring Kafka invokes `KafkaConsumer.pause(assignedPartitions)`. A paused `KafkaConsumer` **keeps calling `poll()` on every loop iteration**, returning zero records while continuing to send group heartbeats and reset the `max.poll.interval.ms` timer. The consumer stays a healthy member of the group with zero rebalances, and partition lag simply builds up in Kafka until the container resumes.
 
----
+> [!IMPORTANT]
+> Set `automaticTransitionFromOpenToHalfOpenEnabled(true)` on your Resilience4j `CircuitBreakerConfig`. By default, Resilience4j transitions from `OPEN` to `HALF_OPEN` lazily when the *next* call arrives. When the Kafka listener container is paused, no calls arrive, so without automatic transition enabled, the circuit breaker would stay `OPEN` and the consumer would stay paused forever.
 
-## Senior Engineer Interview Crucible
+```java
+package com.javahub.kafka.resilience;
 
-### Why is using `Thread.sleep()` to implement retry backoff inside a Kafka consumer a fatal anti-pattern, and how do multi-tier retry topics resolve it?
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.config.KafkaListenerEndpointRegistry;
+import org.springframework.kafka.listener.MessageListenerContainer;
 
-Using `Thread.sleep()` inside a Kafka consumer poll loop halts the consumer thread from performing subsequent work. 
+import java.time.Duration;
 
-This introduces two catastrophic failure modes:
-1. **Head-of-Line Blocking:** While the thread sleeps, all subsequent valid messages queued in that partition are blocked, inflating consumer lag.
-2. **Rebalance Storms via `max.poll.interval.ms`:** If multiple transient errors occur in succession, the accumulated sleep duration easily exceeds the configured `max.poll.interval.ms`. The Kafka broker assumes the consumer thread has deadlocked or crashed, evicts it from the group, and triggers a Stop-The-World rebalance across all other consumer pods.
+@Configuration
+public class CircuitBreakerBackpressureConfig {
 
-**Multi-tier retry topics** resolve this by offloading failed records immediately to delayed topics (e.g., `orders-retry-1s`, `orders-retry-10s`). The consumer commits the main topic offset instantly, allowing the worker thread to immediately invoke `poll()` and process subsequent healthy messages without delay.
+    private static final Logger log = LoggerFactory.getLogger(CircuitBreakerBackpressureConfig.class);
+    public static final String LISTENER_ID = "payment-billing-listener";
 
----
+    @Bean
+    public CircuitBreaker paymentGatewayCircuitBreaker(
+            CircuitBreakerRegistry registry,
+            KafkaListenerEndpointRegistry listenerRegistry) {
 
-### Explain the difference between blocking retries and non-blocking retries in Spring for Apache Kafka (`@RetryableTopic`). When would you still use blocking retries?
+        CircuitBreakerConfig config = CircuitBreakerConfig.custom()
+                .slidingWindowSize(20)
+                .minimumNumberOfCalls(10)
+                .failureRateThreshold(50.0f)
+                .waitDurationInOpenState(Duration.ofSeconds(30))
+                .permittedNumberOfCallsInHalfOpenState(5)
+                // Critical: triggers OPEN -> HALF_OPEN on a background timer while listener is paused
+                .automaticTransitionFromOpenToHalfOpenEnabled(true)
+                .build();
 
-- **Non-Blocking Retries (`@RetryableTopic`):** Failed messages are forwarded to separate delay topics, allowing the main consumer to proceed with the next record.
-  - *Advantage:* High throughput; one failing record never blocks valid records.
-  - *Trade-off:* **Message ordering is broken**. If record 1 fails and is moved to a retry topic, record 2 is processed on the main topic immediately.
-- **Blocking Retries (`DefaultErrorHandler` with BackOff):** The consumer retries the record locally in memory on the same thread before advancing the offset.
-  - *Advantage:* **Strict message ordering is preserved**. Record 2 will never be processed until record 1 either succeeds or is exhausted and moved to the DLT.
-  - *Trade-off:* Throughput drops to zero for that partition while retrying.
+        CircuitBreaker cb = registry.circuitBreaker("paymentGateway", config);
 
-**When to use Blocking Retries:** In domains where strict sequential ordering per partition is an absolute business invariant (e.g., financial balance ledgers, inventory decrement logs, or state-machine transitions). If event B depends on event A having succeeded first, you must use blocking retries (with careful tuning of backoff limits) to prevent out-of-order execution.
+        cb.getEventPublisher().onStateTransition(event -> {
+            MessageListenerContainer container = listenerRegistry.getListenerContainer(LISTENER_ID);
+            if (container == null) {
+                return;
+            }
 
----
+            CircuitBreaker.State nextState = event.getStateTransition().getToState();
+            if (nextState == CircuitBreaker.State.OPEN) {
+                log.warn("Circuit breaker OPEN; pausing Kafka listener {}", LISTENER_ID);
+                container.pause();
+            } else if (nextState == CircuitBreaker.State.HALF_OPEN
+                    || nextState == CircuitBreaker.State.CLOSED) {
+                if (container.isContainerPaused()) {
+                    log.info("Circuit breaker {}; resuming Kafka listener {}", nextState, LISTENER_ID);
+                    container.resume();
+                }
+            }
+        });
 
-### Walk through the headers added to a message by Spring Kafka's `DeadLetterPublishingRecoverer`. Why are these headers critical for triage?
+        return cb;
+    }
+}
+```
 
-When `DeadLetterPublishingRecoverer` routes an unprocessable message to a Dead Letter Topic, it enriches the record with diagnostic metadata in the Kafka record headers:
-- `kafka_original-topic`: The name of the topic where the record originated.
-- `kafka_original-partition`: The specific partition number.
-- `kafka_original-offset`: The offset in the source topic.
-- `kafka_exception-fqcn`: The fully qualified class name of the exception that caused the failure (e.g., `org.hibernate.exception.ConstraintViolationException`).
-- `kafka_exception-message`: The detailed exception message.
-- `kafka_exception-stacktrace`: The complete root-cause stack trace.
+Inside `PaymentBillingService`, decorate the downstream HTTP or database call with `circuitBreaker.executeRunnable(...)` (or `@CircuitBreaker(name = "paymentGateway")`), and treat `CallNotPermittedException` as a retryable exception (never route it straight to the DLT). That way, the few in-flight records from the current poll batch that arrive right as the breaker trips are retried cleanly, while the container immediately pauses so thousands of subsequent orders remain untouched on the broker until the downstream gateway recovers.
 
-These headers are critical because they decouple operational debugging from application log aggregation. An engineer or automated triage dashboard can inspect the DLT directly and immediately identify which service failed, the exact line of code that threw the error, and the original transaction offset without querying gigabytes of distributed Datadog or ELK logs.
+## Interview Questions
 
----
+### Why does `Thread.sleep()` inside a `@KafkaListener` cause rebalance storms, and how do non-blocking retry topics avoid that?
 
-### How do you safely replay thousands of messages from a Dead Letter Topic back into the primary processing pipeline after deploying a bug fix?
+A Kafka consumer runs heartbeats on a background thread, but the broker also enforces `max.poll.interval.ms` on the application poll loop to detect livelocked listeners. Sleeping inside the listener blocks the thread from returning to `poll()`. If a few failing records accumulate enough sleep time to exceed `max.poll.interval.ms`, the broker evicts the consumer and triggers a consumer group rebalance, reassigning partitions across pods (which may then hit the exact same failing records). Non-blocking retry topics avoid this by offloading failed records to delayed retry topics and committing the main offset immediately so the main consumer returns to `poll()` right away.
 
-Safely replaying records from a DLT requires a structured, multi-step operational procedure:
+### When should you choose `DefaultErrorHandler` blocking retries over `@RetryableTopic` non-blocking retries?
 
-1. **Verify Bugfix Deployment:** Confirm via automated tests and staging verification that the root-cause bug has been resolved in production.
-2. **Throttle Replay Throughput:** Never dump 50,000 DLT records into the main topic simultaneously. Rapidly dumping a huge backlog can overwhelm downstream databases, saturate connection pools, and trigger rate-limiting. Use a throttled batch tool or script (e.g., 200 records per second).
-3. **Strip Error Headers:** Remove the `kafka_exception-*` headers prior to re-publishing to ensure metrics and monitoring treat the replayed records as fresh traffic.
-4. **Rely on Consumer Idempotency:** The consumer must use an idempotent mechanism (such as the **Transactional Inbox Pattern**) to ensure that records that may have partially succeeded before dying do not execute duplicate side-effects (e.g., double-charging credit cards).
-5. **Monitor DLT Lag:** Continuously observe the DLT during replay. If any records fail again and bounce straight back to the DLT, immediately abort the replay job to investigate unpredicted edge cases.
+Use `DefaultErrorHandler` with short blocking backoffs when strict per-partition ordering is required (for example, when processing sequential state transitions like `Created -> Authorized -> Captured -> Refunded` for the same account or order key). Non-blocking retry topics move a failing record onto a separate topic while allowing subsequent records for the same key to proceed on the main topic, which breaks causal order. Choose `@RetryableTopic` when throughput matters more than strict ordering across failed records, or when your consumer handles out-of-order delivery via entity versions or idempotent checks.
+
+### Why is `ErrorHandlingDeserializer` required even if you already configured a `DefaultErrorHandler` with a `DeadLetterPublishingRecoverer`?
+
+Deserialization runs inside `KafkaConsumer.poll()`, before Spring Kafka invokes your `@KafkaListener` method. Without `ErrorHandlingDeserializer`, a malformed record causes `poll()` itself to throw a `SerializationException` repeatedly at the same offset, and the listener container's record-level `DefaultErrorHandler` cannot extract the raw bytes to publish them to the DLT. `ErrorHandlingDeserializer` traps the deserialization error, attaches the raw bytes and stack trace in record headers, and passes the failed record into `DefaultErrorHandler`, which treats `DeserializationException` as non-retryable and sends it straight to the DLT.
+
+### Why should you pause a Kafka listener container via `KafkaListenerEndpointRegistry` when a circuit breaker opens instead of letting all records fail into the DLT?
+
+A Dead Letter Topic is meant for isolated, unprocessable messages, not for buffering 15 minutes of healthy production traffic during a downstream outage. Letting records fail into the DLT creates unnecessary broker traffic, triggers false alerts, and forces an operational replay afterward. Calling `container.pause()` triggers `KafkaConsumer.pause()`, which stops fetching new records while continuing to call `poll()` so heartbeats stay alive and no consumer group rebalance occurs. Combined with Resilience4j's `automaticTransitionFromOpenToHalfOpenEnabled(true)`, the consumer resumes automatically once the wait window elapses to probe whether the downstream dependency has recovered.

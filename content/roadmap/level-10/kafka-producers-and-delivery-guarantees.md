@@ -1,210 +1,270 @@
-# Kafka Producers and Delivery Guarantees
+---
+title: "Kafka Producers and Delivery Guarantees"
+description: "Understand Kafka producer internals, RecordAccumulator batching, delivery guarantees, idempotence, custom partitioners, and compression trade-offs in production Java services."
+category: "level-10"
+date: "2026-10-29T10:00:00Z"
+---
 
-In event-driven architectures, producing a message to Kafka looks deceptively simple: you instantiate a `KafkaTemplate` and call `kafkaTemplate.send("orders", order)`.
+Calling `kafkaTemplate.send("orders", order)` looks like a one-line RPC, which is why producer bugs often go unnoticed until traffic spikes or a broker restarts.
 
-In a production banking or payment platform, that naive line of code hides serious concurrency and reliability hazards:
-- What happens if the network cable to the broker blips after the broker writes the message to disk but before the TCP acknowledgment reaches your application? Your application retries, and now your customer is billed twice.
-- What happens if your application crashes while 5,000 messages sit in the producer's in-memory accumulator buffer? Those messages are permanently lost.
-- What happens if you repartition a topic while using default partitioning logic? Strict message ordering for customer transactions is immediately scrambled across partitions.
-
-To design mission-critical event pipelines, senior engineers must master the producer's internal queuing mechanics, configure bulletproof **Zero Data Loss** durability, and implement **Idempotent** and **Transactional** publishing.
+In reality, `send()` does not write directly to a TCP socket. It serializes your record, chooses a partition, and drops the bytes into an in-memory batch buffer. A background thread drains those batches, compresses them, pipelines them across the network, retries transient errors, and waits for broker acknowledgments. Every delivery guarantee, throughput number, and ordering constraint comes directly from how you configure that pipeline.
 
 ---
 
-## The Delivery Guarantee Spectrum
+## Producer Architecture and `RecordAccumulator`
 
-Every distributed messaging system operates within one of three delivery guarantees:
+The Java `KafkaProducer` splits work cleanly between your calling application thread and a single dedicated background **`Sender`** I/O thread.
 
 ```mermaid
 flowchart TD
-    subgraph AtMostOnce["1. At-Most-Once (Fire and Forget)"]
-        AMO["acks=0, retries=0<br/>Messages may be lost, never duplicated.<br/>Lowest latency, zero durability."]
+    subgraph AppThread["Application Thread(s)"]
+        Send["producer.send(record)"] --> Int["ProducerInterceptors"]
+        Int --> Ser["Key & Value Serializers"]
+        Ser --> Part["Partitioner (Key Hash / Sticky / Custom)"]
     end
 
-    subgraph AtLeastOnce["2. At-Least-Once (Standard Production)"]
-        ALO["acks=all, retries > 0<br/>Messages never lost, but may be duplicated on network retry.<br/>Requires consumer idempotency."]
+    subgraph Accumulator["RecordAccumulator (buffer.memory = 32 MB)"]
+        Q0["Partition 0 Deque: [Batch 1 (Full)] [Batch 2 (Filling)]"]
+        Q1["Partition 1 Deque: [Batch 1 (Filling)]"]
+        Q2["Partition 2 Deque: [Batch 1 (Filling)]"]
     end
 
-    subgraph ExactlyOnce["3. Exactly-Once Semantics (EOS)"]
-        EOS["enable.idempotence=true + Kafka Transactions<br/>Messages delivered exactly once within Kafka ecosystem.<br/>No duplicates, zero data loss."]
+    Part -->|"Append serialized record"| Accumulator
+
+    subgraph IOThread["Background Sender Thread"]
+        Sender["Sender Loop<br/>(Drains when batch.size or linger.ms triggers)"] --> Net["NetworkClient (Java NIO Selector)"]
     end
+
+    Accumulator --> Sender
+    Net -->|"Pipelined ProduceRequest"| Broker[("Kafka Partition Leaders")]
 ```
 
-### At-Most-Once
-The producer sends the message and does not wait for an acknowledgment (`acks=0`). If the broker crashes or the network packet drops, the message is lost forever. Useful only for non-critical high-frequency telemetry (e.g., mouse movement coordinates, IoT temperature readings).
+### Step-by-Step Execution
 
-### At-Least-Once
-The producer waits for an acknowledgment from the broker (`acks=1` or `acks=all`). If an acknowledgment is not received within a timeout window, the producer retries. If the broker received the write but the acknowledgment packet was dropped by the network, the retry causes the broker to record the message a second time. **Duplicates can occur.**
+1. **Application Thread (Fast Path)**:
+   - Your code calls `send(record)` (or `send(record, callback)`).
+   - The record passes through any configured `ProducerInterceptor` hooks, then key and value `Serializer` implementations convert objects into byte arrays.
+   - The `Partitioner` selects the destination partition (unless you specified an explicit partition number on the `ProducerRecord`).
+   - The producer appends the serialized bytes to a `ProducerBatch` inside the **`RecordAccumulator`**, which maintains one `Deque<ProducerBatch>` per topic-partition.
+   - `send()` returns a `Future<RecordMetadata>` immediately without waiting for network I/O.
+2. **Backpressure via `buffer.memory` and `max.block.ms`**:
+   - The `RecordAccumulator` draws memory from a fixed pool (`buffer.memory`, default 32 MB). If brokers fall behind and the buffer fills up, `send()` blocks for up to `max.block.ms` (default 60 seconds) before throwing `TimeoutException`.
+3. **Background `Sender` Thread (I/O Path)**:
+   - The `Sender` thread groups ready batches by their destination broker node (partition leader) and sends them in pipelined `ProduceRequest` frames over Java NIO.
+   - A batch becomes ready as soon as it reaches **`batch.size`** (default 16 KB), or once **`linger.ms`** has elapsed since the batch was created.
+   - When the broker responds, the `Sender` thread completes the future and invokes your callback.
 
-### Exactly-Once Semantics (EOS)
-The message is processed and recorded exactly once, even in the event of producer retries, broker failovers, or network partitions. Within Kafka, this is achieved through **Idempotent Producers** and the **Transactional API**.
+### Tuning Batching and Timeouts
 
----
+By default, `linger.ms=0`, so the `Sender` thread transmits batches as soon as the network connection is free. Under moderate to heavy load, raising `linger.ms` slightly (for example, `5` to `20` ms) and increasing `batch.size` (for example, `65536` bytes / 64 KB) lets concurrent application threads pack many records into a single compressed batch. You trade a few milliseconds of producer-side latency for substantially higher throughput, better compression ratios, and lower broker CPU overhead.
 
-## Anatomy of the Kafka Producer: The Accumulator and Sender Thread
-
-A fundamental architectural reality of the Java `KafkaProducer` is that **`producer.send()` does not write to the network**. It writes to an in-memory buffer.
-
-```mermaid
-flowchart TD
-    subgraph ApplicationThread["Application Thread (JVM)"]
-        UserCode["producer.send(record)"] --> Interceptors["Producer Interceptors"]
-        Interceptors --> Serializer["Key & Value Serializers"]
-        Serializer --> Partitioner["Partitioner (Key Hash / Sticky)"]
-    end
-
-    subgraph RecordAccumulator["In-Memory RecordAccumulator Buffer (buffer.memory = 32MB)"]
-        P0_Batches["Partition 0 Queue: [Batch 1 (16KB)] [Batch 2 (Active)]"]
-        P1_Batches["Partition 1 Queue: [Batch 1 (16KB)] [Batch 2 (Active)]"]
-        P2_Batches["Partition 2 Queue: [Batch 1 (Active)]"]
-    end
-
-    Partitioner -->|"Appends to batch"| RecordAccumulator
-
-    subgraph BackgroundSender["Background Sender Thread (Daemon)"]
-        Sender["Sender Runnable"] -->|"Drain full batches or linger.ms expired"| NetworkClient["NetworkClient (NIO Selector)"]
-    end
-
-    RecordAccumulator --> Sender
-    NetworkClient -->|"TCP Batch Socket Write"| KafkaBroker[("Kafka Broker Cluster")]
-```
-
-### The Two-Stage Architecture
-
-1. **The Application Thread (Fast Path):**
-   - The application invokes `send()`.
-   - The record passes through configured **Interceptors**, **Serializers** (converting objects to byte arrays), and the **Partitioner** (determining the destination partition).
-   - The serialized bytes are appended to a batch inside the **`RecordAccumulator`**. This in-memory pool (default: 32 MB, configured via `buffer.memory`) allocates memory in chunks (default: 16 KB, configured via `batch.size`).
-   - `send()` returns immediately with a `CompletableFuture<RecordMetadata>`.
-2. **The Background Sender Thread (I/O Path):**
-   - A dedicated daemon thread continuously monitors the `RecordAccumulator`.
-   - When a batch fills to `batch.size` OR when **`linger.ms`** has elapsed, the Sender thread drains the batches, groups them by target broker node, and transmits them in a single pipelined TCP request via Java NIO.
-
-### The Power of `linger.ms`
-
-By default, `linger.ms=0`, meaning the Sender thread transmits batches immediately as soon as a sender thread is available. Under high load, setting:
-
-```properties
-linger.ms=10
-batch.size=65536 # 64 KB
-```
-
-forces the producer to wait up to 10 milliseconds before transmitting, allowing concurrent application threads to coalesce thousands of individual records into a single 64 KB compressed batch. This simple configuration often **increases producer throughput by 400% to 700%** while reducing broker CPU and network packet overhead dramatically.
-
----
-
-## Partitioning Strategies: Keys and the Sticky Partitioner
-
-How does Kafka decide which partition receives a message?
-
-```mermaid
-flowchart LR
-    MsgWithKey["Record WITH Key: 'order-101'"] --> Murmur2["Murmur2 Hash Modulus"]
-    Murmur2 --> PartKey["Always Partition 2 (Guaranteed Ordering)"]
-
-    MsgNoKey["Record WITHOUT Key (null)"] --> Sticky["Modern Sticky Partitioner"]
-    Sticky --> PartFill["Fills Batch for Partition 0 -> Then switches to Partition 1"]
-```
-
-### Strategy 1: Partitioning by Key (Entity Ordering)
-
-If a record includes a key (e.g., `userId`, `orderId`, `accountId`), Kafka runs the key through the **Murmur2 hashing algorithm**:
+Also pay close attention to `delivery.timeout.ms` (default 120,000 ms / 2 minutes). It caps the total wall-clock time from when `send()` returns until the record is acknowledged or fails permanently, including lingering, network transit, and all retries. Kafka enforces the invariant:
 
 ```text
-partition = toPositive(Utils.murmur2(keyBytes)) % numPartitions
+delivery.timeout.ms >= linger.ms + request.timeout.ms
 ```
 
-- **Strict Ordering Guarantee:** All records sharing the exact same key are guaranteed to land on the **exact same partition**. Because Kafka guarantees total order within an individual partition, consumers are guaranteed to process that entity's events in the exact sequence they occurred.
-- **The Topic Repartitioning Trap:** If you increase the number of partitions on a live topic (e.g., scaling from 6 to 12 partitions), the modulus formula changes. Future records for `order-101` will hash to a completely different partition, immediately breaking sequential processing order for existing entities.
-
-### Strategy 2: Null Keys and the Modern Sticky Partitioner
-
-If a record has no key (`key = null`):
-- **Legacy Behavior (Round-Robin):** In older Kafka versions, records were distributed across partitions round-robin. This resulted in fragmented 1-message batches across all partitions, destroying batching efficiency and CPU cache locality.
-- **Modern Behavior (Sticky Partitioner - KIP-480):** In modern Kafka, when a key is null, the producer sticks to a single partition until its batch fills to `batch.size` or `linger.ms` elapses. Once transmitted, it selects another partition. This produces full batches, maximizes compression ratios, and reduces end-to-end latency.
+If a broker stays unreachable longer than `delivery.timeout.ms`, the producer stops retrying and fails the future with a `TimeoutException`.
 
 ---
 
-## Achieving Zero Data Loss and Idempotence
+## Delivery Guarantees: At-Most-Once, At-Least-Once, and Exactly-Once
 
-To prevent both data loss and message duplication in production, you must configure the producer and broker in unison.
+Distributed messaging systems trade off latency, availability, and duplicate risk along three delivery levels:
 
-### The Producer Idempotence Mechanism (`enable.idempotence=true`)
+| Guarantee | Core Producer Settings | What Can Happen on Failure | Typical Use Case |
+| :--- | :--- | :--- | :--- |
+| **At-Most-Once** | `acks=0` | Messages can be lost if the broker crashes or packets drop; never retried, so no retry duplicates | Non-critical metrics, clickstream telemetry |
+| **At-Least-Once** | `acks=all` (or `acks=1`), retries enabled | Messages are not lost once acknowledged by ISR, but retries can produce duplicates if idempotence is off, and consumers can see duplicates on restart | Standard business events paired with idempotent consumers |
+| **Exactly-Once (EOS)** | `enable.idempotence=true` + `transactional.id` + consumer `read_committed` | Atomic read-process-write inside Kafka with no retry duplicates and no partial multi-topic writes | Kafka-to-Kafka financial pipelines and Kafka Streams |
 
-What happens when a network error occurs during acknowledgment?
+### At-Most-Once (`acks=0`)
+The producer considers a record sent the moment bytes hit the local socket buffer. It never waits for a broker response, so retries never trigger. Latency is minimal, and you cannot even read a real offset from `RecordMetadata`, because the broker never replied.
+
+### At-Least-Once
+The producer waits for broker acknowledgment (`acks=1` for leader only, or `acks=all` for the full ISR) and retries transient failures (`NetworkException`, `NotLeaderOrFollowerException`, `NotEnoughReplicasException`). With `acks=1`, if the leader writes the record locally, acknowledges it, and then crashes before followers replicate it, the record is still lost. That is why durability-sensitive systems use `acks=all`.
+
+### Exactly-Once Semantics (EOS) Context
+Within Kafka, EOS combines two mechanisms:
+- **Idempotent Producer**: Eliminates duplicates caused by producer retries on a single partition during a producer session.
+- **Kafka Transactions**: Writes to multiple topics/partitions and commits consumer offsets (`sendOffsetsToTransaction`) atomically so downstream consumers configured with `isolation.level=read_committed` see either all records in the transaction or none.
+
+Keep the boundary clear: Kafka transactions coordinate Kafka partitions and Kafka consumer offsets. They do **not** make a PostgreSQL write and a Kafka publish atomic; for that boundary, use the Transactional Outbox and Inbox patterns.
+
+---
+
+## `acks=all` and `enable.idempotence=true`
+
+Since **Kafka 3.0** (KIP-679), safe defaults are enabled out of the box:
+- `enable.idempotence=true`
+- `acks=all`
+- `retries=Integer.MAX_VALUE` (bounded by `delivery.timeout.ms`)
+- `max.in.flight.requests.per.connection=5`
+
+Even though Kafka 3+ sets these by default, production teams still declare them explicitly in configuration so an accidental override fails fast at startup. For example, if someone sets `acks=1` while `enable.idempotence=true`, `KafkaProducer` throws a `ConfigException` immediately rather than silently weakening durability.
+
+### How Producer Idempotence Works
+
+Without idempotence, a dropped TCP acknowledgment packet causes the producer to retry a batch the broker already wrote, appending a duplicate record to the log.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant Prod as Producer (PID: 1001)
-    participant Broker as Partition Leader
+    participant Leader as Partition Leader
 
-    Prod->>Broker: Write Record (PID: 1001, Seq: 0, Data: "Debit $50")
-    Note over Broker: Appends to log at Offset 42
-    Broker-->>Prod: Network Packet DROPPED / TCP Timeout!
-    Note over Prod: Producer timeout! Initiates automatic retry...
-    Prod->>Broker: Retry Record (PID: 1001, Seq: 0, Data: "Debit $50")
-    Note over Broker: DETECTS DUPLICATE: Broker already committed (PID: 1001, Seq: 0)!
-    Note over Broker: Discards duplicate write! Returns existing Offset 42 ACK.
-    Broker-->>Prod: ACK Offset 42 (SUCCESS)
+    Prod->>Leader: ProduceBatch (PID: 1001, Seq: 0, "Debit 50 USD")
+    Note over Leader: Appends at Offset 42, records (PID 1001 -> Seq 0)
+    Leader--xProd: ACK lost due to network blip
+    Note over Prod: Request times out, Sender retries batch
+    Prod->>Leader: Retry ProduceBatch (PID: 1001, Seq: 0, "Debit 50 USD")
+    Note over Leader: Sees Seq 0 already committed for PID 1001
+    Leader-->>Prod: ACK Offset 42 (Duplicate discarded, not written)
 ```
 
-1. When `enable.idempotence=true` (enabled by default since Kafka 3.0), the broker assigns the producer a unique 64-bit **Producer ID (PID)** during initialization.
-2. For each partition, the producer tracks a monotonically increasing **Sequence Number** starting at `0`.
-3. When the broker receives a record, it checks the sequence number against its in-memory tracker for that PID.
-4. If the broker receives sequence number `N` when it has already committed `N`, it acknowledges the write but **silently discards the duplicate record from the log**.
-5. Duplicates caused by network retries are eliminated without requiring database transactions.
+1. On startup, the producer sends an `InitProducerId` request and receives a unique 64-bit **Producer ID (PID)** from the cluster.
+2. For each partition, the producer attaches a monotonically increasing **sequence number** (`0, 1, 2, ...`) to every batch.
+3. The partition leader tracks the last 5 sequence numbers per PID in memory and checkpoints producer state to `.snapshot` files on disk.
+4. If the leader receives a sequence number it has already committed, it discards the duplicate write and returns the original offset ACK. If a later batch arrives out of order (for example, Seq 2 arrives while Seq 1 is being retried), the broker rejects it with `OutOfOrderSequenceException` until Seq 1 lands, preserving strict per-partition ordering even with `max.in.flight.requests.per.connection=5`.
 
-### The Zero Data Loss Configuration Matrix
+> [!NOTE]
+> **Scope of Producer Idempotence**
+> Idempotence deduplicates network retries within a single producer session (one PID). If your JVM crashes, restarts with a fresh PID, and your application code re-reads an event and calls `send()` again, Kafka sees a brand-new PID and appends a second record. Consumer-side idempotency is still required for end-to-end deduplication.
 
-To guarantee that no message is ever lost, apply these parameters across your producer and broker configs:
+### Pairing `acks=all` with `min.insync.replicas`
 
-| Configuration | Recommended Value | Why It Is Mandatory |
-| :--- | :--- | :--- |
-| **`acks`** | **`all` (or `-1`)** | The partition leader will not send success until the message is written to all replicas in the current ISR set. |
-| **`enable.idempotence`** | **`true`** | Guarantees that producer retries do not introduce duplicate records or out-of-order writes. |
-| **`retries`** | **`Integer.MAX_VALUE`** | Producer retries transient failures indefinitely until `delivery.timeout.ms` is reached. |
-| **`max.in.flight.requests`** | **`<= 5`** | When idempotence is enabled, up to 5 concurrent in-flight requests are allowed while maintaining strict ordering guarantees. |
-| **`min.insync.replicas`** (Broker) | **`2`** | Enforces that at least 2 replicas (Leader + 1 Follower) must acknowledge the write when `acks=all`. |
+`acks=all` on the producer is only half of the durability equation. It tells the leader to wait for every replica currently in the **In-Sync Replicas (ISR)** set.
 
-> **Critical Production Rule:**
-> If `acks=all` is configured on the producer, but the topic's `min.insync.replicas` is left at the default of `1`, **you do not have zero data loss protection**. If two followers crash, the leader accepts the write alone. If the leader crashes immediately afterward, the message is permanently destroyed. In production, always set `replication.factor=3` and `min.insync.replicas=2`.
+If a topic has `replication.factor=3` but leaves `min.insync.replicas` at its default of `1`, and both followers fail, the ISR shrinks to just the leader. With `min.insync.replicas=1`, the leader happily accepts `acks=all` writes alone. If that leader then loses its disk before followers recover, those acknowledged records are gone.
+
+In production, pair producer and topic settings together:
+- **Topic / Broker**: `replication.factor=3` and `min.insync.replicas=2`
+- **Producer**: `acks=all` and `enable.idempotence=true`
+
+With `min.insync.replicas=2`, the cluster keeps accepting writes through a single broker outage. If 2 brokers go down simultaneously, the leader rejects writes with `NotEnoughReplicasException` rather than risking data loss.
 
 ---
 
-## Spring Boot Producer Implementation
+## Partitioning, Custom Partitioners, and Batch Compression
 
-Let's build a resilient, production-grade Kafka producer using Spring Boot 3 and `KafkaTemplate`.
+### Built-in Partitioning Behavior
 
-### Step 1: Configuration (`application.yml`)
+When a `ProducerRecord` has a **non-null key**, the default partitioner computes:
+
+```text
+partition = Utils.toPositive(Utils.murmur2(keyBytes)) % numPartitions
+```
+
+Every record with the same key lands on the same partition, preserving entity-level order. Be cautious when increasing partition counts on an active topic: changing `numPartitions` changes the modulo result for existing keys, temporarily breaking ordering for in-flight entities.
+
+When a record has a **null key**, older Kafka versions used round-robin partitioning, which scattered single records across every partition and produced tiny, poorly compressed batches. Modern Kafka (since KIP-480 and refined in Kafka 3.3+ via KIP-794's built-in sticky partitioner) sticks to one partition until its batch fills or `linger.ms` expires, then switches to another partition. This fills batches faster and improves compression without sacrificing long-term balance.
+
+### Writing a Custom `Partitioner`
+
+Sometimes default key hashing causes **hot partitions**. For example, if one enterprise tenant generates 40% of your platform's order volume and you hash by `tenantId`, that single tenant's partition falls behind while other partitions sit underutilized. Or you may want priority tenants isolated on dedicated partitions so noisy neighbors cannot delay them.
+
+You can implement Kafka's `org.apache.kafka.clients.producer.Partitioner` interface:
+
+```java
+package com.javahub.kafka.producer;
+
+import org.apache.kafka.clients.producer.Partitioner;
+import org.apache.kafka.common.Cluster;
+import org.apache.kafka.common.PartitionInfo;
+import org.apache.kafka.common.utils.Utils;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
+
+public class TenantAwarePartitioner implements Partitioner {
+
+    private Set<String> dedicatedTenants = Set.of();
+
+    @Override
+    public void configure(Map<String, ?> configs) {
+        Object configured = configs.get("app.partitioner.dedicated.tenants");
+        if (configured instanceof String csv && !csv.isBlank()) {
+            this.dedicatedTenants = Set.of(csv.split(","));
+        }
+    }
+
+    @Override
+    public int partition(
+            String topic,
+            Object key,
+            byte[] keyBytes,
+            Object value,
+            byte[] valueBytes,
+            Cluster cluster) {
+        List<PartitionInfo> partitions = cluster.partitionsForTopic(topic);
+        int totalPartitions = partitions.size();
+
+        if (totalPartitions == 1) {
+            return 0;
+        }
+        if (keyBytes == null || !(key instanceof String keyStr)) {
+            return ThreadLocalRandom.current().nextInt(totalPartitions);
+        }
+
+        // Reserve the last partition for dedicated VIP tenant traffic; hash all others across [0..N-2]
+        if (dedicatedTenants.contains(keyStr)) {
+            return totalPartitions - 1;
+        }
+        return Utils.toPositive(Utils.murmur2(keyBytes)) % (totalPartitions - 1);
+    }
+
+    @Override
+    public void close() {
+        // No resources to release
+    }
+}
+```
+
+Register it in producer properties via `partitioner.class: com.javahub.kafka.producer.TenantAwarePartitioner`. Note that Kafka 3.3+ defaults `partitioner.class` to `null` (activating the internal broker-load-aware sticky partitioner); setting `partitioner.class` overrides it cleanly.
+
+### Batch Compression (`lz4`, `zstd`, `snappy`, `gzip`)
+
+Kafka compresses entire **`ProducerBatch`** blocks rather than individual messages. Larger batches (via `batch.size` and `linger.ms`) give the compressor repeated JSON keys, UUID prefixes, and schema structures to collapse, shrinking network traffic, replication traffic, and broker disk usage all at once.
+
+When the broker's `compression.type` is left at its default (`producer`), the broker stores the compressed batch bytes as-is without decompressing and recompressing them; the consumer decompresses the batch on read.
+
+| Codec | Compression Ratio | CPU Overhead | Latency Impact | When to Pick It |
+| :--- | :--- | :--- | :--- | :--- |
+| **`none`** | None | Lowest | Lowest | Payloads are already compressed (encrypted blobs, images, protobuf with tiny batches) |
+| **`lz4`** | Good | Very low | Very low | Default high-throughput choice when latency and CPU budgets are tight |
+| **`zstd`** | Highest (close to or better than gzip) | Moderate | Low to moderate | Best all-around choice for JSON/text logs and cross-AZ network cost savings (Kafka 2.1+) |
+| **`snappy`** | Moderate | Low | Low | Solid general-purpose option, often used for legacy compatibility with older Spark/Hadoop pipelines |
+| **`gzip`** | High | Highest | Higher | Rarely preferred over `zstd` today because `zstd` achieves similar ratios with far less CPU |
+
+---
+
+## Spring Boot 3 Producer Implementation
+
+### Configuration (`application.yml`)
 
 ```yaml
 spring:
   kafka:
-    bootstrap-servers: kafka-broker-1:9092,kafka-broker-2:9092,kafka-broker-3:9092
+    bootstrap-servers: kafka-1:9092,kafka-2:9092,kafka-3:9092
     producer:
-      # Key and Value Serializers
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      
-      # Durability & Zero Data Loss Settings
       acks: all
-      retries: 2147483647 # Integer.MAX_VALUE
       properties:
         enable.idempotence: true
         max.in.flight.requests.per.connection: 5
-        
-        # Batching & Throughput Optimization
         linger.ms: 10
-        batch.size: 65536 # 64 KB
-        compression.type: lz4 # Fast, low CPU overhead compression
-        
-        # Timeout Settings
-        delivery.timeout.ms: 120000 # 2 minutes total timeout
-        request.timeout.ms: 30000    # 30 seconds per request
+        batch.size: 65536
+        compression.type: zstd
+        delivery.timeout.ms: 120000
+        request.timeout.ms: 30000
+        buffer.memory: 67108864 # 64 MB
+        max.block.ms: 10000
 ```
 
-### Step 2: The Production Event Publisher Service
+### Asynchronous Publisher with Tracing Headers
 
 ```java
 package com.javahub.kafka.producer;
@@ -219,6 +279,7 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
@@ -242,121 +303,89 @@ public class OrderEventProducer {
             correlationId = UUID.randomUUID().toString();
         }
 
-        // 1. Construct ProducerRecord with Explicit Partitioning Key (orderId)
         ProducerRecord<String, OrderEvent> record = new ProducerRecord<>(
                 ORDERS_TOPIC,
-                event.orderId(), // Key: Ensures all events for this specific order land on the same partition
+                event.orderId(),
                 event
         );
-
-        // 2. Propagate Distributed Tracing Correlation ID in Kafka Headers
+        record.headers().add(new RecordHeader("x-event-id", event.eventId().getBytes(StandardCharsets.UTF_8)));
         record.headers().add(new RecordHeader("x-correlation-id", correlationId.getBytes(StandardCharsets.UTF_8)));
-        record.headers().add(new RecordHeader("x-produced-timestamp", Instant.now().toString().getBytes(StandardCharsets.UTF_8)));
+        record.headers().add(new RecordHeader("x-produced-at", Instant.now().toString().getBytes(StandardCharsets.UTF_8)));
 
-        // 3. Asynchronous Send with Non-Blocking Callbacks
         CompletableFuture<SendResult<String, OrderEvent>> future = kafkaTemplate.send(record);
 
         return future.handle((result, ex) -> {
             if (ex != null) {
-                log.error("CRITICAL: Failed to publish OrderEvent for orderId: {} to topic: {}", 
-                        event.orderId(), ORDERS_TOPIC, ex);
-                // Trigger alerting, dead-letter fallback, or circuit breaker
-                throw new IllegalStateException("Failed to publish order event to Kafka", ex);
+                log.error("Failed to publish OrderEvent eventId={} orderId={}",
+                        event.eventId(), event.orderId(), ex);
+                throw new IllegalStateException("Kafka publish failed for order " + event.orderId(), ex);
             }
-
-            RecordMetadata metadata = result.getRecordMetadata();
-            log.info("OrderEvent successfully published for orderId: {} -> Partition: {}, Offset: {}, Timestamp: {}",
-                    event.orderId(), metadata.partition(), metadata.offset(), metadata.timestamp());
-            
-            return metadata;
+            RecordMetadata meta = result.getRecordMetadata();
+            log.info("Published OrderEvent orderId={} partition={} offset={}",
+                    event.orderId(), meta.partition(), meta.offset());
+            return meta;
         });
     }
 
-    public record OrderEvent(String orderId, String accountId, double amount, String currency, String status) {}
+    public record OrderEvent(
+            String eventId,
+            String orderId,
+            String accountId,
+            BigDecimal amount,
+            String currency,
+            String status) {}
 }
 ```
 
----
+### Atomic Multi-Topic Publishing with Kafka Transactions
 
-## Kafka Transactions: Atomic Multi-Partition Writes
-
-What happens if an application must publish to the `orders` topic AND the `audit-log` topic atomically? If the second write fails, the two topics diverge.
-
-Kafka supports **Atomic Multi-Partition Transactions** using a two-phase commit coordinator:
+When a service must write to two Kafka topics together (such as `fintech.orders.v1` and `fintech.audit.v1`) so consumers see either both records or neither, enable `spring.kafka.producer.transaction-id-prefix` and wrap the sends in `executeInTransaction`:
 
 ```java
+package com.javahub.kafka.producer;
+
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.stereotype.Service;
+
 @Service
-public class TransactionalOrderService {
+public class TransactionalOrderPublisher {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
-    public TransactionalOrderService(KafkaTemplate<String, Object> kafkaTemplate) {
+    public TransactionalOrderPublisher(KafkaTemplate<String, Object> kafkaTemplate) {
         this.kafkaTemplate = kafkaTemplate;
     }
 
-    public void processOrderTransactionally(OrderEvent order, AuditEvent audit) {
-        // Executes atomic two-phase commit across multiple topics and partitions
-        kafkaTemplate.executeInTransaction(operations -> {
-            operations.send("fintech.orders.v1", order.orderId(), order);
-            operations.send("fintech.audit.v1", order.orderId(), audit);
-            return true;
+    public void publishOrderAndAudit(OrderEventProducer.OrderEvent order, AuditRecord audit) {
+        kafkaTemplate.executeInTransaction(ops -> {
+            ops.send("fintech.orders.v1", order.orderId(), order);
+            ops.send("fintech.audit.v1", order.orderId(), audit);
+            return null;
         });
     }
+
+    public record AuditRecord(String eventId, String orderId, String actor, String action) {}
 }
 ```
 
-Under the hood:
-1. The producer registers its `transactional.id` with the **Transaction Coordinator** broker.
-2. The coordinator writes an `uncommitted` marker to the transaction log.
-3. The messages are appended to their target partitions with a transaction marker.
-4. When `executeInTransaction` finishes without exception, the coordinator appends a `COMMIT` marker to all partitions.
-5. Consumers configured with `isolation.level=read_committed` skip uncommitted or aborted messages, guaranteeing end-to-end atomicity.
+Under the hood, the producer registers its `transactional.id` with a Transaction Coordinator broker, writes records with a transaction marker, and appends a final `COMMIT` (or `ABORT`) control record to every involved partition. Downstream consumers must set `isolation.level=read_committed` to hide uncommitted and aborted records.
 
 ---
 
-## Senior Engineer Interview Crucible
+## Interview Questions
 
-### How does Kafka's Idempotent Producer eliminate duplicate messages during network retries without persisting transaction logs?
+### What actually happens when you call `producer.send()`, and why can it still block?
 
-When `enable.idempotence=true`, the broker assigns the producer a unique 64-bit **Producer ID (PID)** via an `InitProducerId` request. For each partition, the producer maintains an internal monotonic **Sequence Number** starting at zero.
+`send()` runs on the calling application thread: it executes interceptors, serializes the key and value, picks a partition, and appends the bytes into a `ProducerBatch` in the `RecordAccumulator`. It does not perform network I/O itself; a background `Sender` thread drains batches to brokers. However, `send()` can still block in two cases: if topic metadata is not yet fetched, or if the `RecordAccumulator` buffer (`buffer.memory`) is full because brokers are slower than your application. In either case, it blocks up to `max.block.ms` before throwing `TimeoutException`.
 
-Every batch sent across the network includes the PID and the starting sequence number. The partition leader broker stores the latest sequence number for each active PID in volatile memory and checkpoints it to local disk (`leader-epoch-checkpoint`). 
+### Why is `acks=all` alone not enough to prevent data loss?
 
-When a network timeout occurs and the producer retries sending batch `N`, the broker inspects the sequence number:
-- If `incomingSequence == committedSequence + 1`: The message is accepted and appended to the log.
-- If `incomingSequence <= committedSequence`: The broker recognizes the message as an in-flight network duplicate. It discards the record from physical storage to prevent duplication and immediately returns a successful ACK containing the existing offset to the producer.
+`acks=all` only instructs the partition leader to wait for all brokers currently in the In-Sync Replicas (ISR) set. If the topic leaves `min.insync.replicas=1`, a failure of two followers shrinks the ISR down to just the leader. The leader still satisfies `acks=all` with a single local write, and if that leader then fails before recovering followers, the acknowledged data is lost. Production topics need `replication.factor=3` and `min.insync.replicas=2` alongside `acks=all`.
 
----
+### How does `enable.idempotence=true` preserve ordering while allowing up to 5 in-flight requests per connection?
 
-### Explain the relationship between `acks=all` and `min.insync.replicas`. What catastrophic failure mode occurs if `min.insync.replicas=1` while `acks=all`?
+Before idempotence existed, setting `max.in.flight.requests.per.connection > 1` with retries enabled could reorder batches: if Batch 1 failed and Batch 2 succeeded, retrying Batch 1 appended it after Batch 2. With idempotence enabled, every batch carries a Producer ID (PID) and a monotonic per-partition sequence number. The partition leader tracks a sliding window of up to 5 sequence numbers per PID and enforces sequential acceptance, rejecting out-of-order batches with `OutOfOrderSequenceException` until the earlier sequence number succeeds.
 
-The `acks=all` (or `-1`) configuration is a producer-side setting instructing the partition leader not to send a success acknowledgment until the write has been replicated to all brokers currently in the **In-Sync Replicas (ISR)** set.
+### Why does increasing `linger.ms` improve compression effectiveness?
 
-The `min.insync.replicas` setting is a broker/topic-side constraint defining the *minimum number of in-sync replicas that must acknowledge a write* for it to be accepted.
-
-**The Catastrophic Failure Mode:**
-If a topic has a replication factor of 3, but `min.insync.replicas` is left at the default value of `1`:
-1. If two follower brokers crash or suffer a network partition, the leader ejects them from the ISR.
-2. The ISR set now contains **only the leader itself** (1 node).
-3. Because the ISR size is 1, a producer sending with `acks=all` is satisfied by the leader writing to its own disk alone!
-4. If that leader broker experiences a hardware crash or power loss 10 milliseconds later, **all of those acknowledged messages are permanently lost**, violating the zero-data-loss guarantee.
-
-To prevent this, production topics must always configure `replication.factor=3` and `min.insync.replicas=2`. If fewer than 2 replicas are available, the leader rejects writes with `NotEnoughReplicasException`, prioritizing consistency and durability over availability.
-
----
-
-### Why is `max.in.flight.requests.per.connection` limited to 5 when `enable.idempotence=true` is enabled, and what happened before Kafka 0.11?
-
-Before Kafka 0.11 (before idempotent producers existed), if a producer sent two concurrent in-flight requests (Batch 1 followed by Batch 2) over a single TCP connection, and Batch 1 encountered a transient failure while Batch 2 succeeded, the producer would retry Batch 1. Batch 1 would append to the log *after* Batch 2, silently **violating message ordering**. To guarantee ordering before Kafka 0.11, engineers were forced to set `max.in.flight.requests.per.connection=1`, severely limiting throughput.
-
-With `enable.idempotence=true`, Kafka supports `max.in.flight.requests.per.connection <= 5`. The broker maintains a sliding window of the last 5 sequence numbers for each PID. If Batch 2 arrives before Batch 1, the broker buffers Batch 2 in memory and waits for Batch 1 to arrive. Once Batch 1 lands, the broker appends them in their correct sequence order, maintaining total order without sacrificing network pipelining throughput.
-
----
-
-### How does the Sticky Partitioner improve producer throughput and compression over traditional round-robin partitioning when keys are null?
-
-When producing messages without keys (`key = null`), the goal is to distribute records evenly across all partitions.
-
-In older Kafka versions, this was implemented as strict round-robin: Message 1 went to Partition 0, Message 2 to Partition 1, and Message 3 to Partition 2. As a result, the producer created numerous tiny, fragmented batches across every partition. Because compression algorithms (like LZ4, Zstandard, or Snappy) require repetitive text patterns across multi-kilobyte blocks to achieve high compression ratios, round-robin resulted in high network packet overhead and poor compression.
-
-The **Sticky Partitioner (KIP-480)** solves this by "sticking" to a single partition until its batch reaches `batch.size` or `linger.ms` elapses. Once that batch is submitted to the Sender thread, the partitioner switches to another partition. This produces full 16 KB or 64 KB batches per partition, maximizing compression efficiency, reducing CPU serialization overhead, and decreasing end-to-end publish latency.
+Kafka compresses data at the `ProducerBatch` level, not per individual message. When `linger.ms=0`, batches often contain only one or two records, giving `lz4`, `snappy`, or `zstd` very little repeated structure to compress. Adding a small linger window (such as 5 to 20 ms) allows the `RecordAccumulator` to pack dozens or hundreds of records into one batch, yielding far better compression ratios while reducing broker request rates.

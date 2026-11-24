@@ -1,158 +1,91 @@
-# Real-Time Messaging: WebSockets and SSE
+---
+title: "Real-Time Messaging: WebSockets & SSE"
+description: "Understand the WebSocket HTTP 101 handshake, STOMP messaging with RabbitMQ broker relays, and Server-Sent Events with Spring MVC SseEmitter, including reconnection and proxy pitfalls."
+category: "level-9"
+date: "2026-10-29T10:00:00Z"
+---
 
-In the early days of the web, applications simulated real-time updates using **Short Polling**: a JavaScript timer fired `fetch('/api/notifications')` every two seconds.
+When an application needs to push live order statuses, chat messages, or streaming LLM tokens to browsers, short polling breaks down quickly. If 50,000 connected users call `GET /api/notifications` every two seconds, your backend processes 25,000 requests per second where almost every response is empty, burning CPU on TLS, auth filters, and database reads.
 
-In a system with 50,000 active users, short polling generates 1.5 million HTTP requests per minute. Ninety-nine percent of those requests return empty payloads (`200 OK []`), yet each one incurs TCP handshakes, TLS negotiation, HTTP header parsing, and database queries. It saturates server thread pools and drains client mobile batteries.
+Modern web backends solve this with two complementary protocols:
 
-Modern distributed systems require persistent, event-driven communication channels between clients and servers. In the modern web architecture, two protocols dominate real-time messaging:
-- **Server-Sent Events (SSE):** Lightweight, unidirectional streaming over standard HTTP.
-- **WebSockets:** Full-duplex, bidirectional communication over a dedicated persistent TCP socket.
+- **Server-Sent Events (SSE):** Unidirectional server-to-client streaming over standard HTTP (`text/event-stream`).
+- **WebSockets:** Full-duplex, bidirectional communication over a persistent TCP socket upgraded from HTTP.
 
-In this guide, we will contrast the two paradigms, build production-grade SSE pipelines, implement enterprise STOMP WebSockets in Spring Boot, and solve the multi-node clustering challenge using external message relays.
+Choosing the right one and configuring it properly for multi-pod deployments and reverse proxies avoids most real-time production incidents.
 
 ---
 
-## Architectural Decision: WebSockets vs Server-Sent Events
+## WebSocket Handshake and Protocol Mechanics
 
-Before writing code, an architect must determine the directionality and complexity of the communication.
+A WebSocket connection does not start on a separate port or custom transport. It begins as an ordinary HTTP/1.1 `GET` request asking the server to switch protocols (RFC 6455).
 
-```mermaid
-flowchart TD
-    subgraph SSE["Server-Sent Events (SSE)"]
-        SSE_Dir["Unidirectional: Server -> Client only"]
-        SSE_Trans["Standard HTTP/1.1 or HTTP/2 ('text/event-stream')"]
-        SSE_Features["Built-in reconnect, event IDs, firewall friendly"]
-        SSE_Use["Use for: AI token streaming, dashboards, stock tickers, order updates"]
-    end
+### The HTTP 101 Switching Protocols Upgrade
 
-    subgraph WS["WebSockets"]
-        WS_Dir["Full-Duplex: Bidirectional Client <-> Server"]
-        WS_Trans["ws:// or wss:// (HTTP 101 Upgrade -> Raw TCP Framing)"]
-        WS_Features["Sub-protocols needed (STOMP), manual reconnect logic"]
-        WS_Use["Use for: Chat applications, collaborative editing, gaming"]
-    end
+The client sends upgrade headers along with a random 16-byte Base64 nonce in `Sec-WebSocket-Key`:
+
+```http
+GET /ws-connect HTTP/1.1
+Host: api.example.com
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+Sec-WebSocket-Version: 13
+Origin: https://app.example.com
 ```
 
-| Feature | Server-Sent Events (SSE) | WebSockets (with STOMP) |
-| :--- | :--- | :--- |
-| **Direction** | Unidirectional (Server to Client) | Full-Duplex Bidirectional (Both ways) |
-| **Protocol** | Standard HTTP/1.1 or HTTP/2 | Custom `ws://` / `wss://` protocol |
-| **Data Format** | UTF-8 Text (`text/event-stream`) | Binary or UTF-8 Text |
-| **Reconnection** | Native browser handling with backoff | Manual client-side reconnection logic |
-| **Corporate Proxies** | Traverses firewalls and CDNs seamlessly | Can be blocked or terminated by strict proxies |
-| **Browser Limit** | 6 connections per domain under HTTP/1.1; unlimited under HTTP/2 | 1 connection per tab (multiplexed easily) |
-| **Primary Use Cases** | LLM token streaming, notifications, price feeds | Chat, multiplayer games, collaborative tools |
+If the server accepts the handshake, it concatenates the client's key with the fixed RFC 6455 GUID (`258EAFA5-E914-47DA-95CA-C5AB0DC85B11`), computes the SHA-1 hash, Base64-encodes the digest, and replies with `101 Switching Protocols`:
 
-> **Architectural Rule:** If the client only needs to *listen* to updates from the server (e.g., ChatGPT-style response streaming, order tracking, trading feeds), **always choose SSE**. It is simpler, leverages existing HTTP security filters, and supports automatic reconnection out of the box. Only choose WebSockets when the client must continuously *send* high-frequency messages upstream.
+```http
+HTTP/1.1 101 Switching Protocols
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=
+```
+
+That challenge-response step is not authentication; it verifies that the server genuinely speaks WebSockets and prevents HTTP caching proxies from replaying a stale response.
+
+### Framing After the Upgrade
+
+Once `101` is returned, HTTP ends and the same underlying TCP socket carries lightweight **WebSocket frames**. Each frame has a compact header (2 to 14 bytes) containing:
+
+- **FIN bit:** Marks whether this is the final fragment of a message.
+- **Opcode:** Identifies the frame type: text (`0x1`), binary (`0x2`), close (`0x8`), ping (`0x9`), or pong (`0xA`).
+- **Masking key:** All client-to-server frames must be XOR-masked with a 4-byte random key to prevent malicious browser payloads from poisoning misconfigured intermediate HTTP proxies. Server-to-client frames are not masked.
+- **Payload length and data:** The raw UTF-8 text or binary payload.
+
+Control frames (`Ping` / `Pong`) let either side detect silent half-open TCP connections when a mobile device drops off Wi-Fi without sending a TCP `FIN`.
 
 ---
 
-## Server-Sent Events (SSE) in Modern Spring Boot
+## STOMP Messaging Over WebSockets
 
-SSE operates over standard HTTP using the `Content-Type: text/event-stream` header. The connection remains open indefinitely, allowing the server to stream discrete text events formatted as:
+Raw WebSockets give you a bidirectional pipe of text or binary frames, nothing more. They do not define message routing, topic subscriptions, user destinations, or content-type headers. Writing your own JSON envelope and subscription map quickly becomes fragile.
 
-```text
-id: evt-101
-event: order-updated
-data: {"orderId":"99","status":"SHIPPED"}
-
-```
-
-### Reactive Streaming with Spring WebFlux
-
-In reactive applications, building an SSE endpoint requires returning a `Flux<ServerSentEvent<T>>`:
-
-```java
-package com.javahub.sse.controller;
-
-import org.springframework.http.MediaType;
-import org.springframework.http.codec.ServerSentEvent;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Flux;
-
-import java.time.Duration;
-import java.time.Instant;
-import java.util.UUID;
-
-@RestController
-@RequestMapping("/api/v1/market-feed")
-public class MarketFeedSseController {
-
-    @GetMapping(path = "/tickers/{symbol}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<ServerSentEvent<StockTick>> streamPriceUpdates(@PathVariable String symbol) {
-        return Flux.interval(Duration.ofMillis(500))
-                .map(sequence -> ServerSentEvent.<StockTick>builder()
-                        .id(UUID.randomUUID().toString())
-                        .event("price-tick")
-                        .retry(Duration.ofSeconds(3)) // Tells browser to wait 3s before reconnecting if dropped
-                        .data(new StockTick(symbol, generateSimulatedPrice(symbol), Instant.now()))
-                        .build());
-    }
-
-    private double generateSimulatedPrice(String symbol) {
-        return 150.0 + (Math.random() * 10.0 - 5.0);
-    }
-
-    public record StockTick(String symbol, double price, Instant timestamp) {}
-}
-```
-
-### Production Hazards with Spring MVC `SseEmitter`
-
-In traditional servlet-based Spring MVC, engineers use `SseEmitter`. While functional, you must manage connection lifecycles defensively:
-
-```java
-@GetMapping(path = "/notifications", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-public SseEmitter subscribeNotifications(@AuthenticationPrincipal User user) {
-    // 1. Set explicit timeout (e.g., 30 minutes); 0 means infinite which risks connection leaks
-    SseEmitter emitter = new SseEmitter(1800_000L);
-
-    notificationService.registerEmitter(user.getId(), emitter);
-
-    // 2. CRITICAL: Clean up emitter when completed or timed out
-    emitter.onCompletion(() -> notificationService.removeEmitter(user.getId(), emitter));
-    emitter.onTimeout(() -> {
-        emitter.complete();
-        notificationService.removeEmitter(user.getId(), emitter));
-    });
-    emitter.onError(e -> notificationService.removeEmitter(user.getId(), emitter));
-
-    return emitter;
-}
-```
-
-If you omit the completion and error listeners, dropped client connections will remain cached in JVM memory, leaking memory and exhausting server socket limits.
-
----
-
-## Enterprise WebSockets with STOMP
-
-Raw WebSockets only define how to transmit bytes or text frames over a TCP socket. They specify nothing about:
-- Which user should receive a message.
-- How to subscribe to a specific topic (`/topic/orders`).
-- How to route a private message to a specific user (`/user/queue/messages`).
-
-Without a higher-level sub-protocol, you would be forced to invent your own custom JSON message envelope format. In the enterprise Java ecosystem, that problem is solved by **STOMP (Simple Text Oriented Messaging Protocol)**.
+Spring Framework pairs WebSockets with **STOMP (Simple Text Oriented Messaging Protocol)**, a lightweight text-based sub-protocol modeled loosely on HTTP frames (`CONNECT`, `SUBSCRIBE`, `SEND`, `MESSAGE`, `DISCONNECT`).
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Client as Frontend (STOMP Client)
-    participant Broker as Spring Boot WebSocket Broker
+    participant Client as Browser STOMP Client
+    participant Spring as Spring Boot WebSocket App
 
-    Client->>Broker: CONNECT (accept-version:1.2, heart-beat:10000,10000)
-    Broker-->>Client: CONNECTED (version:1.2, heart-beat:10000,10000)
-
-    Client->>Broker: SUBSCRIBE (id:sub-1, destination:/topic/public-announcements)
-    Note over Broker: Registers client in subscription registry
-
-    Broker-->>Client: MESSAGE (subscription:sub-1, message-id:msg-9, destination:/topic/public-announcements)<br/>{"text": "System maintenance in 10 mins"}
+    Client->>Spring: HTTP GET /ws-connect (Upgrade: websocket)
+    Spring-->>Client: HTTP 101 Switching Protocols
+    Client->>Spring: STOMP CONNECT (accept-version:1.2, heart-beat:10000,10000)
+    Spring-->>Client: STOMP CONNECTED (version:1.2, heart-beat:10000,10000)
+    Client->>Spring: STOMP SUBSCRIBE (id:sub-1, destination:/topic/room.42)
+    Client->>Spring: STOMP SEND (destination:/app/chat.send/42)
+    Spring-->>Client: STOMP MESSAGE (destination:/topic/room.42, body:JSON)
 ```
 
-### Configuring Spring Boot STOMP Message Broker
+### Destination Prefixes in Spring Boot
+
+Spring routes STOMP destinations using three clear prefixes:
+
+- **`/app` (`setApplicationDestinationPrefixes`):** Messages sent by clients to `/app/...` are routed to your `@MessageMapping` controller methods for validation, persistence, and business logic.
+- **`/topic`:** Pub/sub broadcast destinations (one-to-many). Every subscriber on `/topic/room.42` receives published messages.
+- **`/queue` (with `/user` prefix):** Point-to-point or user-specific destinations. A client subscribes to `/user/queue/messages`, and Spring translates that internally to a session-bound destination so only that authenticated user receives frames sent via `convertAndSendToUser`.
 
 ```java
 package com.javahub.websocket.config;
@@ -169,28 +102,23 @@ public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // The raw WebSocket handshake endpoint
+        // Native WebSocket endpoint (add .withSockJS() only if legacy fallback is genuinely needed)
         registry.addEndpoint("/ws-connect")
-                .setAllowedOriginPatterns("https://*.company.com", "http://localhost:3000")
-                // Fallback to SockJS if browser or corporate proxy blocks native WebSockets
-                .withSockJS();
+                .setAllowedOriginPatterns("https://*.example.com", "http://localhost:3000");
     }
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        // Destinations handled by application @MessageMapping controllers
         registry.setApplicationDestinationPrefixes("/app");
-
-        // Simple in-memory broker for local development
-        registry.enableSimpleBroker("/topic", "/queue");
-
-        // Destination prefix for private user-to-user messaging
         registry.setUserDestinationPrefix("/user");
+
+        // In-memory broker: fine for local dev or single-instance deployments only
+        registry.enableSimpleBroker("/topic", "/queue");
     }
 }
 ```
 
-### The STOMP Message Controller
+### Handling Inbound and Outbound Messages
 
 ```java
 package com.javahub.websocket.controller;
@@ -200,7 +128,6 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.messaging.simp.annotation.SendToUser;
 import org.springframework.stereotype.Controller;
 
 import java.security.Principal;
@@ -215,7 +142,7 @@ public class ChatMessageController {
         this.messagingTemplate = messagingTemplate;
     }
 
-    // Listens on /app/chat.send/{roomId} and broadcasts to /topic/room.{roomId}
+    // Receives frames at /app/chat.send/{roomId} and broadcasts to /topic/room.{roomId}
     @MessageMapping("/chat.send/{roomId}")
     @SendTo("/topic/room.{roomId}")
     public ChatOutputMessage broadcastToRoom(@DestinationVariable String roomId,
@@ -224,13 +151,19 @@ public class ChatMessageController {
         return new ChatOutputMessage(principal.getName(), input.content(), Instant.now());
     }
 
-    // Private Direct Message: Sends strictly to destination user's queue
+    // Routes a private message only to the target user's subscribed session(s)
     @MessageMapping("/chat.private")
     public void sendDirectMessage(@Payload PrivateMessageRequest request, Principal principal) {
-        ChatOutputMessage message = new ChatOutputMessage(principal.getName(), request.content(), Instant.now());
-        
-        // Pushes to /user/{targetUsername}/queue/messages
-        messagingTemplate.convertAndSendToUser(request.recipientUsername(), "/queue/messages", message);
+        ChatOutputMessage message = new ChatOutputMessage(
+                principal.getName(),
+                request.content(),
+                Instant.now()
+        );
+        messagingTemplate.convertAndSendToUser(
+                request.recipientUsername(),
+                "/queue/messages",
+                message
+        );
     }
 
     public record ChatInputMessage(String content) {}
@@ -239,132 +172,14 @@ public class ChatMessageController {
 }
 ```
 
----
+### Authenticating STOMP Connections Safely
 
-## The Clustered Pod Dilemma: Scaling Across Kubernetes
+Avoid putting JWTs in the WebSocket URL (`wss://api.example.com/ws-connect?token=eyJ...`). Query parameters end up in Nginx access logs, cloud load balancer logs, browser history, and APM traces.
 
-Spring Boot's default `SimpleBroker` stores active WebSocket client connections in a local JVM `ConcurrentHashMap`.
+Because the browser `WebSocket` API does not let JavaScript attach custom `Authorization` headers to the initial HTTP upgrade request, teams typically use one of two patterns:
 
-In a production Kubernetes cluster with multiple pods, this leads to silent message drops:
-
-```mermaid
-flowchart TD
-    subgraph Clients["Connected Web Browsers"]
-        UserAlice["User Alice (Connected to Pod 1)"]
-        UserBob["User Bob (Connected to Pod 2)"]
-    end
-
-    subgraph K8sPods["Spring Boot Cluster (SimpleBroker)"]
-        Pod1["Pod 1: Holds Alice's TCP socket"]
-        Pod2["Pod 2: Holds Bob's TCP socket"]
-    end
-
-    UserAlice -->|"1. /app/chat.send (Message for Bob)"| Pod1
-    Pod1 -->|"2. SimpleBroker broadcasts locally"| Pod1
-    Pod1 -.->|"X CANNOT REACH: Bob is on a different physical pod!"| Pod2
-    Pod2 -.->|"Bob receives NOTHING!"| UserBob
-```
-
-1. Alice establishes a WebSocket handshake to Pod 1.
-2. Bob establishes a WebSocket handshake to Pod 2.
-3. Alice posts a message to a shared room. Pod 1's `SimpleBroker` delivers the message to all clients *connected to Pod 1*.
-4. Bob receives nothing because Pod 1 has no visibility into Pod 2's TCP sockets.
-
-### The Production Remedy: External STOMP Relay (RabbitMQ / ActiveMQ)
-
-To scale WebSockets horizontally, replace the in-memory `SimpleBroker` with an **External STOMP Broker Relay** backed by **RabbitMQ** or **Apache ActiveMQ Artemis**:
-
-```mermaid
-flowchart TD
-    UserAlice["User Alice"] -->|"WebSocket"| Pod1["Pod 1 (WebSocket Edge Gateway)"]
-    UserBob["User Bob"] -->|"WebSocket"| Pod2["Pod 2 (WebSocket Edge Gateway)"]
-
-    subgraph MessageBroker["Dedicated Cluster Backplane (RabbitMQ with STOMP Plugin)"]
-        Rabbit[("RabbitMQ Exchange / Fanout Topic")]
-    end
-
-    Pod1 -->|"1. TCP STOMP Relay: Publish message"| Rabbit
-    Rabbit -->|"2. Broadcast to all subscribed Edge Pods"| Pod1
-    Rabbit -->|"2. Broadcast to all subscribed Edge Pods"| Pod2
-    Pod2 -->|"3. Deliver to Bob's open WebSocket"| UserBob
-```
-
-### Configuring the External Relay in Spring Boot
-
-Enable the STOMP plugin in RabbitMQ:
-```bash
-rabbitmq-plugins enable rabbitmq_stomp
-```
-
-Update your Spring Boot configuration:
-
-```java
-@Configuration
-@EnableWebSocketMessageBroker
-public class ClusteredWebSocketConfig implements WebSocketMessageBrokerConfigurer {
-
-    @Value("${spring.rabbitmq.host:localhost}")
-    private String relayHost;
-
-    @Value("${spring.rabbitmq.stomp-port:61613}")
-    private int relayPort;
-
-    @Override
-    public void configureMessageBroker(MessageBrokerRegistry registry) {
-        registry.setApplicationDestinationPrefixes("/app");
-
-        // Forward /topic and /queue subscriptions directly to the external RabbitMQ cluster!
-        registry.enableStompBrokerRelay("/topic", "/queue")
-                .setRelayHost(relayHost)
-                .setRelayPort(relayPort)
-                .setClientLogin("guest")
-                .setClientPasscode("guest")
-                .setSystemLogin("guest")
-                .setSystemPasscode("guest")
-                .setSystemHeartbeatSendInterval(10000)
-                .setSystemHeartbeatReceiveInterval(10000);
-    }
-}
-```
-
-Now, when Pod 1 receives a message, it forwards the STOMP frame over a persistent TCP socket to RabbitMQ. RabbitMQ fans out the frame across all connected Spring Boot pods, guaranteeing that Bob receives Alice's message regardless of which Kubernetes pod terminates his WebSocket.
-
----
-
-## Authentication and Security in WebSockets
-
-### The URL Query Parameter Anti-Pattern
-
-Many tutorials suggest passing authentication tokens in the connection URL:
-```text
-wss://api.company.com/ws-connect?token=eyJhbGciOi...
-```
-
-**Never do this in production.**
-- Query strings are logged in plaintext by reverse proxies, load balancers, and CDN access logs.
-- Browser extensions and history trackers can leak the token.
-- WebSockets cannot be refreshed mid-stream; when the token expires after 15 minutes, the connection remains open until manually closed.
-
-### The Standard Enterprise Pattern: STOMP CONNECT Headers
-
-The standard approach uses the HTTP `Authorization` header during the initial HTTP handshake or the STOMP `CONNECT` frame:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Client as STOMP Client
-    participant Interceptor as ChannelInterceptor
-    participant SecurityContext as Spring Security Context
-
-    Client->>Interceptor: STOMP CONNECT Frame<br/>(passcode: Bearer eyJhbGciOiJSUzI1NiIs...)
-    Note over Interceptor: 1. Extract Bearer token from native headers
-    Note over Interceptor: 2. Validate token cryptographically via JwtDecoder
-    Note over Interceptor: 3. Create Authentication (Principal)
-    Interceptor->>SecurityContext: accessor.setUser(authentication)
-    Note over SecurityContext: Associated Principal persists for the entire WebSocket session!
-```
-
-### Implementing the Authentication Channel Interceptor
+1. **HttpOnly session cookie** sent automatically during the HTTP 101 handshake (with strict `Origin` validation to block Cross-Site WebSocket Hijacking).
+2. **Bearer token in the STOMP `CONNECT` frame** validated by a Spring `ChannelInterceptor` before any `SUBSCRIBE` or `SEND` frame is allowed.
 
 ```java
 package com.javahub.websocket.security;
@@ -375,6 +190,7 @@ import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -393,84 +209,342 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
-        StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
+        StompHeaderAccessor accessor =
+                MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
 
-        // Intercept the initial STOMP CONNECT frame
         if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
             String authHeader = accessor.getFirstNativeHeader("Authorization");
-
-            if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                String token = authHeader.substring(7);
-                try {
-                    // Validate token signature and expiration
-                    Jwt jwt = jwtDecoder.decode(token);
-                    
-                    // Bind authenticated Principal to the WebSocket session
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(jwt.getSubject(), null, Collections.emptyList());
-                    accessor.setUser(authentication);
-
-                } catch (Exception e) {
-                    throw new IllegalArgumentException("Invalid JWT token presented during STOMP CONNECT", e);
-                }
-            } else {
-                throw new IllegalArgumentException("Missing or malformed Authorization header in STOMP CONNECT frame");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                throw new AccessDeniedException("Missing Bearer token in STOMP CONNECT frame");
             }
+
+            Jwt jwt = jwtDecoder.decode(authHeader.substring(7));
+            UsernamePasswordAuthenticationToken principal =
+                    new UsernamePasswordAuthenticationToken(jwt.getSubject(), null, Collections.emptyList());
+            accessor.setUser(principal);
         }
         return message;
     }
 }
 ```
 
-Register this interceptor in `WebSocketBrokerConfig`:
+Register it via `configureClientInboundChannel(ChannelRegistration registration)` in your `WebSocketMessageBrokerConfigurer`.
+
+---
+
+## Scaling Across Instances with an External Broker Relay
+
+`registry.enableSimpleBroker("/topic", "/queue")` stores subscriptions in local JVM memory. That works fine on a laptop, and silently breaks as soon as you deploy two replicas behind a load balancer.
+
+```mermaid
+flowchart TD
+    subgraph Problem["SimpleBroker Across Multiple Pods (Broken)"]
+        Alice1["Alice"] -->|"WebSocket"| PodA["Pod 1 (In-Memory Map: Alice)"]
+        Bob1["Bob"] -->|"WebSocket"| PodB["Pod 2 (In-Memory Map: Bob)"]
+        PodA -.->|"No shared state; Bob never receives Alice's message"| PodB
+    end
+```
+
+If Alice's TCP socket lands on Pod 1 and Bob's lands on Pod 2, Pod 1 has no record of Bob's subscription. Messages Alice sends to `/topic/room.42` reach everyone on Pod 1 and vanish for everyone on Pod 2.
+
+### Replacing SimpleBroker with RabbitMQ STOMP Relay
+
+To scale horizontally, swap `enableSimpleBroker` for `enableStompBrokerRelay` backed by **RabbitMQ** (with `rabbitmq_stomp` enabled) or **ActiveMQ Artemis**. Spring opens persistent TCP connections to the broker and relays STOMP `SUBSCRIBE`, `SEND`, and `MESSAGE` frames across all pods.
+
+```mermaid
+flowchart TD
+    Alice["Alice"] -->|"WebSocket"| Pod1["Spring Pod 1"]
+    Bob["Bob"] -->|"WebSocket"| Pod2["Spring Pod 2"]
+
+    Rabbit[("RabbitMQ Cluster<br/>(STOMP Plugin on Port 61613)")]
+
+    Pod1 -->|"1. Relay SEND /topic/room.42"| Rabbit
+    Rabbit -->|"2. Fan-out MESSAGE"| Pod1
+    Rabbit -->|"2. Fan-out MESSAGE"| Pod2
+    Pod2 -->|"3. Deliver over Bob's socket"| Bob
+```
+
+Enable the STOMP plugin in RabbitMQ:
+
+```bash
+rabbitmq-plugins enable rabbitmq_stomp
+```
+
+Make sure `spring-boot-starter-reactor-netty` (or `io.projectreactor.netty:reactor-netty`) is on your classpath, because Spring's `StompBrokerRelayMessageHandler` uses Reactor Netty for the TCP connection to the broker.
 
 ```java
-@Override
-public void configureClientInboundChannel(ChannelRegistration registration) {
-    registration.interceptors(webSocketAuthInterceptor);
+package com.javahub.websocket.config;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+
+@Configuration
+@EnableWebSocketMessageBroker
+public class ClusteredWebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    @Value("${app.stomp.relay-host:localhost}")
+    private String relayHost;
+
+    @Value("${app.stomp.relay-port:61613}")
+    private int relayPort;
+
+    @Value("${app.stomp.relay-user:stomp_user}")
+    private String relayUser;
+
+    @Value("${app.stomp.relay-pass:change_me}")
+    private String relayPass;
+
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws-connect")
+                .setAllowedOriginPatterns("https://*.example.com");
+    }
+
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry registry) {
+        registry.setApplicationDestinationPrefixes("/app");
+        registry.setUserDestinationPrefix("/user");
+
+        registry.enableStompBrokerRelay("/topic", "/queue")
+                .setRelayHost(relayHost)
+                .setRelayPort(relayPort)
+                .setClientLogin(relayUser)
+                .setClientPasscode(relayPass)
+                .setSystemLogin(relayUser)
+                .setSystemPasscode(relayPass)
+                .setSystemHeartbeatSendInterval(10_000)
+                .setSystemHeartbeatReceiveInterval(10_000);
+    }
 }
 ```
 
----
-
-## Senior Engineer Interview Crucible
-
-### When should an architect select Server-Sent Events (SSE) over WebSockets, and what are the specific advantages of SSE?
-
-An architect should select SSE when data flow is strictly **unidirectional** from the server to the client. Examples include real-time financial market price tickers, background job progress monitors, live sports scores, system notifications, and streaming responses from Large Language Models (LLMs).
-
-The specific advantages of SSE over WebSockets include:
-1. **Simpler Protocol:** SSE runs over standard HTTP (`text/event-stream`). It requires no custom handshake protocol or specialized sub-protocol (like STOMP).
-2. **Transparent Infrastructure Compatibility:** Because SSE is standard HTTP, it traverses corporate firewalls, API gateways, load balancers, and reverse proxies without requiring special WebSocket tunneling configurations.
-3. **Native Client Reconnection:** The browser `EventSource` API automatically reconnects if the network connection drops, using an exponential backoff. It sends a `Last-Event-ID` header upon reconnecting, allowing the server to replay missed events seamlessly.
-4. **Existing Security Pipeline Integration:** Standard HTTP authentication mechanisms (cookies, bearer tokens, CSRF protection) apply directly to SSE endpoints.
+> [!WARNING]
+> **RabbitMQ destination naming gotcha:** Unlike `SimpleBroker`, RabbitMQ's STOMP plugin maps `/topic/<routing-key>` to the `amq.topic` exchange and does **not** allow extra `/` characters inside queue or routing key names. Prefer dot-separated names such as `/topic/room.42` instead of `/topic/room/42`. Also note that `systemLogin` authenticates Spring's shared system connection (used by `SimpMessagingTemplate`), while `clientLogin` authenticates relayed client sessions.
 
 ---
 
-### Why does an in-memory STOMP broker (`SimpleBroker`) fail in a multi-pod Kubernetes deployment, and how do you resolve it?
+## Server-Sent Events (SSE) with Spring MVC `SseEmitter`
 
-Spring Boot's `SimpleBroker` stores active WebSocket sessions and subscription mappings in local JVM memory (`ConcurrentHashMap`). In a multi-pod deployment, client TCP connections are distributed across different pods by the ingress controller or load balancer.
+When updates only flow from server to client—dashboards, build logs, stock tickers, notification feeds, or streaming AI tokens—WebSockets and a STOMP broker are often unnecessary machinery.
 
-If User A is connected to Pod 1, and User B is connected to Pod 2, Pod 1 has no knowledge of User B's open TCP connection. When User A publishes a message to a shared topic, Pod 1 broadcasts the message only to clients connected to its own local memory, resulting in silent message loss for User B.
+SSE runs over plain HTTP using `Content-Type: text/event-stream`. The server keeps the response open and flushes UTF-8 text blocks separated by a blank line (`\n\n`):
 
-**The Resolution:** Replace `SimpleBroker` with a dedicated **External STOMP Broker Relay** (such as RabbitMQ with its STOMP plugin enabled, or Apache ActiveMQ Artemis) using `registry.enableStompBrokerRelay()`. In this topology, Spring Boot pods act as stateless edge proxies. All publishes and subscriptions are forwarded to the centralized message broker over a TCP relay backplane. The broker fans out messages to all connected pods, ensuring global delivery across the cluster.
+```text
+id: evt-1042
+event: order-updated
+retry: 3000
+data: {"orderId":"99","status":"SHIPPED"}
+
+```
+
+On the browser side, the built-in `EventSource` API parses those frames automatically. If the network drops, `EventSource` waits for the `retry` interval, reconnects on its own, and sends the last seen event ID in the `Last-Event-ID` HTTP request header so your server can replay missed messages.
+
+### Production-Safe `SseEmitter` Registry and Controller
+
+In Spring MVC, `SseEmitter` builds on Servlet 3.1 asynchronous request processing. Once your controller returns the `SseEmitter`, the Tomcat request thread is released back to the pool; you do not pin one Servlet thread per connected user.
+
+However, you must manage timeouts, dead emitters, replay via `Last-Event-ID`, and proxy headers deliberately:
+
+```java
+package com.javahub.sse;
+
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.MediaType;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+@RestController
+@RequestMapping("/api/v1/events")
+public class OrderEventSseController {
+
+    private static final Logger log = LoggerFactory.getLogger(OrderEventSseController.class);
+    private static final long EMITTER_TIMEOUT_MS = 30 * 60 * 1000L; // 30 minutes
+
+    private final Map<String, Set<SseEmitter>> emittersByUser = new ConcurrentHashMap<>();
+    private final OrderEventHistory eventHistory;
+
+    public OrderEventSseController(OrderEventHistory eventHistory) {
+        this.eventHistory = eventHistory;
+    }
+
+    @GetMapping(path = "/orders", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamOrderEvents(
+            @RequestParam String userId,
+            @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
+            HttpServletResponse response) {
+
+        // Tell Nginx not to buffer SSE chunks before flushing to the browser
+        response.setHeader("X-Accel-Buffering", "no");
+        response.setHeader("Cache-Control", "no-cache");
+
+        SseEmitter emitter = new SseEmitter(EMITTER_TIMEOUT_MS);
+        emittersByUser.computeIfAbsent(userId, key -> ConcurrentHashMap.newKeySet()).add(emitter);
+
+        Runnable cleanup = () -> removeEmitter(userId, emitter);
+        emitter.onCompletion(cleanup);
+        emitter.onTimeout(() -> {
+            emitter.complete();
+            cleanup.run();
+        });
+        emitter.onError(ex -> cleanup.run());
+
+        try {
+            // Send an initial comment so proxies flush response headers immediately
+            emitter.send(SseEmitter.event()
+                    .comment("connected")
+                    .reconnectTime(3000L));
+
+            // Replay any missed events when EventSource automatically reconnects
+            if (lastEventId != null && !lastEventId.isBlank()) {
+                List<OrderEvent> missed = eventHistory.findAfter(userId, lastEventId);
+                for (OrderEvent event : missed) {
+                    emitter.send(SseEmitter.event()
+                            .id(event.id())
+                            .name("order-updated")
+                            .data(event));
+                }
+            }
+        } catch (IOException ex) {
+            cleanup.run();
+            emitter.completeWithError(ex);
+        }
+
+        return emitter;
+    }
+
+    public void publish(String userId, OrderEvent event) {
+        Set<SseEmitter> emitters = emittersByUser.get(userId);
+        if (emitters == null || emitters.isEmpty()) {
+            return;
+        }
+
+        for (SseEmitter emitter : emitters) {
+            try {
+                emitter.send(SseEmitter.event()
+                        .id(event.id())
+                        .name("order-updated")
+                        .data(event));
+            } catch (IOException ex) {
+                // Client disconnected mid-stream; remove immediately to avoid leaks
+                log.debug("Removing closed SSE emitter for user {}", userId);
+                removeEmitter(userId, emitter);
+                emitter.completeWithError(ex);
+            }
+        }
+    }
+
+    // Keep connections alive through idle load balancer timeouts (e.g., 60s AWS ALB idle timeout)
+    @Scheduled(fixedRate = 25_000L)
+    public void sendHeartbeats() {
+        emittersByUser.forEach((userId, emitters) -> {
+            for (SseEmitter emitter : emitters) {
+                try {
+                    emitter.send(SseEmitter.event().comment("keepalive"));
+                } catch (IOException ex) {
+                    removeEmitter(userId, emitter);
+                }
+            }
+        });
+    }
+
+    private void removeEmitter(String userId, SseEmitter emitter) {
+        Set<SseEmitter> emitters = emittersByUser.get(userId);
+        if (emitters != null) {
+            emitters.remove(emitter);
+            if (emitters.isEmpty()) {
+                emittersByUser.remove(userId, emitters);
+            }
+        }
+    }
+
+    public record OrderEvent(String id, String orderId, String status, Instant updatedAt) {}
+}
+```
+
+### Operational Pitfalls with SSE in Production
+
+Four real-world issues trip teams up the first time they deploy SSE:
+
+1. **Nginx buffering stalls events:** By default, Nginx buffers upstream HTTP responses (`proxy_buffering on`) until a buffer fills (often 4KB to 8KB) or the response closes. Your browser sees nothing for minutes and then receives a burst of events at once. Set `X-Accel-Buffering: no` from Spring, or configure the Nginx location block explicitly:
+
+```nginx
+location /api/v1/events/ {
+    proxy_pass http://spring_backend;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_buffering off;
+    proxy_cache off;
+    gzip off;
+    proxy_read_timeout 3600s;
+}
+```
+
+2. **Open-Session-in-View (`spring.jpa.open-in-view`):** Spring Boot enables OSIV by default. Combined with async `SseEmitter` streams, a database connection can stay checked out for the entire lifetime of the HTTP response, draining HikariCP under modest concurrency. Set `spring.jpa.open-in-view=false`.
+3. **HTTP/1.1 browser connection limit:** Browsers cap concurrent HTTP/1.1 connections at **6 per origin**. If a user opens 6 tabs with open SSE streams, a 7th tab hangs on every normal API call. Serving your site over **HTTP/2** removes this bottleneck because all tabs multiplex streams over one shared connection.
+4. **Multi-pod SSE fan-out:** Just like `SimpleBroker`, `emittersByUser` lives in local JVM memory. In a multi-pod cluster, publish events to Redis Pub/Sub or Kafka so every pod receives the event and forwards it to whichever users hold an active `SseEmitter` on that pod.
+
+> [!TIP]
+> If your service already uses reactive **Spring WebFlux**, returning `Flux<ServerSentEvent<T>>` with `produces = MediaType.TEXT_EVENT_STREAM_VALUE` gives you non-blocking backpressure and automatic cancellation cleanup when a client disconnects, without manually tracking `SseEmitter` instances.
 
 ---
 
-### Why is passing a JWT in the WebSocket connection URL (`wss://api/ws?token=...`) a security hazard, and what is the standard enterprise alternative?
+## Choosing Between SSE and WebSockets
 
-Passing JWTs in the query string introduces severe security vulnerabilities:
-1. **Access Log Exposure:** Query strings are recorded in plaintext by reverse proxies (Nginx, Envoy), API gateways, and cloud load balancers. Anyone with access to server logs can retrieve valid credentials.
-2. **Browser History and Referrer Leaks:** Full URLs containing query parameters are stored in browser history and can be leaked via HTTP `Referer` headers to third-party endpoints.
-3. **Inability to Refresh Tokens:** Once established, a WebSocket connection can stay open for days. If a 15-minute access token in the query string expires, the connection remains authenticated indefinitely.
+```mermaid
+flowchart TD
+    Start["Need Real-Time Updates?"] --> Dir{"Does the client send<br/>frequent messages upstream?"}
+    Dir -->|"No: Server-to-Client only"| SSE["Choose SSE<br/>(Standard HTTP, EventSource reconnect,<br/>Last-Event-ID replay)"]
+    Dir -->|"Yes: Interactive Bidirectional"| Bin{"Need pub/sub topics<br/>and user routing?"}
+    Bin -->|"Yes"| STOMP["Choose WebSockets + STOMP<br/>(With RabbitMQ or ActiveMQ relay in cluster)"]
+    Bin -->|"No: Custom low-level binary protocol"| RawWS["Choose Raw WebSockets"]
+```
 
-**The Standard Enterprise Alternative:** Use the **STOMP `CONNECT` frame headers**. During the initial STOMP handshake over the established WebSocket, the client passes the bearer token inside the STOMP `passcode` or native `Authorization` header. A Spring `ChannelInterceptor` intercepts the `CONNECT` frame, validates the token via `JwtDecoder`, and binds the authenticated `Principal` to the session before granting access.
+| Dimension | Server-Sent Events (SSE) | WebSockets (with STOMP) |
+| :--- | :--- | :--- |
+| **Direction** | Server to client only (use regular HTTP `POST` for occasional client actions) | Full-duplex bidirectional |
+| **Protocol** | Standard HTTP/1.1 or HTTP/2 (`text/event-stream`) | `ws://` / `wss://` after HTTP `101` upgrade |
+| **Payload** | UTF-8 text | UTF-8 text or binary |
+| **Reconnection** | Built into browser `EventSource` with `Last-Event-ID` | Must be implemented in client library (e.g., `@stomp/stompjs`) |
+| **Proxies and Firewalls** | Works through standard HTTP proxies (watch response buffering) | Requires proxy upgrade support (`Upgrade` / `Connection` headers) |
+| **Browser Connection Cap** | 6 per origin over HTTP/1.1; multiplexed under HTTP/2 | No 6-connection HTTP/1.1 cap |
+| **Best Fit** | Notifications, dashboards, live feeds, job progress, LLM streaming | Chat, collaborative editors, multiplayer state sync, live auctions |
+
+A good default rule: start with **SSE** whenever updates flow from server to client and user actions are ordinary HTTP requests (`POST /api/orders`). Reach for **WebSockets** when the client continuously streams low-latency data back to the server (cursor positions, typing indicators, game ticks, high-frequency chat).
 
 ---
 
-### How do HTTP/1.1 vs HTTP/2 affect browser connection limits for Server-Sent Events (SSE), and what happens if a user opens multiple browser tabs?
+## Interview Questions
 
-Under **HTTP/1.1**, web browsers enforce a strict limit of **6 concurrent open TCP connections per domain**. Because an SSE stream holds an HTTP connection open indefinitely, opening 6 browser tabs to the application exhausts the browser's entire connection allocation for that origin. Opening a 7th tab causes all subsequent HTTP requests (`fetch`, images, scripts) to hang indefinitely in a pending state until an SSE connection is closed.
+### Why does `SimpleBroker` work locally but drop messages in a multi-pod Kubernetes cluster?
 
-Under **HTTP/2**, this limitation is eliminated. HTTP/2 supports **multiplexing**, allowing hundreds of concurrent bidirectional streams (both regular REST calls and SSE event streams) to share a single underlying TCP connection. A user can open dozens of browser tabs without exhausting browser connection limits. In production, SSE should always be served over HTTP/2.
+`SimpleBroker` keeps active WebSocket sessions and topic subscriptions in local JVM memory. When a load balancer places User A on Pod 1 and User B on Pod 2, Pod 1 has no visibility into User B's socket. Messages published to Pod 1 only fan out to clients connected to Pod 1. Replacing `SimpleBroker` with `enableStompBrokerRelay` backed by RabbitMQ or ActiveMQ Artemis turns each Spring Boot pod into a stateless relay connected to a shared broker that fans messages out to every pod.
 
+### Why do SSE streams sometimes appear frozen behind Nginx even though the Spring Boot controller is emitting events?
+
+Nginx enables `proxy_buffering` by default and waits until its internal buffer fills up before forwarding response bytes to the client. Because SSE events are typically small JSON snippets, they sit trapped in the Nginx buffer. Setting the `X-Accel-Buffering: no` header in the Spring response (or configuring `proxy_buffering off` and disabling `gzip` on the SSE location in Nginx) forces immediate flushing. Periodic heartbeat comments also keep intermediate load balancers from closing idle streams.
+
+### How does browser `EventSource` reconnection work, and how should the server handle missed events?
+
+When an SSE connection drops, the browser's `EventSource` client waits for the server-specified `retry` duration (defaulting to a few seconds) and opens a new HTTP `GET` request automatically. If the server attached an `id:` field to previous events, the browser includes `Last-Event-ID: <id>` in the reconnect request headers. The Spring controller reads `@RequestHeader("Last-Event-ID")`, queries a bounded event store or message log for events created after that ID, and replays them before resuming live delivery.
+
+### What happens if you omit `onCompletion`, `onTimeout`, and `onError` cleanup on `SseEmitter`, or leave `spring.jpa.open-in-view` enabled?
+
+Without cleanup callbacks (and `IOException` handling during `send()`), closed client connections stay referenced in your emitter registry map, leaking heap memory and causing every broadcast loop to iterate over dead sockets. Leaving `spring.jpa.open-in-view=true` on an async `SseEmitter` endpoint can also hold a JDBC connection from HikariCP open for the entire duration of the SSE stream, rapidly starving normal database requests under load.

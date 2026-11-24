@@ -1,40 +1,34 @@
-# GraphQL with Netflix DGS
+---
+title: "GraphQL with Netflix DGS"
+description: "Build schema-first GraphQL services in Spring Boot with Netflix DGS, covering queries, mutations, subscriptions, DataLoader batching, federation, and query protection."
+category: "level-9"
+date: "2026-10-29T10:00:00Z"
+---
 
-In traditional REST architectures, the server dictates the shape of the data. Over time, as mobile apps, desktop dashboards, and smartwatch clients evolve, REST endpoints encounter two chronic performance bottlenecks:
+When an API serves a web dashboard, a mobile app, and a smart TV client at the same time, fixed REST payloads start pulling in opposite directions. A single `GET /api/v1/shows/42` endpoint either returns dozens of fields that a mobile list screen throws away (over-fetching), or stays minimal and forces the client to chain follow-up calls for cast members, reviews, and availability (under-fetching). As screens multiply, teams either add custom query flags to every endpoint or maintain separate Backend-for-Frontend services that duplicate orchestration logic.
 
-1. **Over-fetching:** A mobile client calling `GET /api/v1/users/42` receives an enormous 40-field JSON payload containing billing addresses, audit metadata, and account settings when it only needed the user's `firstName` and `avatarUrl`. Over cellular networks, this wastes bandwidth and drains device battery.
-2. **Under-fetching (The Waterfall Problem):** To render a single e-commerce product page, the client must execute a cascade of dependent HTTP requests: first `GET /products/100`, then extract the author ID to call `GET /authors/45`, then call `GET /products/100/reviews`, and finally `GET /inventory/100`. Latency compounds sequentially.
+GraphQL shifts payload selection to the caller. The server publishes a strongly typed schema describing what data exists and how types connect, and each client asks for the exact fields it needs in a single request.
 
-**GraphQL** inverts this relationship: the client specifies the exact fields it requires, and the server returns precisely that shape in a single round-trip.
-
-At Netflix, managing hundreds of microservices with millions of concurrent client devices led to the creation of the **Domain Graph Service (DGS) Framework**. Built natively on top of Spring Boot and `graphql-java`, Netflix DGS provides schema-first code generation, enterprise testing harnesses, first-class **DataLoader** batching, and turnkey **Apollo Federation** support.
+Netflix built the **Domain Graph Service (DGS)** framework to run GraphQL across Spring Boot microservices at scale. Built on `graphql-java` (and integrated with Spring for GraphQL starting in DGS 9.x), DGS centers on schema-first development, build-time Java code generation, per-request `DataLoader` batching, and Apollo Federation support.
 
 ---
 
-## The Core Philosophy of Netflix DGS
+## Schema-First Design and Code Generation
 
-Unlike code-first frameworks that generate GraphQL schemas from Java annotations, Netflix DGS enforces a **Schema-First** paradigm:
+Java GraphQL libraries fall into two camps: code-first (where annotations on Java classes produce the schema at startup) and schema-first (where `.graphqls` files are written first and serve as the contract). Netflix DGS is opinionated toward **schema-first**.
 
 ```mermaid
 flowchart LR
-    Schema["1. schema.graphqls<br/>(Single Source of Truth)"] --> CodeGen["2. DGS CodeGen Plugin<br/>(Maven/Gradle)"]
-    CodeGen --> Models["3. Java Types & Records<br/>(Generated Compile-Time Classes)"]
-    Models --> DataFetchers["4. DGS Components<br/>(@DgsQuery, @DgsData)"]
+    Schema["schema.graphqls<br/>(API Contract)"] --> CodeGen["DGS Codegen Plugin<br/>(Maven or Gradle)"]
+    CodeGen --> Models["Generated Java Types<br/>(Show, ReviewInput, DgsConstants)"]
+    Models --> Fetchers["Spring Beans<br/>(@DgsComponent, @DgsData)"]
 ```
 
-1. **Contract-First Collaboration:** Frontend and backend engineers collaborate on a clean `.graphqls` schema file before writing a single line of backend code.
-2. **Compile-Time Safety:** The DGS CodeGen plugin parses the schema during the build process and generates type-safe Java records, query builders, and input types. If a field name in the schema changes, your Java code fails to compile immediately rather than throwing runtime reflection errors.
-3. **Spring Boot Native:** DGS components are standard Spring beans annotated with `@DgsComponent`, enabling dependency injection, security filters, and metrics out of the box.
+Putting the schema in version-controlled `.graphqls` files gives frontend and backend engineers a neutral contract to review in pull requests before writing resolver logic. During the build, the DGS code generator reads those files and produces Java classes for your types, input objects, enums, and field name constants (`DgsConstants`). If someone renames a field in the schema, the Java build breaks at compile time instead of failing silently at runtime with a null field.
 
----
+### Writing the Schema
 
-## Schema Definition and Code Generation
-
-Let's build a domain for an enterprise video streaming catalog.
-
-### Step 1: Define the GraphQL Schema
-
-Place this file in `src/main/resources/schema/schema.graphqls`:
+Place schema files under `src/main/resources/schema/`. DGS automatically discovers and merges all `.graphqls` files in that directory.
 
 ```graphql
 type Query {
@@ -46,12 +40,17 @@ type Mutation {
     addReview(showId: ID!, review: ReviewInput!): Review!
 }
 
+type Subscription {
+    reviewAdded(showId: ID!): Review!
+}
+
 type Show {
     id: ID!
     title: String!
     releaseYear: Int!
     genre: Genre!
-    # Resolved lazily by dedicated DataFetcher
+    licensingCost: Float
+    # Resolved on demand only when requested by the client
     reviews: [Review!]!
     cast: [Actor!]!
 }
@@ -82,24 +81,47 @@ enum Genre {
 }
 ```
 
-### Step 2: Configure the DGS Maven Plugin
+Notice the distinction between `type` (returned by the server) and `input` (accepted as arguments). GraphQL keeps output types and input types separate because output types can contain cyclic references and computed fields with arguments, while input types must be plain tree-shaped data.
+
+### Maven Setup for Spring Boot 3
+
+In modern Spring Boot 3.3+ applications, Netflix recommends importing the DGS platform BOM (`graphql-dgs-platform-dependencies`) and using `graphql-dgs-spring-graphql-starter`, which runs DGS on top of Spring for GraphQL's transport layer (HTTP, WebSockets, SSE, and Micrometer observability). Older DGS 8.x projects use `graphql-dgs-spring-boot-starter`.
 
 ```xml
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>com.netflix.graphql.dgs</groupId>
+            <artifactId>graphql-dgs-platform-dependencies</artifactId>
+            <version>9.1.2</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+
 <dependencies>
-    <!-- Netflix DGS Spring Boot 3 Starter -->
     <dependency>
         <groupId>com.netflix.graphql.dgs</groupId>
-        <artifactId>graphql-dgs-spring-boot-starter</artifactId>
-        <version>8.6.0</version>
+        <artifactId>graphql-dgs-spring-graphql-starter</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <!-- Required if serving GraphQL Subscriptions over WebSockets -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-websocket</artifactId>
     </dependency>
 </dependencies>
 
 <build>
     <plugins>
         <plugin>
-            <groupId>com.netflix.graphql.dgs.codegen</groupId>
-            <artifactId>dgs-codegen-maven-plugin</artifactId>
-            <version>6.1.5</version>
+            <groupId>io.github.deweyjose</groupId>
+            <artifactId>graphqlcodegen-maven-plugin</artifactId>
+            <version>1.60.2</version>
             <executions>
                 <execution>
                     <goals>
@@ -120,18 +142,27 @@ enum Genre {
 </build>
 ```
 
-When you run `mvn compile`, DGS automatically generates immutable Java models: `Show`, `Review`, `ReviewInput`, and `Genre`.
+> [!NOTE]
+> Netflix maintains the official Gradle plugin (`com.netflix.dgs.codegen`). For Maven users, the community-maintained `io.github.deweyjose:graphqlcodegen-maven-plugin` wraps Netflix's core codegen library directly and tracks current DGS releases.
+
+Running `mvn compile` generates `Show`, `Review`, `Actor`, `ReviewInput`, `Genre`, and `DgsConstants` under `target/generated-sources`.
 
 ---
 
-## Implementing DGS Data Fetchers
+## Implementing Queries, Mutations, and Subscriptions
 
-In GraphQL terminology, a resolver is called a **DataFetcher**. In DGS, you define resolvers using the `@DgsComponent` annotation:
+In `graphql-java`, every field in a schema is resolved by a `DataFetcher`. If a field is a simple property on the returned Java object (like `Show.getTitle()`), GraphQL resolves it automatically via property lookup. You only write explicit resolvers for root operations (`Query`, `Mutation`, `Subscription`) and for nested fields that require a database call, a downstream service call, or custom logic.
+
+DGS registers resolver classes with `@DgsComponent` (a stereotype over Spring's `@Component`).
+
+- `@DgsQuery` is shorthand for `@DgsData(parentType = "Query")`.
+- `@DgsMutation` is shorthand for `@DgsData(parentType = "Mutation")`.
+- `@DgsSubscription` is shorthand for `@DgsData(parentType = "Subscription")` and returns a Reactive Streams `Publisher<T>` (such as Project Reactor's `Flux<T>`).
+- `@DgsData(parentType = "...", field = "...")` attaches a resolver to any nested field on any GraphQL type.
 
 ```java
 package com.javahub.datafetchers;
 
-import com.javahub.generated.types.Genre;
 import com.javahub.generated.types.Review;
 import com.javahub.generated.types.ReviewInput;
 import com.javahub.generated.types.Show;
@@ -139,7 +170,10 @@ import com.javahub.service.ShowService;
 import com.netflix.graphql.dgs.DgsComponent;
 import com.netflix.graphql.dgs.DgsMutation;
 import com.netflix.graphql.dgs.DgsQuery;
+import com.netflix.graphql.dgs.DgsSubscription;
 import com.netflix.graphql.dgs.InputArgument;
+import org.reactivestreams.Publisher;
+import reactor.core.publisher.Sinks;
 
 import java.util.List;
 
@@ -147,12 +181,13 @@ import java.util.List;
 public class ShowDataFetcher {
 
     private final ShowService showService;
+    private final Sinks.Many<ReviewEvent> reviewSink =
+            Sinks.many().multicast().directBestEffort();
 
     public ShowDataFetcher(ShowService showService) {
         this.showService = showService;
     }
 
-    // Resolves Query.shows(titleFilter: String)
     @DgsQuery
     public List<Show> shows(@InputArgument String titleFilter) {
         if (titleFilter == null || titleFilter.isBlank()) {
@@ -161,29 +196,43 @@ public class ShowDataFetcher {
         return showService.findByTitleContaining(titleFilter);
     }
 
-    // Resolves Query.show(id: ID!)
     @DgsQuery
     public Show show(@InputArgument String id) {
         return showService.findById(id);
     }
 
-    // Resolves Mutation.addReview(...)
     @DgsMutation
     public Review addReview(@InputArgument String showId, @InputArgument ReviewInput review) {
-        return showService.addReview(showId, review);
+        Review saved = showService.addReview(showId, review);
+        reviewSink.tryEmitNext(new ReviewEvent(showId, saved));
+        return saved;
     }
+
+    @DgsSubscription
+    public Publisher<Review> reviewAdded(@InputArgument String showId) {
+        return reviewSink.asFlux()
+                .filter(event -> event.showId().equals(showId))
+                .map(ReviewEvent::review);
+    }
+
+    private record ReviewEvent(String showId, Review review) {}
 }
 ```
 
+### How Subscriptions Run Over the Wire
+
+Unlike queries and mutations, which execute over standard HTTP `POST /graphql`, subscriptions keep a long-lived stream open to push events to clients:
+
+1. **WebSocket (`graphql-transport-ws`):** Enabled in Spring for GraphQL by setting `spring.graphql.websocket.path=/graphql` (with `spring-boot-starter-websocket` on the classpath). Clients send a `subscribe` frame and receive `next` frames as the `Publisher` emits items.
+2. **Server-Sent Events (SSE):** Supported over standard HTTP (`Accept: text/event-stream`) with no WebSocket upgrade required, which simplifies routing through strict corporate proxies.
+
+Keep in mind that the in-memory `Sinks.Many` shown above only broadcasts to clients connected to the same application instance. Across multiple Kubernetes pods, back the `Publisher` with a shared pub/sub broker such as Redis Pub/Sub, Kafka, or RabbitMQ so every pod receives newly created reviews.
+
 ---
 
-## The GraphQL N+1 Problem and DGS DataLoaders
+## Solving the N+1 Query Problem with DataLoader
 
-The most severe architectural hazard in GraphQL is the **N+1 Query Problem**.
-
-### The Anatomy of the Failure
-
-Suppose a client requests 50 shows and their reviews:
+Child field resolvers are clean to write, which makes it very easy to introduce severe database load by accident. Consider this client query:
 
 ```graphql
 query {
@@ -197,50 +246,51 @@ query {
 }
 ```
 
-If you resolve the `reviews` field using a naive `@DgsData` resolver:
+If you write a straightforward `@DgsData` resolver for `Show.reviews`:
 
 ```java
-// DANGEROUS: Causes the N+1 Database Catastrophe!
+// Bad: executes one SQL query per Show returned by Query.shows
 @DgsData(parentType = "Show", field = "reviews")
 public List<Review> reviews(DgsDataFetchingEnvironment dfe) {
     Show show = dfe.getSource();
-    // Executes 1 separate SQL query PER SHOW!
-    return reviewRepository.findByShowId(show.getId()); 
+    return reviewRepository.findByShowId(show.getId());
 }
 ```
 
-The execution flow triggers:
-- 1 SQL query to fetch the 50 shows: `SELECT * FROM shows;`
-- **50 separate SQL queries** to fetch reviews for each show: `SELECT * FROM reviews WHERE show_id = ?;`
-
-If the client requests 1,000 items, your database receives 1,001 queries for a single HTTP request, completely exhausting the database connection pool.
+If `shows` returns 50 rows, `graphql-java` invokes `reviews(...)` 50 separate times. The database runs 1 query for the shows plus 50 queries for the reviews (51 total). Ask for 500 shows, and a single HTTP request fires 501 queries, tying up connection pool threads and slowing down every other caller.
 
 ```mermaid
 flowchart TD
-    subgraph NaiveN1["Naive Resolution: 51 SQL Queries"]
+    subgraph Naive["Naive @DgsData Resolver (51 SQL Queries)"]
         direction TB
-        Q1["1. SELECT * FROM shows (Returns 50 rows)"]
-        Q2["2. SELECT * FROM reviews WHERE show_id = 1"]
-        Q3["3. SELECT * FROM reviews WHERE show_id = 2"]
-        Q4["... (48 more queries) ..."]
-        Q5["51. SELECT * FROM reviews WHERE show_id = 50"]
-        Q1 --> Q2 --> Q3 --> Q4 --> Q5
+        N1["1. SELECT * FROM shows (50 rows)"]
+        N2["2. SELECT * FROM reviews WHERE show_id = 1"]
+        N3["3. SELECT * FROM reviews WHERE show_id = 2"]
+        N4["... 48 additional round-trips ..."]
+        N1 --> N2 --> N3 --> N4
     end
 
-    subgraph DataLoaderSolution["DataLoader Resolution: Exactly 2 SQL Queries"]
+    subgraph Batched["With @DgsDataLoader (2 SQL Queries)"]
         direction TB
-        D1["1. SELECT * FROM shows (Returns 50 rows)"]
-        D2["2. DGS DataLoader batches all 50 Show IDs"]
-        D3["3. SELECT * FROM reviews WHERE show_id IN (1, 2, 3, ... 50)"]
-        D1 --> D2 --> D3
+        B1["1. SELECT * FROM shows (50 rows)"]
+        B2["2. DataLoader collects all 50 show IDs"]
+        B3["3. SELECT * FROM reviews WHERE show_id IN (1..50)"]
+        B1 --> B2 --> B3
     end
 ```
 
-### The Remedy: Batch Loading with `@DgsDataLoader`
+### BatchLoader vs. MappedBatchLoader
 
-A **DataLoader** is a utility from `java-dataloader` that batches individual field requests across a single execution context and resolves them in a single aggregated call using deferred `CompletableFuture` promises.
+`java-dataloader` solves this by deferring I/O until GraphQL has finished walking all sibling fields at the current level of the query tree. DGS supports two primary interfaces:
 
-#### Step 1: Implement the MappedBatchLoader
+- **`MappedBatchLoader<K, V>`:** Receives a `Set<K>` of keys and returns `CompletionStage<Map<K, V>>`. This is usually the safer choice for database and microservice lookups because missing keys do not break positional alignment; if show `"42"` has no reviews, you can simply return an empty list or omit it (handling null/empty cleanly).
+- **`BatchLoader<K, V>`:** Receives a `List<K>` of keys and must return a `CompletionStage<List<V>>` with the **exact same size and order** as the input list. If a key is not found, you must place `null` at that exact index, or `DataLoader` will fail with a mismatch error. It works well for dense 1-to-1 lookups where you map results back in key order.
+
+Both interfaces also have `*WithContext` variants (`MappedBatchLoaderWithContext` and `BatchLoaderWithContext`) when you need to pass authentication headers, tenant IDs, or query arguments into the batch call via `BatchLoaderEnvironment`.
+
+### Implementing a MappedBatchLoader
+
+Because `DataLoader` runs asynchronously, avoid dumping blocking JDBC calls onto `ForkJoinPool.commonPool()` in high-throughput services. Inject a dedicated bounded executor (or a Java 21 virtual thread executor if your JDBC driver does not pin carrier threads).
 
 ```java
 package com.javahub.dataloaders;
@@ -249,37 +299,47 @@ import com.javahub.generated.types.Review;
 import com.javahub.repository.ReviewRepository;
 import com.netflix.graphql.dgs.DgsDataLoader;
 import org.dataloader.MappedBatchLoader;
+import org.springframework.beans.factory.annotation.Qualifier;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
 
-@DgsDataLoader(name = "reviewsLoader")
+@DgsDataLoader(name = "reviews")
 public class ReviewsDataLoader implements MappedBatchLoader<String, List<Review>> {
 
     private final ReviewRepository reviewRepository;
+    private final Executor ioExecutor;
 
-    public ReviewsDataLoader(ReviewRepository reviewRepository) {
+    public ReviewsDataLoader(ReviewRepository reviewRepository,
+                             @Qualifier("dgsDataLoaderExecutor") Executor ioExecutor) {
         this.reviewRepository = reviewRepository;
+        this.ioExecutor = ioExecutor;
     }
 
     @Override
     public CompletionStage<Map<String, List<Review>>> load(Set<String> showIds) {
-        // Asynchronously executes ONE single batch query: 
-        // SELECT * FROM reviews WHERE show_id IN (:showIds)
-        return CompletableFuture.supplyAsync(() -> reviewRepository.findReviewsGroupedByShowIds(showIds));
+        return CompletableFuture.supplyAsync(() -> {
+            Map<String, List<Review>> grouped = reviewRepository.findReviewsGroupedByShowIds(showIds);
+            // Ensure every requested showId maps to a non-null list because schema defines [Review!]!
+            showIds.forEach(id -> grouped.putIfAbsent(id, Collections.emptyList()));
+            return grouped;
+        }, ioExecutor);
     }
 }
 ```
 
-#### Step 2: Use the DataLoader in the Field Resolver
+Then wire the loader into the field resolver by returning a `CompletableFuture`:
 
 ```java
 package com.javahub.datafetchers;
 
 import com.javahub.dataloaders.ReviewsDataLoader;
+import com.javahub.generated.types.DgsConstants;
 import com.javahub.generated.types.Review;
 import com.javahub.generated.types.Show;
 import com.netflix.graphql.dgs.DgsComponent;
@@ -293,62 +353,66 @@ import java.util.concurrent.CompletableFuture;
 @DgsComponent
 public class ShowReviewsDataFetcher {
 
-    @DgsData(parentType = "Show", field = "reviews")
+    @DgsData(parentType = DgsConstants.SHOW.TYPE_NAME, field = DgsConstants.SHOW.Reviews)
     public CompletableFuture<List<Review>> reviews(DgsDataFetchingEnvironment dfe) {
         Show show = dfe.getSource();
-        
-        // Retrieve the registered DataLoader by name
         DataLoader<String, List<Review>> dataLoader = dfe.getDataLoader(ReviewsDataLoader.class);
-        
-        // Enqueue this show's ID. DataLoader will batch all IDs across the query execution!
         return dataLoader.load(show.getId());
     }
 }
 ```
 
-### How DataLoader Works Under the Hood:
-1. When GraphQL resolves the 50 `Show` objects, each `reviews` field resolver invokes `dataLoader.load(show.getId())`.
-2. Instead of calling the database, the DataLoader immediately returns an unfulfilled `CompletableFuture` and enqueues the ID into its internal queue.
-3. Once all sibling fields in the current execution level are visited, the GraphQL engine triggers `dispatch()`.
-4. The DataLoader fires a **single SQL query** containing all 50 show IDs (`WHERE show_id IN (...)`), maps the results, and completes the futures simultaneously.
+### Per-Request Caching and Lifecycle
+
+A `DataLoader` does two jobs: **batching** and **request-scoped memoization**.
+
+When `reviews(...)` runs for 50 shows, each call to `dataLoader.load(show.getId())` queues the key and immediately returns an incomplete `CompletableFuture`. Once `graphql-java` finishes traversing the `shows` list, the execution strategy dispatches the batch, runs `load(Set<String>)` once, and completes all 50 futures.
+
+Equally important is the **per-request cache**:
+
+- DGS creates a fresh `DataLoaderRegistry` for every incoming GraphQL request.
+- Within that single request, if two different branches of the query ask for the same key (for example, ten shows in the result all feature actor `"actor-7"`), `dataLoader.load("actor-7")` hits the in-memory `CacheMap` and returns the same `CompletableFuture` instead of fetching `"actor-7"` again.
+- Once the HTTP request completes, the `DataLoader` instance and its cache are discarded. Cached data never leaks between different users or stays stale across requests.
+
+> [!WARNING]
+> While `DataLoader` instances are created per request, the Spring bean annotated with `@DgsDataLoader` is a **singleton** by default. Never store per-request mutable fields on your `MappedBatchLoader` class. If you need request-specific state, either implement `MappedBatchLoaderWithContext` or register a `Supplier` / prototype-scoped loader bean.
 
 ---
 
-## Apollo Federation: Building the Enterprise Supergraph
+## Composing Microservices with Apollo Federation
 
-In a microservice mesh, you do not want a single monolithic backend maintaining the entire enterprise GraphQL schema. The `Show` service should own show metadata, while an independent `Billing` service owns customer subscriptions, and a `Search` service owns recommendation scores.
+In a larger organization, putting every domain type into one GraphQL application creates a shared deployment bottleneck. Teams end up stepping on each other's releases just to add a field to `Show` or `Customer`.
 
-**Apollo Federation** allows independent microservices (called **Subgraphs**) to compose into a single unified **Supergraph**:
+**Apollo Federation** splits the graph into independent services called **subgraphs**. Each Spring Boot DGS service owns its slice of the schema, and a router (such as Apollo Router) composes them into one client-facing **supergraph**.
 
 ```mermaid
 flowchart TD
-    Client["Client App (React / Mobile)"] --> Gateway["Apollo Router / Federation Gateway"]
+    Client["Web or Mobile Client"] --> Router["Apollo Router<br/>(Supergraph Gateway)"]
 
-    subgraph Mesh["Independent Microservice Subgraphs"]
-        ShowSvc["Show Service (DGS Subgraph)<br/>Owns Show { id, title, genre }"]
-        ReviewSvc["Review Service (DGS Subgraph)<br/>Extends Show with reviews: [Review]"]
-        RatingSvc["Rating Service (DGS Subgraph)<br/>Extends Show with averageRating: Float"]
+    subgraph Subgraphs["DGS Subgraph Services"]
+        ShowSvc["Show Service<br/>Owns Show (id, title, genre)"]
+        ReviewSvc["Review Service<br/>Extends Show with reviews"]
+        RatingSvc["Rating Service<br/>Extends Show with averageRating"]
     end
 
-    Gateway -->|"Extracts Show core data"| ShowSvc
-    Gateway -->|"Resolves reviews via @key(fields: 'id')"| ReviewSvc
-    Gateway -->|"Resolves ratings via @key(fields: 'id')"| RatingSvc
+    Router -->|"1. Query core Show fields"| ShowSvc
+    Router -->|"2. _entities lookup by key (id)"| ReviewSvc
+    Router -->|"3. _entities lookup by key (id)"| RatingSvc
 ```
 
-### Extending Entities Across Microservices
-
-In the Review Service, we extend the `Show` type originally defined in the Show Service:
+In the Review Service subgraph, `Show` is referenced by its primary key (`@key(fields: "id")`) and extended with the `reviews` field (using Federation v2 syntax; Federation v1 uses `extend type Show` or `@extends` with `@external`):
 
 ```graphql
-type Show @key(fields: "id") @extends {
-    id: ID! @external
+extend schema
+    @link(url: "https://specs.apollo.dev/federation/v2.3", import: ["@key"])
+
+type Show @key(fields: "id") {
+    id: ID!
     reviews: [Review!]!
 }
 ```
 
-### Implementing `@DgsEntityFetcher`
-
-The Review Service must provide an **Entity Fetcher** so the Apollo Router can resolve the federated `Show` representation:
+When the router needs `reviews` for a set of shows, it sends an `_entities` query to the Review Service containing representations like `{"__typename": "Show", "id": "101"}`. DGS routes those representations to an `@DgsEntityFetcher` method:
 
 ```java
 package com.javahub.federation;
@@ -364,113 +428,135 @@ public class ShowEntityFetcher {
 
     @DgsEntityFetcher(name = "Show")
     public Show resolveShow(Map<String, Object> values) {
-        // Apollo Router passes the key fields: {"__typename": "Show", "id": "101"}
         String id = (String) values.get("id");
-        
-        // Return a stub representation; reviews field resolver will resolve the rest!
+        // Return a stub containing only the key; ShowReviewsDataFetcher + DataLoader fetches reviews
         return Show.newBuilder().id(id).build();
     }
 }
 ```
 
+Because `resolveShow` only constructs a lightweight stub with the `id`, the router can pass 50 `Show` representations in one `_entities` request, and your existing `ReviewsDataLoader` will still batch all 50 review lookups into a single SQL query.
+
 ---
 
-## Production Security: Defense Against Malicious Queries
+## Security: Field-Level Authorization and Query Limits
 
-Because GraphQL allows clients to specify arbitrary query shapes, malicious attackers or poorly written frontend scripts can trigger Denial-of-Service (DoS) attacks by sending **deeply nested recursive queries**:
+GraphQL changes your security surface compared to REST. You no longer have one URL per resource, so URL-based authorization rules (`/api/admin/**`) only protect the entire `/graphql` endpoint, not individual fields. At the same time, letting clients shape their own queries means a single HTTP request can trigger expensive nested traversal.
 
-```graphql
-# MALICIOUS: Circular Recursive DoS Query
-query InfiniteLoopAttack {
-    show(id: "1") {
-        cast {
-            shows {
-                cast {
-                    shows {
-                        cast {
-                            shows {
-                                title
-                            }
-                        }
-                    }
-                }
-            }
-        }
+### Field-Level Authorization with Spring Security
+
+Because `@DgsComponent` beans are regular Spring beans, Spring Security method security (`@EnableMethodSecurity`) works directly on `@DgsQuery`, `@DgsMutation`, and `@DgsData` methods. This lets public fields stay accessible while sensitive fields on the exact same type require elevated roles.
+
+```java
+package com.javahub.datafetchers;
+
+import com.javahub.generated.types.DgsConstants;
+import com.javahub.generated.types.Show;
+import com.javahub.service.ContractService;
+import com.netflix.graphql.dgs.DgsComponent;
+import com.netflix.graphql.dgs.DgsData;
+import com.netflix.graphql.dgs.DgsDataFetchingEnvironment;
+import org.springframework.security.access.prepost.PreAuthorize;
+
+@DgsComponent
+public class ShowFinancialsDataFetcher {
+
+    private final ContractService contractService;
+
+    public ShowFinancialsDataFetcher(ContractService contractService) {
+        this.contractService = contractService;
+    }
+
+    @PreAuthorize("hasRole('FINANCE_ADMIN')")
+    @DgsData(parentType = DgsConstants.SHOW.TYPE_NAME, field = DgsConstants.SHOW.LicensingCost)
+    public Double licensingCost(DgsDataFetchingEnvironment dfe) {
+        Show show = dfe.getSource();
+        return contractService.findLicensingCost(show.getId());
     }
 }
 ```
 
-A query like this can cause millions of nested resolver executions, pinning backend CPU and exhausting database connection pools.
+If an unauthenticated or non-admin user requests `{ show(id: "1") { title licensingCost } }`, GraphQL can still return `title` while returning `null` for `licensingCost` alongside an error entry in the `errors` array (assuming `licensingCost` is nullable in the schema and you have a custom `DataFetcherExceptionHandler` mapping `AccessDeniedException` to a clean `PERMISSION_DENIED` error without leaking stack traces).
 
-### Defensive Hardening in Production:
+### Guarding Against Deep and Expensive Queries
 
-1. **Max Query Depth Instrumentation:** Restrict how deep a query can nest (typically max depth = 5 to 7).
-2. **Query Complexity Analysis:** Assign numeric cost weights to fields and reject any query exceeding a threshold (e.g., max complexity = 200).
-3. **Persisted Queries (Automatic Persisted Queries - APQ):** In production, disable arbitrary GraphQL query execution entirely. The server only executes pre-approved query hashes compiled into the frontend build artifact.
+If `Show` references `cast: [Actor!]!` and `Actor` references `shows: [Show!]!`, a client can craft a circular query nested 15 levels deep. Even with DataLoaders, the fan-out multiplies exponentially at every level and can saturate CPU and memory.
+
+Production GraphQL servers layer four defenses before execution starts:
+
+1. **Query Depth Limiting:** Reject queries whose AST nesting exceeds a configured ceiling (commonly 5 to 8 levels).
+2. **Query Complexity Analysis:** Assign cost weights to fields and multiply list fields by their requested page size (`first` / `limit`), rejecting queries over a budget.
+3. **Disable Introspection in Production:** Prevent external scanners from dumping your entire schema (`spring.graphql.schema.introspection.enabled=false` or `dgs.graphql.introspection.enabled=false`).
+4. **Persisted Queries (Safelisting):** For first-party web and mobile apps, register allowed query documents at build time and only accept known SHA-256 query hashes in production.
+
+Register `graphql-java` instrumentations as standard Spring beans and DGS wires them automatically:
 
 ```java
 package com.javahub.config;
 
+import graphql.analysis.FieldComplexityCalculator;
 import graphql.analysis.MaxQueryComplexityInstrumentation;
 import graphql.analysis.MaxQueryDepthInstrumentation;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-public class GraphQLSecurityConfig {
+public class GraphQLProtectionConfig {
 
-    // Enforce maximum query depth of 6 levels
     @Bean
     public MaxQueryDepthInstrumentation maxQueryDepthInstrumentation() {
-        return new MaxQueryDepthInstrumentation(6);
+        return new MaxQueryDepthInstrumentation(7);
     }
 
-    // Enforce maximum computational complexity of 150 points
     @Bean
     public MaxQueryComplexityInstrumentation maxQueryComplexityInstrumentation() {
-        return new MaxQueryComplexityInstrumentation(150);
+        FieldComplexityCalculator calculator = (env, childComplexity) -> {
+            // Multiply child cost by requested page size when a list field accepts a "limit" argument
+            Object limitArg = env.getArguments().get("limit");
+            int multiplier = (limitArg instanceof Number n) ? Math.max(1, n.intValue()) : 1;
+            return 1 + (childComplexity * multiplier);
+        };
+        return new MaxQueryComplexityInstrumentation(200, calculator);
     }
 }
 ```
 
 ---
 
-## Senior Engineer Interview Crucible
+## Trade-Offs: GraphQL vs. REST
 
-### How does a `DataLoader` solve the GraphQL N+1 problem under the hood using execution dispatching?
+GraphQL solves real client aggregation problems, but it is not a blanket upgrade over REST. Knowing where it creates friction saves teams from adopting it for the wrong workload.
 
-A `DataLoader` decouples the *request* for an entity from the actual *execution* of the fetch. When the GraphQL engine traverses the execution AST and encounters field resolvers for multiple sibling nodes, each resolver invokes `dataLoader.load(key)`. Instead of executing an immediate I/O call, the DataLoader enqueues the key in memory and returns an uncompleted `CompletableFuture`.
+| Area | GraphQL (Netflix DGS) | REST (Spring MVC) |
+| :--- | :--- | :--- |
+| **Data Fetching** | Client chooses exact fields; avoids multi-call waterfalls | Server fixes payload shape; simple for resource-centric APIs |
+| **HTTP and CDN Caching** | Harder; most queries use `POST /graphql` with JSON bodies (requires APQ over `GET` or GraphQL-aware edge caches) | Native support via `GET`, `ETag`, `Cache-Control`, and standard CDNs |
+| **Observability and Errors** | HTTP status is usually `200 OK` even on partial failures; monitoring must inspect GraphQL `errors` and operation names | Standard HTTP status codes (`400`, `404`, `500`) work directly with gateways and log dashboards |
+| **Query Cost Control** | Requires depth limits, complexity scoring, and DataLoader discipline | Cost per endpoint is predictable and bounded by design |
+| **Binary Files and Streaming** | Awkward; multipart upload specs exist but add friction | First-class support for multipart uploads, range requests, and downloads |
 
-Once all field resolvers at that level of the query tree have executed, the GraphQL engine's execution strategy triggers the DataLoader's `dispatch()` phase. The DataLoader flushes its queued keys, invokes a single batch-fetching function (e.g., `WHERE id IN (...)`), and maps the returned entities to resolve the pending futures. This transforms what would have been `N` independent database queries into a single batch query.
+**When GraphQL shines:** Client-facing aggregation layers serving diverse UIs (mobile, web, TV) over deeply connected domain graphs where round-trip count and payload size directly affect user experience.
 
----
-
-### Contrast Apollo Federation with a traditional monolithic GraphQL schema or a Backend-for-Frontend (BFF) gateway.
-
-In a **Monolithic GraphQL Schema**, all types, mutations, and business logic reside in a single codebase. While simple initially, it creates a massive deployment bottleneck as dozens of microservice teams attempt to coordinate schema changes and merges within a single repository.
-
-A **Backend-for-Frontend (BFF)** creates specialized gateways tailored to specific clients (e.g., iOS BFF, Web BFF). However, BFFs frequently duplicate business orchestration logic and cross-service aggregation code across multiple gateway services.
-
-**Apollo Federation** is a declarative, distributed architecture. Microservice teams independently own, build, and deploy their own GraphQL subgraphs. Using federation directives like `@key`, `@extends`, and `@external`, independent services extend shared entity types. An intelligent gateway (such as Apollo Router) composes these subgraphs into a unified Supergraph at runtime, automatically planning and routing queries across the microservice mesh without requiring custom aggregation boilerplate.
+**When REST or gRPC is a better fit:** Public APIs that rely heavily on CDN edge caching, file upload/download endpoints, simple CRUD admin services, and high-throughput service-to-service calls inside a cluster (where gRPC with Protobuf avoids GraphQL parsing and AST validation overhead).
 
 ---
 
-### How do you prevent malicious clients from running denial-of-service queries (e.g. deeply nested circular recursive queries)?
+## Interview Questions
 
-To prevent GraphQL Denial-of-Service attacks, enterprise architectures implement three layers of defensive instrumentation:
+### How does a DataLoader prevent the N+1 query problem, and what is the scope of its cache?
 
-1. **Query Depth Limiting:** Using `MaxQueryDepthInstrumentation`, the engine calculates the syntax tree depth of the query. If a query nests beyond a safe threshold (e.g., 5-7 levels deep), it is rejected before execution begins.
-2. **Query Complexity Scoring:** Using `MaxQueryComplexityInstrumentation`, every field in the schema is assigned a computational cost (e.g., scalar fields cost 1, paginated list connections cost 10). The total cost is summed, and queries exceeding a maximum complexity limit are blocked.
-3. **Persisted Queries (Query Whitelisting):** In high-security or mobile-first environments, arbitrary client queries are forbidden in production. Frontend applications register their query strings at build time, generating a cryptographic SHA-256 hash. The client transmits only the hash over HTTP. If the gateway does not recognize the hash in its approved whitelist, the request is instantly rejected.
+A `DataLoader` separates requesting a value from executing the underlying I/O. When `graphql-java` evaluates a field resolver across sibling elements (such as 50 `Show` records), each resolver calls `dataLoader.load(key)`. Instead of hitting the database right away, the loader queues the key and returns an uncompleted `CompletableFuture`. Once all sibling resolvers at that level have been visited, the engine dispatches the loader, which executes a single batched query (such as `WHERE show_id IN (...)`) and resolves all queued futures together.
 
----
+By default, a `DataLoader` cache is scoped to **a single GraphQL request**. If multiple parts of the same query ask for the same key, the loader returns the cached `CompletableFuture` without repeating the lookup. At the end of the request, the cache is discarded so data is never shared across users or served stale on later requests.
 
-### What are the performance and architectural trade-offs between GraphQL and REST for microservices? When is REST still superior?
+### When should you choose `MappedBatchLoader` over `BatchLoader`?
 
-While GraphQL eliminates over-fetching and under-fetching on the client, it introduces architectural trade-offs:
+Use `BatchLoader<K, V>` when you can guarantee that your batch function returns a `List<V>` with the exact same length and ordering as the input `List<K>` (filling missing entries with `null` at the corresponding index). Use `MappedBatchLoader<K, V>` when fetching from a SQL database (`WHERE id IN (...)`) or a downstream service that only returns rows for keys that exist, or returns them in arbitrary order. Returning a `Map<K, V>` avoids positional index bugs when some keys have no matching records.
 
-- **HTTP Caching:** REST maps natively to HTTP semantics. Browsers, CDNs (Cloudflare/Akamai), and reverse proxies (Varnish) can effortlessly cache `GET /products/123` responses using standard `Cache-Control` and `ETag` headers. Because GraphQL queries are typically sent via `POST` requests to a single `/graphql` endpoint with varying query payloads, edge caching requires specialized GraphQL CDN support.
-- **Complexity and Overhead:** GraphQL parsing, validation, AST execution, and DataLoader dispatching add CPU and memory overhead compared to direct, highly optimized REST JSON serialization.
-- **File Uploads and Streaming:** REST is significantly simpler and more performant for binary file uploads (multipart forms), video streaming, and chunked transfers.
+### How do you secure a GraphQL API against both unauthorized field access and denial-of-service queries?
 
-**When REST is Still Superior:** High-throughput internal inter-service communication (machine-to-machine), large file transfers, and simple static CRUD APIs where caching at the CDN edge is paramount. GraphQL is superior for client-facing edge aggregation across heterogeneous devices.
+Authorization is enforced at the resolver or service layer using Spring Security annotations like `@PreAuthorize` on `@DgsQuery`, `@DgsMutation`, and `@DgsData` methods, since URL-level rules only guard the single `/graphql` endpoint. Denial-of-service protection happens before execution by combining `MaxQueryDepthInstrumentation` (to stop deeply nested circular queries), `MaxQueryComplexityInstrumentation` (to cap weighted field and list fan-out cost), disabling introspection in production, and using persisted query safelists for first-party clients.
+
+### Why is HTTP caching harder with GraphQL than with REST, and how do teams work around it?
+
+Standard HTTP caches (browsers, Varnish, CloudFront, Cloudflare) key responses by URL and HTTP method, caching `GET` requests automatically via `Cache-Control` and `ETag`. GraphQL typically sends queries inside a `POST /graphql` request body, which standard HTTP caches bypass. Teams work around this by using **Automatic Persisted Queries (APQ)** over `GET` requests (passing a short query hash and variables as query parameters so CDNs can cache the URL), or by caching lower down at the service/DataLoader layer using Redis or Caffeine.

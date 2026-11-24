@@ -1,215 +1,209 @@
 ---
 title: "The Collections Framework (Maps)"
-description: "Master Java Map architecture: HashMap internals, perturbation hashing, treeification mechanics (Red-Black trees), LinkedHashMap LRU caching, and TreeMap navigation."
+description: "How Java Maps store and retrieve key-value pairs, covering HashMap buckets, collisions, and Red-Black treeification, TreeMap sorting, LinkedHashMap ordering and LRU caching, the equals/hashCode contract, and ConcurrentHashMap."
 category: "level-3"
 date: "2026-10-29T10:00:00Z"
 ---
 
-If you ask any senior Java engineer what single data structure powers the majority of backend services, microservices caches, and in-memory indexes, the answer is unanimous: **`java.util.HashMap`**.
+When you look up a user by ID, count word frequencies, or cache database responses in memory, you almost always reach for a `Map<K, V>`. The interface looks minimal (`put`, `get`, `remove`), yet the implementations behind it behave very differently under load, under hash collisions, and across multiple threads.
 
-On the surface, a map is straightforward: you insert a key-value pair with `.put(key, value)` and fetch it with `.get(key)`. But under the hood lies one of the most sophisticated, hardware-optimized engineering marvels in the entire OpenJDK standard library.
-
-Understanding how `HashMap` calculates bucket indices via bitwise masking, how Java 8 defends against algorithmic hash-flooding DoS attacks using **Red-Black Treeification**, and how `LinkedHashMap` and `TreeMap` achieve deterministic ordering is mandatory knowledge for any senior engineer.
+Knowing how `HashMap` computes bucket indices, why Java 8 added Red-Black trees to collided buckets, how `LinkedHashMap` tracks insertion or access order, when `TreeMap` makes sense, and why `ConcurrentHashMap` exists helps you avoid subtle memory leaks, slow lookups, and concurrency bugs.
 
 ---
 
-## The Map Ecosystem: Choosing the Right Data Structure
+## Choosing a `Map` Implementation
 
-The `java.util.Map<K, V>` interface defines key-value associations. Unlike `List` or `Set`, `Map` does not inherit from `Collection`, but exposes collection views (`keySet()`, `values()`, `entrySet()`).
+Unlike `List` and `Set`, `Map<K, V>` does not extend `Collection`. Instead, it exposes three collection views over its entries: `keySet()`, `values()`, and `entrySet()`.
 
-| Map Type | Underlying Data Structure | Lookup / Insertion | Order Guarantees | Permits Null? |
+| Implementation | Backing Structure | Average `get` / `put` | Iteration Order | `null` Keys / Values |
 |---|---|---|---|---|
-| **`HashMap`** | Hash Table (Buckets + Red-Black Trees) | **`O(1)`** amortized | None (Non-deterministic) | Yes (1 null key at bucket 0) |
-| **`LinkedHashMap`** | Hash Table + Doubly-Linked Pointers | **`O(1)`** amortized | **Insertion or Access Order** | Yes |
-| **`TreeMap`** | Red-Black Self-Balancing Binary Tree | **`O(log n)`** logarithmic | **Sorted (Natural or Comparator)** | No null keys |
-| **`ConcurrentHashMap`** | Partitioned CAS + Synchronized Buckets | **`O(1)`** thread-safe | None | **No null keys or values** |
+| `HashMap` | Hash table (buckets + Red-Black trees) | `O(1)` | Unspecified | 1 `null` key, any `null` values |
+| `LinkedHashMap` | Hash table + doubly-linked list | `O(1)` | Insertion or access order | 1 `null` key, any `null` values |
+| `TreeMap` | Red-Black binary search tree | `O(log n)` | Sorted (`Comparable` or `Comparator`) | No `null` keys (under natural order), `null` values allowed |
+| `ConcurrentHashMap` | Hash table (CAS + per-bucket locking) | `O(1)` thread-safe | Unspecified | No `null` keys and no `null` values |
 
 ---
 
-## Anatomy of a `HashMap`: The JVM Mechanics
+## `HashMap` Internals: Buckets, Hashing, and Collisions
 
-At its core, a `HashMap` is an array of bucket nodes:
+In OpenJDK, `HashMap` stores its entries in an array of bucket heads:
 
 ```java
-// OpenJDK HashMap internal storage:
 transient Node<K, V>[] table;
 ```
 
-Each `Node<K, V>` is a lightweight container holding:
-1. `final int hash`: The cached 32-bit hash code.
-2. `final K key`: The key reference.
-3. `V value`: The value reference.
-4. `Node<K, V> next`: Pointer to the next colliding node in this bucket.
+Like `ArrayList`, `HashMap` allocates `table` lazily on the first `put()`, starting with a default capacity of **16**. Each `Node<K, V>` holds four fields:
+
+- `final int hash`: the cached spread hash of the key
+- `final K key`: the key reference
+- `V value`: the associated value
+- `Node<K, V> next`: pointer to the next colliding entry in the same bucket
 
 ```mermaid
 flowchart TD
-    subgraph BucketArray ["Node&lt;K,V&gt;[] table (Length: Power of 2, e.g. 16)"]
-        B0["Bucket 0: null"]
-        B1["Bucket 1: [Key A -> Val A] -> [Key B -> Val B]"]
-        B2["Bucket 2: null"]
-        B3["Bucket 3: [Key C -> Val C]"]
-        B4["Bucket 4: Red-Black Tree (TreeNode)"]
+    subgraph Table["Node&lt;K,V&gt;[] table (power-of-two length, e.g., 16)"]
+        b0["Bucket 0: null"]
+        b1["Bucket 1: [K1:V1] -> [K2:V2] (linked list)"]
+        b2["Bucket 2: null"]
+        b3["Bucket 3: [K3:V3]"]
+        b4["Bucket 4: TreeNode root (Red-Black tree)"]
     end
 ```
 
-### The Three Steps of `.put(key, value)`
-When you call `map.put(key, value)`, the JVM executes three precise mathematical operations:
+### Hash Perturbation and Bitwise Indexing
 
-### Hash Perturbation (Spreading High Bits)
-A naive hash implementation would use `key.hashCode()` directly. However, typical table capacities are small powers of two (e.g., 16, 32, 64). Only the lowest 4 or 6 bits of the hash would participate in bucket selection!
+When you call `map.put(key, value)`, `HashMap` needs to turn a 32-bit `hashCode()` into a valid array index between `0` and `n - 1` (where `n = table.length`).
 
-If multiple keys have identical low-order bits, catastrophic collisions occur. To prevent this, Java applies a **perturbation function** that XORs the high 16 bits into the low 16 bits:
+First, OpenJDK spreads the key's hash bits using a perturbation function:
 
 ```java
-// OpenJDK HashMap hash spreading:
 static final int hash(Object key) {
     int h;
     return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
 }
 ```
 
-This guarantees that high-order bits influence lower-order bucket placement, dispersing keys evenly across the table.
-
-### Fast Bitwise Modulo Masking
-In mathematics, mapping a hash code into an array of length `n` requires a modulo operation: `index = hash % n`.
-
-However, the CPU integer division opcode (`IDIV`) is expensive, consuming 10 to 40 clock cycles! 
-
-Because `HashMap` strictly forces its capacity `n` to be a **Power of Two** (16, 32, 64, 128, ...), `javac` uses a lightning-fast bitwise AND mask instead:
+Why bother with the XOR shift? Because `HashMap` always keeps its table capacity `n` as a **power of two** (16, 32, 64, 128, ...). That power-of-two invariant lets `HashMap` replace a slow integer remainder (`hash % n`) with a single-cycle bitwise AND:
 
 ```java
-// Fast bitwise indexing (takes only 1 CPU clock cycle!):
 int index = (n - 1) & hash;
 ```
 
-For example, if capacity `n = 16`, `n - 1 = 15` (`0000 1111` in binary). Performing `hash & 15` zeroes out everything except the lowest 4 bits, achieving instantaneous modulo arithmetic!
+When `n = 16`, `n - 1` is `15` (`0000 1111` in binary), so `(n - 1) & hash` only looks at the lowest 4 bits of `hash`. If your keys have hash codes that vary mostly in their upper bits (for example, floats or sequential shifted identifiers), they would all land in the same bucket without perturbation. XORing the upper 16 bits into the lower 16 bits mixes high-bit variation down into the bits that actually select the bucket.
 
-### Collision Resolution: Linked List to Red-Black Tree
-When two unequal keys calculate the same bucket index, a **hash collision** occurs.
+### Load Factor and Resizing
 
-- **Java 7**: Colliding nodes were simply prepended to a singly-linked list. In the worst case (e.g., an attacker maliciously crafting thousands of keys with identical hash codes), lookup degraded to **`O(n)` linear search**, opening web applications to Hash-DOS denial-of-service vulnerabilities.
-- **Java 8+ (Treeification)**: When a single bucket accumulates **8 or more colliding nodes** (`TREEIFY_THRESHOLD = 8`) AND the total map capacity is at least **64** (`MIN_TREEIFY_CAPACITY = 64`), the JVM converts that bucket's linked list into a **Red-Black Self-Balancing Binary Search Tree (`TreeNode`)**!
-- Search time within that collided bucket drops from `O(n)` to **`O(log n)`**, neutralizing algorithmic collision attacks.
-- If entries are removed and bucket size shrinks to **6** (`UNTREEIFY_THRESHOLD = 6`), the JVM converts the tree back into a lightweight linked list to conserve memory.
+As more entries enter the table, the probability of collisions rises. `HashMap` controls when to grow using two constants:
+
+- `DEFAULT_INITIAL_CAPACITY = 16`
+- `DEFAULT_LOAD_FACTOR = 0.75f`
+
+Whenever `size` exceeds `threshold` (`capacity * loadFactor`, so `12` for a 16-bucket table), `HashMap` calls `resize()`, doubling the table capacity (`16 -> 32 -> 64`) and redistributing existing nodes.
+
+Java 8 introduced a clean optimization for that redistribution. Because the new capacity is `2 * oldCap`, the new mask `(2 * oldCap - 1)` adds exactly one bit to the left of the old mask: the bit at `oldCap`. For any existing node, checking `(e.hash & oldCap) == 0` tells `HashMap` immediately where it goes without recomputing `hashCode()`:
+
+- If `(e.hash & oldCap) == 0`, the node stays at its **exact same bucket index** (`loHead`).
+- If `(e.hash & oldCap) != 0`, the node moves to **`oldIndex + oldCap`** (`hiHead`).
+
+If you know up front how many entries you will store, pre-size the map to avoid repeated resizing. Watch out for one subtle detail: calling `new HashMap<>(100)` sets capacity to the next power of two (128), whose threshold is `128 * 0.75 = 96`, so inserting 100 entries still triggers a resize! Since Java 19, use `HashMap.newHashMap(expectedSize)`, which calculates the exact capacity needed to hold `expectedSize` mappings without resizing:
+
+```java
+// Java 19+: accounts for the 0.75 load factor automatically
+Map<String, User> users = HashMap.newHashMap(100);
+```
+
+### Handling Collisions: Linked Lists to Red-Black Trees
+
+Two distinct keys can map to the same bucket index either because they have identical `hashCode()` values or because their hashes share the same lower bits. When that happens, `HashMap` checks each existing node in the bucket by comparing cached hashes first, then reference identity (`==`), then `equals()`. If an equal key is found, its value is replaced; otherwise the new node is appended.
+
+In Java 7 and earlier, a bucket was always a singly-linked list. Under heavy collisions (such as a poor `hashCode()` implementation or a deliberate hash-flooding attack against a web endpoint), lookup degraded to `O(n)`.
+
+Java 8 fixed this worst case with **treeification**:
+
+- When a bucket reaches **`TREEIFY_THRESHOLD = 8`** nodes **and** the total table length is at least **`MIN_TREEIFY_CAPACITY = 64`**, `HashMap` converts that bucket from a linked list of `Node` objects into a **Red-Black self-balancing binary search tree** of `TreeNode` objects.
+- If the table length is still below 64 when a bucket hits 8 entries, `HashMap` **resizes the table** instead of building a tree, because spreading entries across more buckets is cheaper than maintaining tree nodes.
+- Within a treeified bucket, lookup drops from `O(n)` to **`O(log n)`**. (If colliding keys have identical hashes, `HashMap` orders them in the tree using `Comparable` if the keys implement it, falling back to a deterministic tie-breaker based on class name and `System.identityHashCode`.)
+- If removals or resizes shrink a treeified bucket down to **`UNTREEIFY_THRESHOLD = 6`** nodes, `HashMap` converts it back to a lightweight linked list. Leaving a gap between 8 and 6 avoids thrashing back and forth around a single boundary.
 
 ```mermaid
 flowchart LR
-    subgraph CollisionEvolution ["Bucket Collision Lifecycle"]
-        LL["1-7 Collisions: Singly-Linked List<br/>Node&lt;K,V&gt; (O(n) scan)"]
-        Tree["8+ Collisions &amp; Cap &gt;= 64: Red-Black Tree<br/>TreeNode&lt;K,V&gt; (O(log n) scan)"]
-        Untree["Shrinks to &lt;= 6: Convert Back<br/>Node&lt;K,V&gt;"]
-
-        LL -->|"Count &gt;= 8"| Tree
-        Tree -->|"Count &lt;= 6"| Untree
-    end
+    listBucket["Linked List (1 to 7 entries, O(n) scan)"] -->|"count >= 8 and capacity < 64"| resize["Resize table (2x capacity)"]
+    listBucket -->|"count >= 8 and capacity >= 64"| treeBucket["Red-Black Tree (O(log n) lookup)"]
+    treeBucket -->|"count <= 6 after remove or split"| listBucket
 ```
+
+Under a reasonably well-distributed hash function, the JDK documentation notes that bucket counts follow a Poisson distribution where 8 entries in a single bucket occur with probability less than one in ten million (`~0.00000006`), so treeification acts as a safety net rather than normal steady-state behavior.
 
 ---
 
-## Load Factor and High-Speed Resizing
+## The `equals()` and `hashCode()` Contract
 
-How does `HashMap` know when to expand?
+Every hash-based collection in Java (`HashMap`, `HashSet`, `LinkedHashMap`, `ConcurrentHashMap`) depends on the contract declared on `java.lang.Object`:
 
-1. **`DEFAULT_INITIAL_CAPACITY`**: 16.
-2. **`DEFAULT_LOAD_FACTOR`**: `0.75` (a mathematically derived sweet spot balancing memory usage and collision probability).
-3. **`threshold = capacity * loadFactor`**: For capacity 16, threshold is `16 * 0.75 = 12`.
+1. **`equals()` must be an equivalence relation**: reflexive (`x.equals(x)`), symmetric (`x.equals(y)` matches `y.equals(x)`), transitive, consistent, and `x.equals(null)` must return `false`.
+2. **Equal objects must have equal hash codes**: if `a.equals(b)` is `true`, then `a.hashCode() == b.hashCode()` must also be `true`.
+3. **Unequal objects may collide**: if `a.equals(b)` is `false`, their hash codes are allowed to be equal, though spreading them out reduces collisions.
+4. **Consistency while in a map**: an object's `hashCode()` must not change while it is being used as a key in a `Map`.
 
-When `size > threshold`, the map triggers **`resize()`**, doubling the table capacity (`16 -> 32 -> 64`).
+Two mistakes show up regularly in real codebases.
 
-### The Java 8 High-Speed Resize Trick
-In Java 7, resizing required re-running the index formula for every single entry in the map.
+### Mistake One: Overriding `equals()` Without `hashCode()`
 
-In Java 8+, the architects realized a brilliant binary trick: because the capacity doubles (`n -> 2n`), the bitwise mask `(2n - 1)` has exactly **one new bit turned on** (the bit corresponding to `oldCap`).
+If you override `equals()` on a key class but forget `hashCode()`, two logically equal instances inherit `Object.hashCode()` (derived from object identity) and land in completely different buckets. Calling `map.get(new EmployeeId("E-42"))` returns `null` even though an equal `EmployeeId("E-42")` is sitting right there in the map.
 
-When an entry is rehashed, its new bucket index is either:
-- **Exact same index** as before (if the new bit in the hash is `0`).
-- **`oldIndex + oldCap`** (if the new bit in the hash is `1`).
+### Mistake Two: Using Mutable Objects as Keys
 
-```java
-// Java 8 tests the new bit with zero division:
-if ((e.hash & oldCap) == 0) {
-    // Keep in original bucket index (Low head)
-} else {
-    // Move to (index + oldCap) bucket (High head)
-}
-```
-
-The JVM partitions the colliding bucket into two linked lists (`loHead` and `hiHead`) and assigns them directly without recalculating hashes, doubling resizing speed!
-
----
-
-## The Sacred Contract: `equals()` and `hashCode()`
-
-If you store custom objects as `HashMap` keys, you **must strictly honor the `equals()` and `hashCode()` contract**:
-
-1. **Consistency:** If `a.equals(b) == true`, then `a.hashCode() == b.hashCode()` **MUST ALWAYS BE TRUE**.
-2. **Unequal Hashes:** If `a.equals(b) == false`, their hash codes do not have to be distinct (though distinct codes improve performance).
-3. **Key Immutability:** Fields used to compute `hashCode()` must never change after the object is inserted into the map!
+If you mutate a field that feeds into `hashCode()` after putting the key in a `HashMap`, the entry stays in its original bucket while every future lookup hashes to a different bucket:
 
 ```java
-// ❌ PRODUCTION DISASTER: Mutable HashMap Key
-public class AccountKey {
-    private String accountId;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 
-    public AccountKey(String accountId) { this.accountId = accountId; }
-    public void setAccountId(String accountId) { this.accountId = accountId; }
+public class MutableKeyBug {
+    static class AccountKey {
+        private String accountId;
 
-    @Override
-    public boolean equals(Object o) {
-        return o instanceof AccountKey other && Objects.equals(accountId, other.accountId);
+        AccountKey(String accountId) { this.accountId = accountId; }
+        void setAccountId(String accountId) { this.accountId = accountId; }
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof AccountKey other && Objects.equals(accountId, other.accountId);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(accountId);
+        }
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(accountId);
+    public static void main(String[] args) {
+        Map<AccountKey, String> accounts = new HashMap<>();
+        AccountKey key = new AccountKey("ACC-101");
+        accounts.put(key, "Active");
+
+        // Mutating the key changes its hashCode while the entry stays in the old bucket
+        key.setAccountId("ACC-999");
+
+        System.out.println(accounts.get(key)); // null! Entry is orphaned in memory
+        System.out.println(accounts.size());   // 1
     }
 }
-
-// What happens in production:
-Map<AccountKey, String> map = new HashMap<>();
-AccountKey key = new AccountKey("ACC-101");
-map.put(key, "VIP Customer");
-
-// Later, another method mutates the key:
-key.setAccountId("ACC-999"); // HashCode changes!
-
-// map.get(key) now looks in a COMPLETELY DIFFERENT BUCKET!
-System.out.println(map.get(key)); // PRINTS NULL! Entry is permanently lost in memory!
 ```
 
 > [!CAUTION]
-> Always use **immutable objects** (such as Java `record`, `String`, `UUID`, or classes with `final` fields) as `HashMap` keys.
+> Use immutable objects for map keys whenever possible: Java `record` types with immutable components, `String`, `UUID`, `Integer`, or classes with `final` fields and proper `equals()`/`hashCode()`.
 
 ---
 
-## `LinkedHashMap`: Deterministic Encounter Order & LRU Caching
+## `LinkedHashMap`: Insertion Order and LRU Caching
 
-`HashMap` provides zero guarantees regarding iteration order. Iterating across a `HashMap` yields keys in arbitrary bucket order that can shift abruptly whenever the map resizes.
+`HashMap` makes no guarantees about iteration order, and the order can change unexpectedly after a resize. When you want `O(1)` hash lookups **plus** deterministic iteration order, use `LinkedHashMap`.
 
-If your application requires deterministic ordering, use **`LinkedHashMap`**:
+`LinkedHashMap` extends `HashMap` and wraps each entry in `LinkedHashMap.Entry`, which adds two pointers (`before` and `after`) to form a doubly-linked list across all entries in the map:
 
 ```mermaid
 flowchart LR
-    subgraph HashStructure ["Hash Table Buckets"]
-        B1["Bucket 1: Entry A"]
-        B2["Bucket 2: Entry B"]
-        B3["Bucket 3: Entry C"]
+    subgraph Buckets["Hash Table (O(1) lookup by key)"]
+        b1["Bucket 1: Entry A"]
+        b2["Bucket 2: Entry B"]
+        b3["Bucket 3: Entry C"]
     end
 
-    subgraph OrderPointers ["Double-Linked Ordering Chain"]
-        EntryA["Entry A (Head)"] <-->|"before / after"| EntryB["Entry B"]
-        EntryB <-->|"before / after"| EntryC["Entry C (Tail)"]
+    subgraph OrderList["Doubly-Linked Order Chain"]
+        eA["Entry A (Head / Eldest)"] <-->|"before / after"| eB["Entry B"]
+        eB <-->|"before / after"| eC["Entry C (Tail / Most Recent)"]
     end
 ```
 
-`LinkedHashMap.Entry` extends `HashMap.Node` by adding two extra pointers:
-- `Entry<K,V> before`: points to the previous inserted entry.
-- `Entry<K,V> after`: points to the next inserted entry.
+By default, `LinkedHashMap` maintains **insertion order**: iterating visits keys in the order they were first inserted. Calling `put` on an existing key updates its value without moving its position in the list.
 
-### Building an In-Memory LRU (Least Recently Used) Cache
-By passing `accessOrder = true` to the `LinkedHashMap` constructor, the map repositions an entry to the tail of the linked list every time `.get()` or `.put()` is called.
+### Access-Order Mode and Building an LRU Cache
 
-Overriding `removeEldestEntry()` creates a complete, production-ready LRU cache in 15 lines of code:
+If you construct a `LinkedHashMap` with `accessOrder = true`, every `get()` or `put()` on an existing key moves that entry to the **tail** (most recently used position) of the doubly-linked list, leaving the least recently used entry at the **head**.
+
+Combine `accessOrder = true` with overriding `removeEldestEntry()`, and you get a working single-threaded LRU (Least Recently Used) cache in very little code:
 
 ```java
 import java.util.LinkedHashMap;
@@ -219,14 +213,14 @@ public class SimpleLruCache<K, V> extends LinkedHashMap<K, V> {
     private final int maxEntries;
 
     public SimpleLruCache(int maxEntries) {
-        // initialCapacity, loadFactor, accessOrder = true (enables LRU mode!)
-        super(maxEntries, 0.75f, true);
+        // initialCapacity, loadFactor, accessOrder = true
+        super(16, 0.75f, true);
         this.maxEntries = maxEntries;
     }
 
     @Override
     protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
-        // Automatically evicts the oldest untouched entry when size exceeds limit
+        // Called after insertion; returns true to evict the head (eldest) entry
         return size() > maxEntries;
     }
 
@@ -236,90 +230,123 @@ public class SimpleLruCache<K, V> extends LinkedHashMap<K, V> {
         cache.put("k2", "v2");
         cache.put("k3", "v3");
 
-        cache.get("k1"); // Access k1 -> moves k1 to head of freshness!
-        cache.put("k4", "v4"); // Cache full! Evicts least-recently used: k2!
+        cache.get("k1");       // Moves k1 to the tail (most recently used); k2 is now eldest
+        cache.put("k4", "v4"); // Exceeds capacity 3 -> evicts k2
 
-        System.out.println(cache.keySet()); // [k3, k1, k4] (k2 was evicted!)
+        System.out.println(cache.keySet()); // [k3, k1, k4]
     }
 }
 ```
 
+> [!WARNING]
+> `LinkedHashMap` is **not thread-safe**. In `accessOrder = true` mode, even a read via `get()` mutates the internal doubly-linked list pointers and increments `modCount`. Calling `get()` concurrently from multiple threads without synchronization can corrupt the list. For production multi-threaded caching, use a dedicated library such as Caffeine rather than a hand-rolled `LinkedHashMap`.
+
+In Java 21+, `LinkedHashMap` also implements `SequencedMap<K, V>`, giving you `firstEntry()`, `lastEntry()`, `putFirst()`, `putLast()`, and a zero-copy `reversed()` view.
+
 ---
 
-## `TreeMap`: Sorted Navigability
+## `TreeMap`: Sorted Keys and Range Queries
 
-`TreeMap` stores keys in a **Red-Black Self-Balancing Binary Tree**. It implements the rich **`NavigableMap<K, V>`** interface, providing range queries and nearest-neighbor lookups in `O(log n)` time:
+`TreeMap` stores entries in a **Red-Black self-balancing binary search tree**, keeping keys continuously sorted according to their natural `Comparable` order or a `Comparator` passed to the constructor. Every `get`, `put`, and `remove` takes `O(log n)` time.
+
+Because `TreeMap` implements `NavigableMap<K, V>`, it is especially useful whenever you need range slices or nearest-key lookups, such as latency buckets, rate tables, or time-series intervals:
 
 ```java
 import java.util.NavigableMap;
 import java.util.TreeMap;
 
-public class MetricHistogram {
+public class LatencyThresholds {
     public static void main(String[] args) {
-        NavigableMap<Integer, String> thresholds = new TreeMap<>();
-        thresholds.put(100, "LOW");
-        thresholds.put(500, "MEDIUM");
-        thresholds.put(1000, "HIGH");
-        thresholds.put(5000, "CRITICAL");
+        NavigableMap<Integer, String> bands = new TreeMap<>();
+        bands.put(100, "FAST");
+        bands.put(500, "NORMAL");
+        bands.put(1000, "SLOW");
+        bands.put(5000, "CRITICAL");
 
-        // Finding nearest keys in logarithmic time:
-        System.out.println("Floor of 450: " + thresholds.floorKey(450));     // 100
-        System.out.println("Ceiling of 450: " + thresholds.ceilingKey(450)); // 500
+        // Nearest-neighbor lookups in O(log n)
+        System.out.println("Floor of 450ms: " + bands.floorKey(450));     // 100
+        System.out.println("Ceiling of 450ms: " + bands.ceilingKey(450)); // 500
+        System.out.println("Floor entry: " + bands.floorEntry(450));      // 100=FAST
 
-        // Sub-map slice:
-        System.out.println("Range 500..1000: " + thresholds.subMap(500, true, 1000, true));
+        // Inclusive range view backed by the original TreeMap
+        NavigableMap<Integer, String> midRange = bands.subMap(500, true, 1000, true);
+        System.out.println("500..1000ms: " + midRange); // {500=NORMAL, 1000=SLOW}
     }
 }
 ```
 
+Just like `TreeSet`, `TreeMap` determines key equivalence using `compareTo()` or `Comparator.compare() == 0` rather than `equals()`, and throws `NullPointerException` if you insert a `null` key under natural ordering.
+
 ---
 
-## Modern Map Methods: Atomic Updates (Java 8+)
+## `ConcurrentHashMap` Overview and Compound Operations
 
-Stop writing verbose `if (map.containsKey(k))` blocks! Modern Java provides powerful functional compound operations directly on the `Map` interface:
+A regular `HashMap` is strictly single-threaded. If two threads write to a `HashMap` at the same time (especially during a resize), entries can be silently lost, values can become invisible to other threads, or internal links can be corrupted. Wrapping it with `Collections.synchronizedMap(map)` or using legacy `Hashtable` makes operations safe, but wraps the entire map in a single coarse lock so threads block one another even when accessing unrelated keys.
+
+`java.util.concurrent.ConcurrentHashMap` solves that contention problem. In Java 8+, its internal structure mirrors `HashMap` (an array of buckets that treeify at 8 entries), with key concurrency mechanisms:
+
+- **Lock-free reads**: `get()` reads `volatile` references (`table` slots, node `val` and `next` pointers) without acquiring any lock at all.
+- **CAS on empty buckets**: inserting into an empty bucket uses an atomic Compare-And-Swap (`CAS`) instruction without taking a lock.
+- **Per-bucket locking on collisions**: only when inserting into or updating a non-empty bucket does it acquire a `synchronized` lock on that single bucket's head node. Threads working on different buckets proceed in parallel.
+- **Cooperative resizing**: if a thread hits a bucket marked with a `ForwardingNode` during a resize, it helps migrate buckets to the new table rather than sitting idle.
+- **No `null` keys or values**: `ConcurrentHashMap` deliberately rejects `null` keys and `null` values with a `NullPointerException`. In a single-threaded `HashMap`, if `map.get(k)` returns `null`, you can call `map.containsKey(k)` to tell whether the key is absent or explicitly mapped to `null`. In a concurrent map, another thread could mutate the key between those two calls, making `null` ambiguous.
+
+### Compound Operations (`computeIfAbsent`, `merge`, `getOrDefault`)
+
+Java 8 added functional compound methods to the `Map` interface that replace noisy check-then-act boilerplate:
 
 ```java
-Map<String, Integer> wordFrequencies = new HashMap<>();
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-// 1. computeIfAbsent: Compute expensive value ONLY if missing
-wordFrequencies.computeIfAbsent("java", key -> queryExternalDatabase(key));
+public class MapCompoundOps {
+    public static void main(String[] args) {
+        Map<String, Integer> counts = new ConcurrentHashMap<>();
 
-// 2. merge: The cleanest way to accumulate counters
-List<String> words = List.of("apple", "banana", "apple", "cherry");
-for (String word : words) {
-    // If missing, sets to 1. If present, applies Integer::sum (existing + 1)
-    wordFrequencies.merge(word, 1, Integer::sum);
+        // 1. merge: inserts 1 if absent, or sums existing + 1 if present
+        for (String word : List.of("java", "jvm", "java", "map")) {
+            counts.merge(word, 1, Integer::sum);
+        }
+        System.out.println(counts); // {java=2, jvm=1, map=1}
+
+        // 2. computeIfAbsent: computes value only when key is missing
+        Map<String, List<String>> grouped = new ConcurrentHashMap<>();
+        grouped.computeIfAbsent("backend", k -> new java.util.concurrent.CopyOnWriteArrayList<>())
+               .add("OrderService");
+
+        // 3. getOrDefault: safe fallback without inserting anything
+        int missing = counts.getOrDefault("kotlin", 0);
+        System.out.println("Missing count: " + missing); // 0
+    }
 }
-System.out.println(wordFrequencies); // {banana=1, cherry=1, apple=2}
-
-// 3. getOrDefault: Provide safe fallbacks without inserting nulls
-int score = wordFrequencies.getOrDefault("missing_word", 0);
 ```
 
----
-
-## Summary & Mental Model Checkpoint
-
-1. **Bitwise Masking**: `HashMap` forces capacity to a power of two to replace slow integer division modulo (`%`) with fast bitwise AND: `(n - 1) & hash`.
-2. **Perturbation Function**: `hash ^ (hash >>> 16)` blends high 16 bits into low 16 bits to prevent lower-bit bucket clustering.
-3. **Treeification (Java 8)**: Buckets with 8 or more colliding nodes transform into Red-Black Trees (`TreeNode`), dropping worst-case lookup from `O(n)` to `O(log n)`.
-4. **Resizing Efficiency**: Java 8 checks `(e.hash & oldCap) == 0` to partition buckets into low and high chains without recomputing hashes.
-5. **The Immutable Key Rule**: Keys must have consistent `equals()` and `hashCode()`. Never mutate an object's state while it is stored as a map key.
-6. **`LinkedHashMap` LRU**: Pass `accessOrder = true` and override `removeEldestEntry()` to build a self-evicting cache in minutes.
-7. **`TreeMap` Power**: Implements `NavigableMap` for sorted range views (`subMap`, `floorKey`, `ceilingKey`) in `O(log n)` time.
+On `HashMap`, these methods simply keep code concise. On `ConcurrentHashMap`, `computeIfAbsent` and `merge` execute **atomically per key** under the bucket lock, which eliminates check-then-act race conditions (just avoid running slow blocking I/O or modifying other keys of the same map inside the mapping lambda, as that holds the bucket lock or can deadlock).
 
 ---
 
-## 🎯 Senior Engineer Interview Questions
+## Key Takeaways
 
-### Why does `HashMap` require its capacity to always be a power of two, and how does it compute bucket indices?
-> **Answer:** In a hash table of capacity `N`, mapping a 32-bit hash code to a valid bucket index requires modulo arithmetic: `index = hash % N`. On modern CPUs, integer division is a high-latency instruction taking 10 to 40 clock cycles. When `N` is guaranteed to be a power of two (`2^k`, such as 16, 32, 64), the mathematical property `hash % 2^k == hash & (2^k - 1)` holds true. Calculating `(n - 1) & hash` uses the bitwise AND instruction, which executes in a single CPU clock cycle. Furthermore, having `(n - 1)` produce a continuous mask of binary 1s guarantees that every bit position in the lower range contributes to bucket distribution without creating blind spots.
+- `HashMap` keeps its capacity as a power of two so it can map perturbed hashes (`h ^ (h >>> 16)`) to buckets with `(n - 1) & hash`, resizing at a `0.75` load factor and splitting buckets in place using `(e.hash & oldCap) == 0`.
+- When a `HashMap` bucket reaches 8 colliding nodes and table capacity is at least 64, Java 8+ treeifies that bucket into a Red-Black tree (`O(log n)` worst-case lookup) and untreeifies back to a list at 6 nodes.
+- Equal keys must have equal hash codes, and key fields used in `hashCode()` must stay immutable while the key lives in a hash-based map.
+- `LinkedHashMap` preserves insertion order by default and switches to LRU access order when constructed with `accessOrder = true` (not thread-safe).
+- `TreeMap` keeps keys sorted in a Red-Black tree (`O(log n)`) and exposes `NavigableMap` range and nearest-neighbor operations.
+- `ConcurrentHashMap` provides lock-free reads, CAS/per-bucket locking for writes, atomic compound updates, and forbids `null` keys and values.
 
-### What is the hash perturbation function in `HashMap` (`(h = key.hashCode()) ^ (h >>> 16)`), and what problem does it solve?
-> **Answer:** When a `HashMap` table is small (e.g. initial capacity 16), the bitwise index calculation `(n - 1) & hash` only evaluates the lowest 4 bits of the hash code (since 15 is `0000 1111` in binary). If multiple distinct keys produce hash codes that differ in their higher 16 or 24 bits but share identical lower 4 bits, they all map to the exact same bucket, causing catastrophic clustering and collisions. The perturbation function shifts the 32-bit integer right by 16 bits (`h >>> 16`) and XORs it with the original hash (`h ^ (h >>> 16)`). This forces the randomness from the higher 16 bits to fold into the lower 16 bits, ensuring that high-order bits influence bucket index calculations even for small table capacities.
+---
 
-### Explain the mechanics of Java 8 HashMap Treeification and Untreeification. Why is the threshold set to 8, and why does it untreeify at 6?
-> **Answer:** Under Java 7, colliding keys in a bucket formed a singly-linked list, resulting in `O(n)` worst-case lookup performance. Attackers exploited this via Hash-DOS attacks by crafting thousands of strings with identical hash codes to overwhelm web application CPUs. Java 8 introduced Treeification: when a bucket reaches `TREEIFY_THRESHOLD = 8` entries AND the table capacity is at least `MIN_TREEIFY_CAPACITY = 64` (resizing is preferred if capacity is smaller), the bucket is converted into a Red-Black self-balancing binary search tree (`TreeNode`), dropping search complexity to `O(log n)`. The threshold of 8 was chosen based on Poisson distribution probabilities: under well-distributed hash codes, the probability of 8 collisions occurring in a single bucket is less than one in ten million (approximately 0.00000006). The untreeification threshold is set to 6 (rather than 7 or 8) to provide a hysteresis buffer, preventing a bucket from constantly toggling between list and tree when elements are repeatedly inserted and deleted near the boundary.
+## Interview Questions
 
-### How does `LinkedHashMap` implement an LRU (Least Recently Used) cache, and why does reading an entry cause structural modification in access-order mode?
-> **Answer:** `LinkedHashMap` extends `HashMap` by maintaining a doubly-linked list running through all its entries (`before` and `after` pointers on `LinkedHashMap.Entry`). When constructed with `accessOrder = true`, the map overrides the internal `afterNodeAccess(Node e)` callback. Whenever an existing key is accessed via `.get()` or updated via `.put()`, the JVM unlinks the node from its current position in the doubly-linked list and re-inserts it at the end (tail) of the list, keeping the most recently accessed entries at the tail and the least recently used at the head. In access-order mode, calling `.get()` modifies the pointers of the doubly-linked list, which represents a structural modification for iteration purposes and increments `modCount`. Overriding `removeEldestEntry(Map.Entry eldest)` instructs `afterNodeInsertion()` to evict the head node when `size() > maxCapacity`, achieving an O(1) LRU eviction policy.
+### Why does `HashMap` require a power-of-two capacity, and what is the role of `(h = key.hashCode()) ^ (h >>> 16)`?
+Mapping a hash code into a table of size `n` conceptually requires `hash % n`, which uses integer division. When `n` is a power of two, `(n - 1)` is a mask of consecutive `1` bits in the lower positions, so `(n - 1) & hash` gives the exact same remainder in a single bitwise instruction. The catch is that a small table (like 16 buckets) only inspects the lowest 4 bits of the hash. Shifting the upper 16 bits right and XORing them into the lower 16 bits ensures that differences in the high bits still affect bucket selection, cutting down collisions on small tables.
+
+### How do `TREEIFY_THRESHOLD` (8), `MIN_TREEIFY_CAPACITY` (64), and `UNTREEIFY_THRESHOLD` (6) work together in Java 8+ `HashMap`?
+When a bucket accumulates 8 colliding nodes, `HashMap` checks the table's total capacity first. If capacity is still below 64, it doubles the table size instead of building a tree because resizing usually disperses those collisions more cheaply. Once capacity is at least 64, a bucket with 8 or more nodes is converted from a singly-linked list into a Red-Black tree (`TreeNode`), reducing worst-case bucket search from `O(n)` to `O(log n)` to defend against poor hash functions or hash-flooding attacks. It waits until the bucket drops to 6 nodes before converting back to a list so repeated insertions and deletions near 8 do not thrash between representations.
+
+### Why is it dangerous to use a mutable object as a `HashMap` key?
+`HashMap` computes the key's bucket index at insertion time and stores the entry inside that bucket. If a field participating in `hashCode()` is mutated afterward, future `get()`, `containsKey()`, or `remove()` calls hash the modified key to a different bucket. The lookup misses even though the key is still inside the map, and you cannot remove it by key anymore, effectively leaking the entry until the map itself is cleared or discarded.
+
+### Why does `ConcurrentHashMap` disallow `null` keys and `null` values when `HashMap` allows them?
+In a single-threaded `HashMap`, if `map.get(key)` returns `null`, you can call `map.containsKey(key)` to find out whether the key was absent or explicitly mapped to `null`. In a concurrent environment, another thread can insert or remove the key between those two calls, so `containsKey()` cannot reliably disambiguate a `null` return from `get()`. By forbidding `null` keys and `null` values altogether, `ConcurrentHashMap` guarantees that a `null` return from `get()` unambiguously means the key was not present at the moment of the read.

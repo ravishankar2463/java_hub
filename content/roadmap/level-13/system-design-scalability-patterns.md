@@ -1,288 +1,446 @@
 ---
 title: "System Design: Scalability Patterns"
-description: "Master hyperscale system design: CAP and PACELC theorems, L4 vs L7 load balancing, database sharding and replication lag, Redis Cluster 16,384 hash slots, and CDN edge caching."
-category: "level-10"
+description: "Practical distributed systems patterns for Java backends: CAP and PACELC trade-offs, L4 vs L7 load balancing, database replication and sharding, consistent hashing, Redis Cluster, and CDN caching."
+category: "level-13"
 date: "2026-10-29T10:00:00Z"
 ---
 
-Designing a software system that comfortably handles 1,000 concurrent users is relatively straightforward. Designing a global architecture that scales seamlessly from 100,000 to 50 million active users across three continents without collapsing under database locks or network congestion requires a mastery of foundational distributed systems patterns.
+A single Spring Boot service backed by one PostgreSQL instance can handle more traffic than many teams assume, especially with good indexing and connection pooling. Eventually, though, one machine hits a ceiling on CPU, memory, network bandwidth, or storage IOPS. Upgrading to a larger instance (vertical scaling) buys time, but hardware stops scaling linearly well before costs do, and a single node still leaves you with a single failure domain.
 
-Scalability is not about throwing larger AWS instances at the problem (Vertical Scaling / Scaling Up). Vertical scaling has a hard hardware ceiling and an exponential cost curve. True enterprise scale requires **Horizontal Scaling (Scaling Out)**—designing stateless application tiers and distributed data partitions that scale linearly by adding commodity nodes.
+Horizontal scaling splits traffic and state across multiple machines. Stateless application servers are the easy part: put them behind a load balancer and add replicas. The hard part is everything that holds state, such as databases, caches, and sessions, along with the network sitting between them. The patterns below are the building blocks engineers reach for when a single node is no longer enough.
 
-In this guide, we will step into the role of a Principal System Architect. We will dissect the **CAP and PACELC theorems**, contrast **L4 versus L7 load balancing**, conquer **database sharding and replication lag**, navigate **Redis Cluster hash slot topologies**, and leverage **Content Delivery Networks (CDNs)** at the edge.
+## CAP and PACELC Trade-Offs
 
----
+Eric Brewer's **CAP theorem** describes what a distributed data store can guarantee when a network partition happens. Formally, during a partition, a system cannot provide both linearizable **Consistency** (every read sees the most recent completed write or fails) and **Availability** (every non-failing node returns a non-error response).
 
-## The True Trade-Offs: CAP vs PACELC Theorem
+Two details often get muddled in casual discussions:
 
-In 2000, Eric Brewer proposed the **CAP Theorem**: a distributed data store can simultaneously guarantee at most two of the following three properties:
-
-```mermaid
-flowchart TD
-    subgraph CAP ["The CAP Theorem Triangle"]
-        C["Consistency (Linearizability)
-Every read receives the most recent write or an error."]
-        A["Availability
-Every non-failing node returns a non-error response."]
-        P["Partition Tolerance
-The system continues operating despite dropped network packets."]
-    end
-
-    C --- A
-    A --- P
-    P --- C
-
-    Note["In real physical networks, Partition Tolerance (P) is MANDATORY!
-Therefore, you must choose between CP and AP during a network partition."]
-```
-
-### Why "CA" Does Not Exist in Distributed Systems
-Network partitions (fiber cuts, hardware switch failures, GC pauses) are an inescapable law of physics. When a network partition occurs between Datacenter East and Datacenter West:
-- If you allow writes on East, West will be out of date. If West accepts reads, it returns stale data (**Violates Consistency -> AP**).
-- If you refuse writes or block reads until East and West can synchronize, you reject incoming client requests (**Violates Availability -> CP**).
-You cannot choose "CA" unless your entire system runs on a single physical machine with zero network connections.
-
----
-
-### The PACELC Theorem (The Complete Picture)
-In 2012, computer scientist Daniel Abadi noted that CAP only describes what happens **during rare network partitions**. What trade-offs occur during the 99.99% of time when the network is behaving normally?
-
-```
- If there is a Partition (P):
-    How do you trade off Availability (A) vs Consistency (C)?
- Else (E):
-    How do you trade off Latency (L) vs Consistency (C)?
-```
+1. **Consistency in CAP is not the "C" in ACID.** ACID consistency is about application invariants like foreign keys and check constraints. CAP consistency is linearizability, meaning the distributed cluster behaves as if there were a single up-to-date copy of the data.
+2. **"CA" is not a real choice for networked systems.** Switches fail, routing tables flap, fibers get cut, and long garbage collection pauses look identical to a network drop from the outside. Because partitions will happen, the real decision during a partition is **CP** (refuse some requests rather than return stale or conflicting data) versus **AP** (keep serving requests and reconcile divergence later).
 
 ```mermaid
 flowchart TD
-    PACELC{"PACELC Classification"}
+    pace{"System Behavior (PACELC)"}
+    pace -->|"Network Partition (P)"| partChoice{"Availability or Consistency?"}
+    pace -->|"Normal Operation (E)"| normChoice{"Latency or Consistency?"}
 
-    PACELC -->|"If Partition (P)"| Choice1{"Availability (A) or Consistency (C)?"}
-    PACELC -->|"Else Normal (E)"| Choice2{"Latency (L) or Consistency (C)?"}
+    partChoice -->|"Favor Availability (PA)"| pa["Accept reads and writes on both sides; reconcile later"]
+    partChoice -->|"Favor Consistency (PC)"| pc["Reject writes or reads on minority side"]
 
-    Choice1 -->|"A"| PA["PA: High Availability"]
-    Choice1 -->|"C"| PC["PC: Strict Consistency"]
-
-    Choice2 -->|"L"| EL["EL: Low Latency (Async replication)"]
-    Choice2 -->|"C"| EC["EC: High Consistency (Sync replication)"]
+    normChoice -->|"Favor Latency (EL)"| el["Return after local write; replicate asynchronously"]
+    normChoice -->|"Favor Consistency (EC)"| ec["Wait for quorum or replica sync before acknowledging"]
 ```
 
-### Real-World PACELC Systems
-- **MongoDB**: **PC / EC**. In a partition, it rejects writes on minority partitions to maintain consistency (PC). Under normal conditions, it requires primary acknowledgments for strong consistency (EC).
-- **Apache Cassandra / Amazon DynamoDB**: **PA / EL**. In a partition, nodes accept writes locally (PA). Under normal conditions, replicas synchronize asynchronously to deliver single-digit millisecond latency (EL).
-- **Google Spanner**: **PC / EC**. Uses atomic GPS/atomic clock synchronization (TrueTime API) to provide external consistency worldwide at the cost of slight latency overhead.
+### Why PACELC Is More Useful Day to Day
 
----
+Daniel Abadi's **PACELC theorem** extends CAP to cover the 99.9% of the time when the network is healthy:
+
+- **If there is a Partition (P):** choose between **Availability (A)** and **Consistency (C)**.
+- **Else (E), during normal operation:** choose between **Latency (L)** and **Consistency (C)**.
+
+Even with a healthy network, keeping replicas strictly synchronized requires extra network round trips before acknowledging a write. Returning immediately and replicating asynchronously keeps latency low, but readers on another replica can briefly see stale values.
+
+In practice, many modern databases let you tune this per query or per collection, though each system has a natural default:
+
+| System | Typical Classification | Practical Behavior |
+|---|---|---|
+| **PostgreSQL (sync standby) / Google Spanner** | PC / EC | Prioritizes consistent reads and writes; waits for replication quorum or synchronized commits under normal operation. |
+| **MongoDB (default majority write + primary read)** | PC / EC | Minority partition cannot elect a primary to accept writes; tunable with weaker read/write concerns if you accept staleness. |
+| **Apache Cassandra / DynamoDB (default reads)** | PA / EL | Optimized for low latency and high availability with asynchronous replication; supports stronger consistency via quorum (`QUORUM` reads/writes or strongly consistent reads in DynamoDB) at higher latency. |
+
+Notice the key takeaway for application design: consistency is rarely an all-or-nothing choice across an entire company. Payment ledger entries belong on a strongly consistent path (PC/EC), while product view counts or recently viewed items work fine with eventual consistency (PA/EL).
 
 ## Load Balancing: Layer 4 vs Layer 7
 
-Load balancers distribute incoming traffic across pools of backend application servers. They operate at two distinct layers of the OSI model:
+A load balancer sits in front of a pool of backend instances, routes incoming traffic, and stops sending requests to unhealthy nodes. The choice between **Layer 4** and **Layer 7** comes down to how much of the network packet the balancer inspects.
 
 ```mermaid
 flowchart TD
-    Client["Client TCP Connection"] --> LBType{"Choose Load Balancer Layer"}
+    client["Client Request"] --> lb{"Load Balancer Type"}
 
-    subgraph Layer4 ["Layer 4 Load Balancer (AWS NLB / Linux IPVS)"]
-        L4["Inspects: IP Address & TCP/UDP Port
-- Zero packet payload decryption
-- No SSL termination
-- Ultra-high throughput: 10M+ packets/sec
-- Cannot route by URL path or HTTP headers"]
-    end
+    lb -->|"Transport Layer (TCP/UDP)"| l4["Layer 4 (AWS NLB, HAProxy TCP, IPVS)"]
+    lb -->|"Application Layer (HTTP/gRPC)"| l7["Layer 7 (Nginx, Envoy, AWS ALB)"]
 
-    subgraph Layer7 ["Layer 7 Load Balancer (NGINX / Envoy / AWS ALB)"]
-        L7["Inspects: Full HTTP/gRPC Application Layer
-- Decrypts TLS / Terminates SSL
-- Routes by Path (/api/v1/orders vs /api/v1/catalog)
-- Inspects Cookies & Injects Security Headers
-- Higher CPU overhead"]
-    end
-
-    LBType --> Layer4
-    LBType --> Layer7
+    l4 --> l4Notes["Routes by IP and port only; passes encrypted TLS through; very high packet rate"]
+    l7 --> l7Notes["Terminates TLS; inspects paths, headers, and cookies; supports canary and per-RPC routing"]
 ```
 
-| Dimension | Layer 4 (Transport / TCP) | Layer 7 (Application / HTTP) |
+| Dimension | Layer 4 (Transport) | Layer 7 (Application) |
 |---|---|---|
-| **OSI Layer** | Layer 4 (TCP, UDP) | Layer 7 (HTTP, HTTPS, gRPC, WebSockets) |
-| **Payload Inspection** | None. Looks only at IP headers and port numbers. | Deep packet inspection (URI paths, headers, JSON cookies). |
-| **TLS Termination** | Passes raw encrypted TCP bytes directly to backend. | Terminates TLS, inspects plaintext, re-encrypts if needed. |
-| **Throughput / Latency** | Extreme throughput, microsecond latency. | Lower throughput, millisecond latency (CPU bound by parsing). |
-| **Routing Flexibility** | Simple round-robin, hash of client IP/port. | Intelligent routing (A/B testing, Canary, URL path rewrites). |
+| **Protocols** | TCP, UDP | HTTP/1.1, HTTP/2, HTTP/3, gRPC, WebSockets |
+| **Visibility** | Source/destination IP and port | Full URI path, HTTP headers, cookies, gRPC service/method |
+| **TLS Handling** | Usually pass-through (backend terminates TLS) | Terminates TLS at the balancer (optionally re-encrypts to backends) |
+| **Connection Multiplexing** | Pins one TCP connection to one backend | Can load-balance individual HTTP/2 or gRPC streams across backends |
+| **Overhead** | Minimal CPU and memory per connection | Higher CPU due to TLS handshakes and HTTP parsing |
 
----
+That fourth row is easy to overlook with gRPC or HTTP/2. Because HTTP/2 multiplexes thousands of requests over a single long-lived TCP connection, a Layer 4 load balancer sends all of those requests to whichever backend pod won the initial TCP handshake. Adding new pods does not rebalance existing clients until connections reset. A Layer 7 proxy like Envoy or Nginx understands individual HTTP/2 streams and spreads them evenly across the backend pool.
 
-## Database Scalability: Read Replication vs Horizontal Sharding
+### Practical Layer 7 Upstream Configuration
 
-When a relational database reaches its computational limit, you scale it through two primary architectural patterns:
+Below is a realistic Nginx configuration fronting a pool of Spring Boot order services. It uses `least_conn` routing (generally better than plain round-robin when request durations vary), keeps persistent connections open to the backends to avoid TCP handshake churn, and marks slow or failing nodes down automatically:
+
+```nginx
+upstream order_service_pool {
+    least_conn;
+
+    server 10.0.1.11:8080 max_fails=3 fail_timeout=15s;
+    server 10.0.1.12:8080 max_fails=3 fail_timeout=15s;
+    server 10.0.1.13:8080 max_fails=3 fail_timeout=15s;
+
+    keepalive 64;
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name api.example.com;
+
+    ssl_certificate     /etc/nginx/certs/api.crt;
+    ssl_certificate_key /etc/nginx/certs/api.key;
+
+    location /api/v1/orders {
+        proxy_pass http://order_service_pool;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_connect_timeout 2s;
+        proxy_read_timeout 10s;
+
+        # Retry idempotent failures on another healthy upstream
+        proxy_next_upstream error timeout http_502 http_503;
+        proxy_next_upstream_tries 2;
+    }
+}
+```
+
+In production Kubernetes or cloud environments, you often combine both layers: an L4 load balancer at the edge for static IPs and raw TCP absorption, forwarding into a fleet of L7 proxies (Nginx Ingress, Envoy, or AWS ALB) that handle TLS, path routing, rate limits, and health probes against `/actuator/health/readiness`.
+
+## Database Replication and Sharding
+
+When a relational database becomes the bottleneck, first check whether the problem is **read volume** or **write volume / dataset size**. Those two problems call for very different architectures.
 
 ```mermaid
 flowchart TD
-    subgraph ReadReplication ["Pattern 1: Read-Replication (Scale Reads)"]
-        AppW["App (Write Path)"] --> Master[("Primary / Master DB
-(Handles all INSERT/UPDATE/DELETE)")]
-        Master -.->|Async Binary Log Replication| Replica1[("Read Replica 1")]
-        Master -.->|Async Binary Log Replication| Replica2[("Read Replica 2")]
-        AppR["App (Read Path)"] --> Replica1
-        AppR --> Replica2
+    subgraph repl["Read Replication (Scale Reads)"]
+        appWrite["Write Path"] --> primary[("Primary DB")]
+        primary -.->|"Async WAL / Binlog"| rep1[("Read Replica 1")]
+        primary -.->|"Async WAL / Binlog"| rep2[("Read Replica 2")]
+        appRead["Read Path"] --> rep1
+        appRead --> rep2
     end
 
-    subgraph Sharding ["Pattern 2: Horizontal Sharding (Scale Writes)"]
-        Router["Application Shard Router
-Hash(tenant_id) % 3"]
-        Router -->|Slot 0| Shard0[("Shard 0 DB (Tenants A-H)")]
-        Router -->|Slot 1| Shard1[("Shard 1 DB (Tenants I-P)")]
-        Router -->|Slot 2| Shard2[("Shard 2 DB (Tenants Q-Z)")]
+    subgraph shard["Horizontal Sharding (Scale Writes and Storage)"]
+        router["Shard Router"] --> s0[("Shard 0")]
+        router --> s1[("Shard 1")]
+        router --> s2[("Shard 2")]
     end
 ```
 
-### The Read-Your-Own-Writes Replication Lag Nightmare
-In Read-Replication, the primary database streams changes asynchronously to read replicas. Under heavy load, replicas can lag behind the primary by 200ms to 5 seconds (**Replication Lag**).
+### Read Replicas and Replication Lag
 
-If a user updates their shipping address (written to the Primary) and the browser immediately refreshes the page (routed to a lagging Read Replica), the user sees their old address!
+Most applications are heavily read-biased (often 80% to 95% reads). Adding read replicas offloads `SELECT` traffic from the primary. The primary writes changes to its write-ahead log (WAL in PostgreSQL, binlog in MySQL) and streams them to replicas.
 
-#### Production Defenses Against Replication Lag
-1. **Sticky Session Routing**: Route a user's read requests to the Primary database for 5 seconds immediately following any write operation.
-2. **Replication Lag Tracking**: If a replica's replication lag exceeds 500ms, automatically evict it from the active read pool.
-3. **Optimistic UI Caching**: Update the frontend DOM immediately without refetching from the backend.
+Because replication is usually asynchronous to avoid slowing down primary commits, replicas lag behind the primary. Under normal load that lag might be 10 to 50 milliseconds. During a bulk migration or traffic burst, it can stretch to several seconds.
 
----
+This causes the classic **read-your-own-writes** bug: a user updates their shipping address on the primary, gets redirected to the checkout page, and a read replica serves the old address. Common ways to handle this in Java backends include:
 
-### Horizontal Sharding: Splitting the Monolith Table
-When write volume exceeds what a single high-end database server can process (e.g., 20,000 writes/sec), you must **shard** the data across multiple physical database instances.
+- **Route recent writers to the primary:** Record a short-lived flag (in a session, cookie, or Redis with a 5-second TTL) when a user writes, and route that user's reads to the primary until the window passes.
+- **Route by transaction intent:** Use Spring's `@Transactional(readOnly = true)` to send read-only queries to replicas, while keeping critical post-write reads on the primary.
+- **Lag-aware health checks:** Pull a replica out of the read pool if its replication delay exceeds a threshold (for example, 500 ms).
 
-#### Selecting the Shard Key
-The choice of **Shard Key** is the most critical decision in database architecture:
-- **Tenant ID (Multi-tenant SaaS)**: All data for Tenant 42 lands on Shard 2. Clean, fast, zero cross-shard joins for normal operations.
-- **Customer ID**: All orders for Customer A land on Shard 1.
-- *The Danger*: **The Celebrity / Hot Shard Problem**. If Tenant 42 is Apple or Nike, Shard 2 will melt down while Shards 1, 3, and 4 sit 98% idle. You must use salt hashing or dedicated single-tenant sharding for hyperscale accounts.
+Here is how a Spring `AbstractRoutingDataSource` combines `@Transactional(readOnly = true)` with a thread-local override that forces primary reads after a user has just written:
 
----
+```java
+import org.springframework.jdbc.datasource.lookup.AbstractRoutingDataSource;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-## Distributed Caching: Redis Cluster and 16,384 Hash Slots
+public class ReadWriteRoutingDataSource extends AbstractRoutingDataSource {
 
-A single Redis instance can process 100,000 operations per second in-memory. But what happens when your dataset exceeds 128 GB of RAM or your throughput demands reach 1,000,000 ops/second? You deploy a **Redis Cluster**.
+    public enum DataSourceType { PRIMARY, REPLICA }
+
+    private static final ThreadLocal<Boolean> FORCE_PRIMARY =
+            ThreadLocal.withInitial(() -> false);
+
+    public static void forcePrimaryForCurrentRequest() {
+        FORCE_PRIMARY.set(true);
+    }
+
+    public static void clear() {
+        FORCE_PRIMARY.remove();
+    }
+
+    @Override
+    protected Object determineCurrentLookupKey() {
+        if (Boolean.TRUE.equals(FORCE_PRIMARY.get())) {
+            return DataSourceType.PRIMARY;
+        }
+        boolean isReadOnly = TransactionSynchronizationManager.isCurrentTransactionReadOnly();
+        return isReadOnly ? DataSourceType.REPLICA : DataSourceType.PRIMARY;
+    }
+}
+```
+
+Make sure to call `ReadWriteRoutingDataSource.clear()` inside a `finally` block in a servlet filter or interceptor so pooled worker threads never leak `FORCE_PRIMARY` onto unrelated requests. Also wrap this routing data source in Spring's `LazyConnectionDataSourceProxy`; otherwise Spring grabs a connection from the default target *before* the `@Transactional(readOnly = true)` flag is visible to `determineCurrentLookupKey()`.
+
+### Horizontal Sharding
+
+Read replicas do not increase write throughput, because every replica still has to replay every write from the primary. When write volume or table size outgrows a single primary, you split rows across independent database instances (**shards**).
+
+Choosing the **shard key** is a decision you live with for years:
+
+- **Good fit:** `tenant_id` in a B2B SaaS product or `user_id` in a consumer app, where almost every query is scoped to one tenant or user. Joins and transactions stay inside a single shard.
+- **Cross-shard queries:** Any query that omits the shard key (such as `SELECT * FROM orders WHERE status = 'PENDING'`) has to fan out to every shard, collect results in memory, and merge/sort them (**scatter-gather**). At scale, teams avoid running scatter-gather on live OLTP shards by streaming changes via CDC (Debezium + Kafka) into a separate search or analytics store like Elasticsearch or ClickHouse.
+- **Hot shards (celebrity problem):** If you shard a ticketing platform by `event_id` and a huge stadium tour goes on sale, 100% of the burst hits the one shard holding that `event_id` while every other shard sits nearly idle. Mitigations include dedicated shards for oversized tenants, or adding a bounded salt suffix (`event_id + "_" + (hash % 16)`) to spread writes across 16 partitions at the cost of reading across those 16 partitions.
+
+### Consistent Hashing with Virtual Nodes
+
+Naive hash partitioning uses `shard = Math.abs(hash(key)) % N`. That breaks down the moment you add or remove a node: changing `N` from 10 to 11 remaps roughly 91% of all keys, causing massive data migration in a database or a near-total cache wipe in a caching layer.
+
+**Consistent hashing** arranges nodes and keys on a circular hash ring (typically the 32-bit integer space). Each key maps to the first node found moving clockwise around the ring. When a node joins or leaves, only about `1/N` of the keys move to an adjacent node. Adding **virtual nodes** (placing each physical server at 100 to 200 positions around the ring) smooths out uneven distribution when the node count is small.
+
+```java
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.SortedMap;
+import java.util.TreeMap;
+
+public class ConsistentHashRing {
+
+    private final int virtualNodesPerServer;
+    private final TreeMap<Integer, String> ring = new TreeMap<>();
+
+    public ConsistentHashRing(int virtualNodesPerServer) {
+        this.virtualNodesPerServer = virtualNodesPerServer;
+    }
+
+    public void addNode(String nodeId) {
+        for (int i = 0; i < virtualNodesPerServer; i++) {
+            int position = hash(nodeId + "#vnode-" + i);
+            ring.put(position, nodeId);
+        }
+    }
+
+    public void removeNode(String nodeId) {
+        for (int i = 0; i < virtualNodesPerServer; i++) {
+            int position = hash(nodeId + "#vnode-" + i);
+            ring.remove(position);
+        }
+    }
+
+    public String getNode(String key) {
+        if (ring.isEmpty()) {
+            throw new IllegalStateException("Hash ring has no nodes");
+        }
+        int keyHash = hash(key);
+        SortedMap<Integer, String> tail = ring.tailMap(keyHash);
+        int targetPosition = tail.isEmpty() ? ring.firstKey() : tail.firstKey();
+        return ring.get(targetPosition);
+    }
+
+    private int hash(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            return ((digest[0] & 0xFF) << 24)
+                 | ((digest[1] & 0xFF) << 16)
+                 | ((digest[2] & 0xFF) << 8)
+                 | (digest[3] & 0xFF);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
+    }
+}
+```
+
+In production code where nodes are added and removed dynamically while request threads call `getNode`, guard mutations or swap an immutable snapshot reference (`AtomicReference<NavigableMap<Integer, String>>`) so reads remain lock-free.
+
+## Caching Topologies and Redis Cluster
+
+Putting a fast in-memory cache in front of a database cuts read latency from tens of milliseconds down to sub-millisecond lookups and shields the database from repetitive queries. How reads and writes coordinate between the cache and the database defines the caching topology:
+
+- **Cache-Aside (Lazy Loading):** The application checks the cache first. On a miss, it loads from the database, stores the result in the cache with a TTL, and returns it. On a write, the application updates the database and deletes (invalidates) the cache entry. Cache-aside is resilient to cache outages (traffic degrades to the database rather than failing outright) and only caches data that is actually requested.
+- **Write-Through:** The application writes to the cache layer, which synchronously writes to the database before returning. Cached values stay fresh, at the expense of higher write latency and caching rows that may never be read again.
+- **Write-Behind (Write-Back):** The cache acknowledges writes immediately and flushes batched updates asynchronously to the database. Throughput is very high, but a cache node crash before flushing loses acknowledged writes. This is usually reserved for non-critical counters or telemetry unless paired with a durable log.
+
+### Cache-Aside with Invalidation and Stampede Protection
+
+A subtle failure mode in Cache-Aside is the **cache stampede** (thundering herd): a hot key expires, and hundreds of concurrent threads miss at the same millisecond and run the same expensive SQL query simultaneously.
+
+```java
+import java.time.Duration;
+import java.util.Optional;
+import java.util.concurrent.ThreadLocalRandom;
+
+public class ProductCatalogService {
+
+    private final ProductRepository repository;
+    private final RedisCacheClient cache;
+
+    public ProductCatalogService(ProductRepository repository, RedisCacheClient cache) {
+        this.repository = repository;
+        this.cache = cache;
+    }
+
+    public Product getProduct(String productId) {
+        String key = "product:" + productId;
+        Optional<Product> cached = cache.get(key, Product.class);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        // Single-flight or short distributed lock prevents thundering herd on hot keys
+        Product product = repository.findById(productId)
+                .orElseThrow(() -> new ProductNotFoundException(productId));
+
+        // Add random jitter (5 to 6 minutes) so bulk-loaded keys do not expire together
+        long ttlSeconds = 300 + ThreadLocalRandom.current().nextLong(60);
+        cache.set(key, product, Duration.ofSeconds(ttlSeconds));
+        return product;
+    }
+
+    public void updatePrice(String productId, long priceCents) {
+        repository.updatePrice(productId, priceCents);
+        // Delete after DB commit rather than updating cache directly to reduce race windows
+        cache.delete("product:" + productId);
+    }
+}
+```
+
+In Spring Boot, `@Cacheable(cacheNames = "products", sync = true)` synchronizes concurrent misses inside a single JVM instance so only one thread hits the database per node. Across a large fleet of pods, combine jittered TTLs with probabilistic early refresh or a short-lived per-key Redis lock if a single miss query is expensive.
+
+> [!WARNING]
+> Always invalidate the cache **after** the database transaction commits (for example via Spring's `TransactionSynchronization.afterCommit()`). If you delete the cache key before the database commit completes, a concurrent reader can miss the cache, read the old uncommitted value from the database, and repopulate the cache with stale data until the TTL expires.
+
+### How Redis Cluster Works: 16,384 Hash Slots
+
+When your working set exceeds a single Redis node's RAM or throughput, **Redis Cluster** partitions keys across multiple primary nodes, each backed by one or more replicas for failover.
+
+Rather than consistent hashing directly onto node IDs, Redis Cluster divides the keyspace into exactly **16,384 hash slots** (0 through 16,383). Every primary owns a subset of those slots, and clients compute the target slot locally:
+
+`slot = CRC16(key) mod 16384`
 
 ```mermaid
 flowchart TD
-    subgraph RedisCluster ["Redis Cluster Topology (16,384 Hash Slots)"]
-        Node1["Master Node A
-(Slots 0 - 5,460)"] --- ReplicaA["Replica A1"]
-        Node2["Master Node B
-(Slots 5,461 - 10,922)"] --- ReplicaB["Replica B1"]
-        Node3["Master Node C
-(Slots 10,923 - 16,383)"] --- ReplicaC["Replica C1"]
-    end
+    client["Java Client (Lettuce / Jedis)"] --> hash["CRC16(key) mod 16384 = Slot 7812"]
+    hash -->|"Direct hop via cached slot map"| nodeB
 
-    Client["Redis Client (Jedis / Lettuce)"] --> Calculate["CRC16('user:101') % 16384 = Slot 7,812"]
-    Calculate -->|Direct Route| Node2
+    subgraph cluster["Redis Cluster (16,384 Hash Slots)"]
+        nodeA["Primary A (Slots 0 - 5460)"] --- repA["Replica A1"]
+        nodeB["Primary B (Slots 5461 - 10922)"] --- repB["Replica B1"]
+        nodeC["Primary C (Slots 10923 - 16383)"] --- repC["Replica C1"]
+    end
 ```
 
-### How Redis Cluster Works
-1. Redis Cluster divides the entire keyspace into **16,384 logical Hash Slots**.
-2. Master nodes divide the hash slots among themselves (e.g., Node A holds slots 0 to 5,460).
-3. To locate the node for a key, the client calculates:
-   `slot = CRC16(key) % 16384`
-4. Smart client drivers (like Lettuce in Spring Boot) maintain an in-memory routing table mapping slots to node IP addresses, routing commands directly to the correct master node in a single network hop!
+Why 16,384 slots instead of 65,536? Redis nodes exchange cluster topology over a gossip protocol every second. A bitmap of 16,384 slots fits in just 2 KB per heartbeat message, keeping gossip bandwidth small, while still giving fine-grained rebalancing across clusters up to around 1,000 nodes.
 
-### The Multi-Key Hash Tag Solution
-In Redis Cluster, multi-key operations (like `MGET` or Lua transactions) fail with a `CROSSSLOT Keys in request don't hash to the same slot` error if the keys hash to different slots.
+Smart clients like Lettuce (Spring Data Redis's default) cache the slot-to-node table in memory so commands go straight to the owning node in one hop. If slots are moving during a reshard, a node responds with `MOVED` (update your slot table permanently) or `ASK` (redirect this single command while migration finishes).
 
-To force related keys onto the exact same hash slot and node, use **Hash Tags** `{...}`:
-- `{user:101}:profile`
-- `{user:101}:orders`
-- `{user:101}:preferences`
+### Multi-Key Operations and Hash Tags
 
-Redis calculates the CRC16 hash **only on the text inside the curly braces**, guaranteeing all three keys land on the exact same master node!
+In Redis Cluster, commands that touch multiple keys (`MGET`, `RENAME`, Lua scripts, transactions) fail with `CROSSSLOT Keys in request don't hash to the same slot` unless every key resolves to the same slot.
 
----
+You control co-location using **hash tags** enclosed in curly braces `{...}`:
 
-## Edge Caching: Content Delivery Networks (CDNs)
+- `{tenant:42}:profile`
+- `{tenant:42}:limits`
+- `{tenant:42}:session`
 
-A packet travelling over fiber from Sydney, Australia to an AWS datacenter in Virginia, USA takes approximately **220 milliseconds round-trip** due to the speed of light in fiber optics. No amount of Java optimization can overcome the speed of light.
+When a key contains `{...}`, Redis runs `CRC16` only on the substring inside the first non-empty brace pair. All three keys hash to the exact same slot and live on the same primary node. Use hash tags carefully: tagging too many keys with a coarse prefix (like `{global}`) defeats partitioning and creates a hot shard on one Redis node.
 
-A **Content Delivery Network (CDN)** deploys hundreds of Points of Presence (PoPs) at the physical edges of the internet, caching data within 10 milliseconds of end users.
+## Content Delivery Networks (CDNs)
+
+No amount of JVM tuning can beat fiber-optic propagation delay. A round trip from Sydney to `us-east-1` takes roughly 200 ms before your application executes a single line of code, plus extra round trips for TCP and TLS handshakes.
+
+A **Content Delivery Network (CDN)** terminates TLS and caches responses at edge Points of Presence (PoPs) close to users, often within 10 to 25 ms. Static assets (images, JavaScript bundles, videos) are the classic use case, but CDNs also absorb huge traffic volumes for public or semi-public read APIs such as product catalogs, pricing tables, and configuration endpoints.
 
 ```mermaid
 flowchart LR
-    User["End User (Tokyo)"] -->|"5ms Latency"| PoP["CDN Edge Server (Tokyo PoP)"]
-    
-    PoP -->|"Cache Hit (Static Assets / Cached API)"| User
-    PoP -.->|"Cache Miss (Pass to Origin)"| Origin["Origin API (AWS US-East Virginia - 180ms)"]
+    user["User (Tokyo)"] -->|"~10ms"| pop["CDN Edge PoP (Tokyo)"]
+    pop -->|"Cache Hit"| user
+    pop -.->|"Cache Miss (Origin Fetch)"| origin["Origin API (us-east-1, ~170ms)"]
 ```
 
-### Modern Dynamic API Caching with `Cache-Control`
-CDNs do not just cache static images and CSS; they can cache read-only REST API endpoints at the edge:
+### Controlling Edge and Browser Caching with HTTP Headers
+
+CDN behavior is driven largely by standard HTTP response headers. Setting them cleanly in Spring Boot gives you precise control over what browsers cache versus what shared CDN edges cache:
+
+```java
+import java.time.Duration;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class CatalogApiController {
+
+    private final ProductCatalogService catalogService;
+
+    public CatalogApiController(ProductCatalogService catalogService) {
+        this.catalogService = catalogService;
+    }
+
+    @GetMapping("/api/v1/products/{id}")
+    public ResponseEntity<Product> getProduct(@PathVariable String id) {
+        Product product = catalogService.getProduct(id);
+
+        CacheControl cacheControl = CacheControl.maxAge(Duration.ofSeconds(60))
+                .cachePublic()
+                .sMaxAge(Duration.ofSeconds(300))
+                .staleWhileRevalidate(Duration.ofSeconds(300));
+
+        return ResponseEntity.ok()
+                .cacheControl(cacheControl)
+                .eTag("\"" + product.version() + "\"")
+                .header("Vary", "Accept-Encoding, Accept-Language")
+                .body(product);
+    }
+}
+```
+
+That controller emits headers like:
 
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/json
-Cache-Control: public, max-age=60, s-maxage=300, stale-while-revalidate=60
-```
-- **`s-maxage=300`**: Tells the CDN edge proxy to cache the response for 5 minutes.
-- **`stale-while-revalidate=60`**: If a request arrives within 60 seconds after expiration, the CDN serves the stale cached response instantly (<10ms), while asynchronously fetching fresh data from the origin server in the background!
-
----
-
-## Architectural Traps and Real-World Outages
-
-### The "Hot Shard Flash Sale" Meltdown
-A major ticketing platform sharded their database by `event_id`. 
-When tickets for a global stadium tour went on sale, 4 million users flooded the website simultaneously. All 4 million requests were for `event_id = 998877`, mapping 100% of global traffic directly to **Shard 7**. 
-
-Shard 7's CPU utilization spiked to 100%, disk IOPS exhausted, and the database locked up within 20 seconds. Meanwhile, Shards 1 through 6 sat completely idle at 1% CPU utilization!
-
-**The Fix:** For mega-events, implement a pre-allocated write buffer in Redis or shard high-volume entities using a compound key with random virtual salt partitions: `hash(event_id + "_" + random(0, 10))`.
-
-### The "Cache Stampede / Thundering Herd" Outage
-An e-commerce homepage cached the featured product list in Redis with a fixed 1-hour TTL (`ttl = 3600`). 
-At 12:00:00 PM, the cache key expired. 
-At that exact millisecond, 8,000 incoming requests found a cache miss simultaneously. All 8,000 threads fired the heavy database query at the exact same instant, exhausting the HikariCP connection pool and crashing the PostgreSQL primary.
-
-**The Fix:** Use probabilistic early expiration (XFetch algorithm) or combine cache reads with mutual exclusion locking:
-```java
-@Cacheable(cacheNames = "featured_products", sync = true)
+Cache-Control: public, max-age=60, s-maxage=300, stale-while-revalidate=300
+ETag: "v42"
+Vary: Accept-Encoding, Accept-Language
 ```
 
----
+What each header actually does:
 
-## Senior Interview Questions
+- **`public, max-age=60, s-maxage=300`**: Browsers cache the response for 60 seconds, while shared caches (the CDN edge) keep it for 300 seconds. For user-specific endpoints, always use `Cache-Control: private, no-store` so a CDN never caches one customer's response and serves it to another.
+- **`stale-while-revalidate=300`**: After the 300-second fresh window expires, the CDN can immediately serve the slightly stale copy to the next caller while refreshing from your origin in the background, hiding origin latency from users.
+- **`ETag`**: Enables conditional requests (`If-None-Match: "v42"`). If the product version has not changed, your origin returns `304 Not Modified` with an empty body, saving bandwidth and serialization work.
+- **`Vary`**: Tells the CDN to partition its cache key by the listed request headers. Never put high-cardinality headers like `User-Agent` or `Cookie` in `Vary`, or your cache hit ratio will collapse.
 
-### Question 1: What is the fundamental difference between the CAP Theorem and the PACELC Theorem?
-**Answer:**  
-The CAP Theorem states that in the presence of a network **Partition (P)**, a distributed system must choose between **Availability (A)** and **Consistency (C)**. However, CAP ignores system trade-offs when the network is healthy and functioning normally.
+## Common Failure Modes
 
-The PACELC Theorem expands CAP to cover normal operation:
-- **If Partitioned (P)**: Choose between **Availability (A)** and **Consistency (C)**.
-- **Else (E)** (normal operation): Choose between **Latency (L)** and **Consistency (C)**.
-For example, a system might choose High Availability during a partition (PA), but under normal conditions, choose low latency over strong consistency (EL) by replicating writes asynchronously (e.g., Cassandra / DynamoDB).
+- **Read-your-writes bugs after adding replicas:** Teams add a read replica, turn on global read splitting, and immediately get support tickets about "my edits disappeared." Always classify which flows require monotonic or read-your-writes guarantees before routing them to replicas.
+- **Hot keys in sharded databases and Redis:** Even with 16 shards or a 12-node Redis Cluster, one viral product page or flash-sale `event_id` can saturate a single node. Protect ultra-hot read keys with short-lived in-process caches (such as Caffeine with a 2 to 5 second TTL) in front of Redis so each app pod absorbs thousands of reads locally.
+- **Thundering herd after cache flush or expiry:** Never expire an entire catalog at midnight with identical TTLs. Add random jitter to TTLs and use single-flight/lock patterns on expensive misses.
+- **Accidentally caching private responses at the CDN:** Misconfigured CDN rules that ignore `Authorization` headers or override origin `Cache-Control` have caused major data-leak incidents. Always mark authenticated responses `private, no-store` and test CDN caching rules in staging with two separate test accounts.
 
-### Question 2: In database sharding, what is the "Cross-Shard Query Problem", and how do distributed architectures mitigate it?
-**Answer:**  
-The Cross-Shard Query problem occurs when an application needs to execute a query that does not include the Shard Key in its `WHERE` clause, or requires joining tables partitioned across different physical database instances. 
+## Interview Questions
 
-To execute `SELECT * FROM orders WHERE status = 'PENDING'`, the application must issue a **Scatter-Gather query**: broadcast the query across every single physical shard, wait for all shards to respond over the network, merge the result sets in application memory, and sort/paginate the aggregated list.
+### How does PACELC add to the CAP theorem when evaluating a database?
 
-**Mitigation Strategies:**
-1. **Denormalized CQRS Read Models**: Stream change events to a centralized search index (Elasticsearch) that indexes all fields for fast global filtering.
-2. **Careful Shard Key Selection**: Align the shard key with the dominant access pattern (e.g., sharding by `tenant_id` ensures 99% of enterprise queries stay within a single shard).
+CAP only explains how a system behaves during a network partition: either reject some operations to keep linearizable consistency (CP) or keep answering requests and accept divergence (AP). PACELC adds the "Else" branch for normal, healthy network operation, where you still have to trade off latency (L) against consistency (C). For instance, waiting for synchronous replication across availability zones guarantees fresh reads on replicas (EC) at the cost of extra round-trip latency, while asynchronous replication returns quickly (EL) at the cost of replication lag.
 
-### Question 3: How does Consistent Hashing minimize data movement when nodes are added or removed from a caching cluster?
-**Answer:**  
-In naive modulo hashing (`node = hash(key) % N`), if you have 10 nodes and add an 11th node (`N = 11`), almost **every single key in the cluster** maps to a new node index (roughly 91% of keys move), completely destroying the cache and overwhelming backend databases.
+### Why does a Layer 4 load balancer struggle to balance gRPC traffic evenly across Kubernetes pods?
 
-**Consistent Hashing** maps both cache nodes and keys onto a virtual circular ring (from 0 to 2^32 - 1). A key is assigned to the first node encountered moving clockwise around the ring. 
-When a new node is added or removed, **only a fraction (1/N) of keys are re-routed to the new node**, while the remaining `(N - 1) / N` keys remain safely mapped to their existing nodes. Virtual nodes (replicas) are placed across the ring to ensure even key distribution.
+gRPC runs over HTTP/2, which multiplexes many concurrent RPC calls over a single persistent TCP connection. A Layer 4 load balancer makes routing decisions only when a TCP connection is opened, so every RPC on that connection lands on the same backend pod. When new pods scale up, existing clients stay pinned to older pods. Using a Layer 7 load balancer (such as Envoy or Linkerd) or client-side load balancing inspects individual HTTP/2 streams and distributes requests across all healthy pods.
 
-### Question 4: What is the difference between Cache-Aside, Write-Through, and Write-Behind (Write-Back) caching patterns?
-**Answer:**  
-- **Cache-Aside (Lazy Loading)**: The application is responsible for cache management. On a read, it checks the cache; if a miss occurs, it queries the database and populates the cache. On a write, it updates the database and evicts the cache key.
-  - *Pros:* Resilient (cache failure doesn't stop writes).
-  - *Cons:* Cache misses incur three network hops.
-- **Write-Through**: The application writes exclusively to the cache layer; the cache synchronously writes to the database before acknowledging success to the caller.
-  - *Pros:* Cached data is always fresh; eliminates stale reads.
-  - *Cons:* Write latency is higher because it waits for both cache and database writes to complete.
-- **Write-Behind (Write-Back)**: The application writes to the cache, which acknowledges immediately. The cache asynchronously batches and flushes writes to the database in the background.
-  - *Pros:* Extreme write performance and throughput.
-  - *Cons:* Risk of data loss if the cache node crashes before flushing dirty writes to the durable database.
+### What happens when a query cannot include the shard key in a sharded database?
+
+The router cannot tell which shard holds the matching rows, so it has to run a scatter-gather query: broadcast the query to every shard, wait for the slowest shard to respond, and merge, sort, and paginate the combined rows in application memory. Tail latency worsens as shard count grows, and deep pagination (`OFFSET 10000`) becomes very expensive. Teams work around this by aligning the shard key with the primary access pattern and maintaining denormalized secondary read models (such as an Elasticsearch index fed via change data capture) for global search and reporting.
+
+### Why do Cache-Aside systems invalidate the cache on writes instead of updating the cached value directly?
+
+Updating the cache directly on writes creates a race condition under concurrent updates: Request A updates the database first, Request B updates the database second and writes B's value to the cache, and then a slightly delayed Request A overwrites the cache with A's older value, leaving the cache permanently out of sync until the TTL expires. Deleting the cache key after the database commit avoids leaving stale values behind from reordered writes, and avoids wasting cache memory on keys that may not be read again soon.

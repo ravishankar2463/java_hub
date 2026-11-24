@@ -1,93 +1,94 @@
 ---
 title: "NoSQL Databases"
-description: "Master NoSQL architectures in modern Java: CAP and PACELC theorems, MongoDB document modeling, Redis memory structures and caching patterns, and Neo4j graph traversals."
+description: "How to choose between PostgreSQL and NoSQL stores, model documents in MongoDB, use Redis with Spring Data, and query connected data in Neo4j."
 category: "level-7"
 date: "2026-10-29T10:00:00Z"
 ---
 
-A decade ago, the tech industry rode a wave of anti-relational hype. Blogs declared that *"SQL is dead"* and that modern web applications should store everything in schema-less document stores.
+For a few years in the 2010s, it was fashionable to argue that relational databases were obsolete and that every new backend should default to a schema-less document store. Many teams learned the hard way what happens when you put orders, invoices, and user permissions into a store without foreign keys or multi-record relational modeling: validation logic sprawled across application services, reporting queries got painful, and subtle schema drift crept into production collections.
 
-Many engineering teams fell into the trap. They replaced battle-tested relational databases with NoSQL document stores for core financial ledgers, only to discover painful realities:
-- Enforcing foreign key constraints across collections required writing thousands of lines of fragile application-level validation code.
-- Without database-level multi-table transactions, partial writes created corrupted state during network hiccups.
-- Document collections degenerated into unmaintainable, chaotic schemas where different rows had mismatched types and missing fields.
+The pendulum has settled into a more practical approach called **polyglot persistence**: keep a relational database as the default system of record, and introduce a specialized NoSQL engine only when a specific access pattern genuinely earns the extra operational cost.
 
-Today, mature software architects embrace **Polyglot Persistence**. We recognize that **NoSQL does not mean "No SQL"—it means "Not Only SQL"**. 
+## When to Use SQL vs. NoSQL (And Why PostgreSQL Is Still the Default)
 
-Different storage engines are physically optimized for radically different data shapes and access patterns. The goal of a senior engineer is to pair the right tool with the right job: using PostgreSQL for authoritative transactional state, Redis for sub-millisecond in-memory caching, MongoDB for heterogeneous product catalogs, and Neo4j for deep relationship traversals.
+Every extra database in your stack adds real work: another cluster to provision, upgrade, back up, monitor, secure, and keep in sync with the rest of your data. Before reaching for a NoSQL store, ask whether PostgreSQL already handles the job cleanly.
+
+Modern PostgreSQL is much more capable than the rigid RDBMS caricature from fifteen years ago:
+
+- **Semi-structured attributes**: `JSONB` columns with GIN indexes let you store heterogeneous product attributes or webhook payloads inside a relational table while keeping ACID transactions and foreign keys for the structured columns around them.
+- **Moderate hierarchical or graph queries**: Recursive Common Table Expressions (`WITH RECURSIVE`) handle org charts, category trees, and shallow 2-to-3-hop traversals without standing up a separate graph cluster.
+- **Throughput**: A well-indexed PostgreSQL instance with connection pooling (HikariCP) and read replicas handles tens of thousands of queries per second for typical business applications.
+
+PostgreSQL stays the better default when you have relational integrity constraints, complex ad-hoc reporting joins, financial or inventory ledgers, or a small team that wants one reliable database to operate.
+
+NoSQL engines earn their keep when your data shape or scale pushes against relational trade-offs:
+
+- **Document stores (MongoDB)** fit well when you load and save whole self-contained aggregates with deeply varied schemas per record (product catalogs across disparate categories, CMS content trees, form builders) and want built-in horizontal sharding across write-heavy collections.
+- **In-memory key-value stores (Redis)** fit well when you need sub-millisecond reads, TTL-driven caches, atomic counters, distributed locks, session storage, or rolling-window rate limiters that would put unnecessary write load on PostgreSQL.
+- **Graph databases (Neo4j)** fit well when core product features depend on deep, variable-length relationship traversals (3 to 6+ hops) across dense networks, such as fraud ring detection, access-control inheritance graphs, or real-time dependency/recommendation paths.
+- **Wide-column stores (Cassandra, DynamoDB)** fit well for high-volume, predictable-key, write-heavy workloads across multiple regions (IoT telemetry, time-series event logs, messaging history) where horizontal write scaling and high availability matter more than ad-hoc joins.
 
 ```mermaid
 flowchart TD
-    subgraph "Polyglot Persistence in an Enterprise Architecture"
-        Client["Client / API Gateway"]
-        
-        Client -->|User Sessions & Rate Limiting| Redis[("Redis (In-Memory Key-Value / ZSet)<br/>Latency: < 1ms")]
-        Client -->|Transactional Orders & Ledger| Postgres[("PostgreSQL (Relational ACID)<br/>Strict Consistency & 3NF")]
-        Client -->|Dynamic Product Catalog| Mongo[("MongoDB (Document Store)<br/>Flexible Schemas & Fast Read Aggregates")]
-        Client -->|Social & Fraud Detection Graph| Neo4j[("Neo4j (Graph Database)<br/>Index-Free Adjacency Traversals")]
+    subgraph Polyglot["Polyglot Persistence Architecture"]
+        App["Spring Boot Services"]
+
+        App -->|"Sessions, cache, rate limits"| Redis[("Redis (In-Memory KV)<br/>Sub-millisecond reads & TTLs")]
+        App -->|"Orders, billing, core state"| Postgres[("PostgreSQL (Relational ACID)<br/>Constraints, joins & transactions")]
+        App -->|"Heterogeneous catalog specs"| Mongo[("MongoDB (Document Store)<br/>Flexible BSON aggregates")]
+        App -->|"Multi-hop fraud & social paths"| Neo4j[("Neo4j (Graph Database)<br/>Direct pointer traversals")]
     end
 ```
 
----
+## Distributed Trade-Offs: CAP and PACELC
 
-## Distributed Systems Fundamentals: CAP and PACELC Theorems
-
-When you move from a single relational database instance to a distributed cluster of nodes spanning multiple availability zones, the physical laws of computer networks dictate your system's limits.
+Once a database runs across multiple nodes and availability zones, network behavior constrains what it can promise.
 
 ### The CAP Theorem
 
-Formulated by Eric Brewer in 2000 and formally proven by Gilbert and Lynch, the **CAP Theorem** states that a distributed data store can simultaneously guarantee at most two of the following three properties:
+Eric Brewer's **CAP theorem** (formalized by Gilbert and Lynch) states that during a **network partition (P)**, a distributed data store cannot guarantee both **linearizable Consistency (C)** and **100% Availability (A)**.
 
-1. **Consistency (C)**: Every read receives the most recent write or an error (Single-copy consistency / Linearizability).
-2. **Availability (A)**: Every non-failing node returns a non-error response for every request, without guaranteeing that it contains the most recent write.
-3. **Partition Tolerance (P)**: The system continues to operate despite an arbitrary number of messages being dropped or delayed by the physical network between nodes.
+Because physical networks drop packets, switches fail, and availability zones lose connectivity, partition tolerance is not optional in distributed clusters. When a split happens, a store has to choose one side:
 
-In the physical world, **network cables get severed, routers fail, and cloud availability zones experience network splits**. Therefore, **Partition Tolerance (P) is a mandatory reality of distributed computing**. 
-
-When a network partition strikes, an architecture is forced into a binary trade-off:
-- **CP Systems (Consistency over Availability)**: If nodes cannot communicate, the system rejects writes and returns errors rather than serving stale or conflicting data (e.g., MongoDB with `w: "majority"`, Google Spanner, HBase).
-- **AP Systems (Availability over Consistency)**: All nodes accept reads and writes, serving potentially stale data and resolving conflicting writes later via reconciliation mechanisms (e.g., Apache Cassandra, Amazon DynamoDB).
+- **CP behavior (Consistency over Availability)**: Nodes on the minority side of a partition reject writes (or reads requiring quorum) rather than risk divergent state. MongoDB with `writeConcern: "majority"` and `readConcern: "majority"` behaves this way.
+- **AP behavior (Availability over Consistency)**: Both sides keep accepting reads and writes, tolerating stale reads or conflicting writes that must be reconciled later (for example, last-write-wins or conflict resolution). Apache Cassandra configured with `LOCAL_ONE` behaves this way.
 
 ```mermaid
 flowchart TD
-    subgraph "Network Partition Strikes (P is mandatory)"
-        Split["Network Cable Cut Between Node A and Node B"]
-        
-        Split --> Choice{"Architectural Choice"}
-        
-        Choice -->|"Choose Consistency (CP)"| CP["Deny Writes on Split Nodes<br/>Result: 100% Consistent, Degraded Availability"]
-        Choice -->|"Choose Availability (AP)"| AP["Accept Writes on Both Nodes<br/>Result: 100% Available, Split-Brain / Eventual Consistency"]
-    end
+    Split["Network Partition Between Nodes"] --> Choice{"Cluster Behavior"}
+    Choice -->|"Prioritize Consistency (CP)"| CP["Reject writes on minority partition<br/>No conflicting writes; reduced availability"]
+    Choice -->|"Prioritize Availability (AP)"| AP["Accept writes on all reachable nodes<br/>High availability; eventual reconciliation"]
 ```
 
 ### The PACELC Theorem
 
-In 2012, Daniel Abadi identified a major flaw in the CAP theorem: CAP only discusses what happens **when a network failure occurs**. But distributed networks run normally 99.9% of the time!
+CAP only describes what happens *during* a network partition, yet networks run normally most of the time. Daniel Abadi extended CAP with **PACELC**:
 
-Abadi formulated the **PACELC Theorem**:
-- **If there is a Partition (P)**, trade off **Availability (A)** vs **Consistency (C)**;
-- **Else (E)** (when the network is running normally), trade off **Latency (L)** vs **Consistency (C)**.
+- **If there is a Partition (P)**, choose between **Availability (A)** and **Consistency (C)**.
+- **Else (E)** (normal operation), choose between **Latency (L)** and **Consistency (C)**.
 
-| Database | PACELC Classification | Normal State (Else) | Failure State (Partition) |
+Even on a healthy network, waiting for synchronous replication across nodes adds latency, while acknowledging locally returns faster at the cost of replica lag.
+
+| Database | Typical PACELC Profile | Normal Operation (Else) | During Partition |
 | :--- | :--- | :--- | :--- |
-| **MongoDB** | **PC/EC** | Consistent reads (routes to primary) | Consistent (denies writes to minor partitions) |
-| **Cassandra** | **PA/EL** | Low Latency (reads local replica) | Available (accepts writes everywhere) |
-| **PostgreSQL (Async Replica)** | **PC/EL** | Low Latency (read replicas are async) | Consistent on Primary |
+| **PostgreSQL (Primary + Async Replica)** | PC / EL | Fast local commits; async replicas may lag | Primary stays consistent; replicas stay read-only |
+| **MongoDB (Primary Read, Majority Write)** | PC / EC | Primary reads see latest majority writes | Minority partition rejects writes |
+| **Cassandra (Tunable Quorum)** | PA / EL (default) | Fast local reads/writes (tunable toward C via `QUORUM`) | Accepts writes everywhere via hinted handoff |
+| **DynamoDB** | PA / EL or EC | Eventual reads by default; optional strongly consistent reads | Highly available across AZs |
 
----
+Notice that real databases are configurable rather than locked into one box. Cassandra can enforce strong per-key consistency when `R + W > N` (for example, `QUORUM` reads and writes across 3 replicas), and MongoDB can trade consistency for lower latency by reading from secondaries.
 
-## Document Stores: MongoDB and BSON Aggregates
+## Document Stores: MongoDB
 
-Document databases replace rigid relational tables with semi-structured, self-describing **BSON (Binary JSON)** documents grouped into collections.
+MongoDB stores records as **BSON (Binary JSON)** documents grouped into collections. BSON extends JSON with native types such as `ObjectId`, `Date`, `Decimal128`, and binary payloads, and allows documents in the same collection to have different fields.
 
-A relational database requires an `orders` table, an `order_items` table, an `order_addresses` table, and an `order_discounts` table joined together across multiple foreign keys. A document database models an entire **Domain-Driven Design Aggregate** as a single, cohesive document:
+Instead of splitting an order across `orders`, `order_items`, and `order_addresses` tables and joining them on every read, a document store often groups an entire aggregate into one document:
 
-```javascript
-// MongoDB Document in 'orders' collection
+```json
 {
   "_id": "ORD-99014",
   "customerId": "CUST-42",
-  "placedAt": ISODate("2026-10-29T10:00:00Z"),
+  "placedAt": "2026-10-29T10:00:00Z",
   "shippingAddress": {
     "street": "100 Market St",
     "city": "San Francisco",
@@ -103,215 +104,415 @@ A relational database requires an `orders` table, an `order_items` table, an `or
 }
 ```
 
-### The Embedding vs Referencing Decision
+Reading `ORD-99014` takes a single document lookup instead of multi-table joins, and MongoDB guarantees atomic single-document writes without needing multi-document transactions (though MongoDB 4.0+ does support multi-document ACID transactions across replica sets and shards when needed, at a performance cost).
 
-The central design dilemma in document modeling is whether to **embed** child data or **reference** it by ID.
+### Embedding vs. Referencing
+
+The most important schema decision in MongoDB is whether to **embed** related data inside the parent document or **reference** it by ID in another collection.
 
 ```mermaid
 flowchart TD
-    Decision["Entity Association Modeling"] --> Q1{"Is the child lifecycle strictly owned by the parent?"}
-    
-    Q1 -->|"No (Shared Entity, e.g. Customer, Product)"| Ref["Use Reference (Store ID only)"]
-    Q1 -->|"Yes"| Q2{"Is the child collection strictly bounded (< 100 items)?"}
-    
-    Q2 -->|"Yes (e.g. Order Items, Address)"| Embed["Embed as Nested Array / Subdocument"]
-    Q2 -->|"No (Unbounded, e.g. Comments, IoT Logs)"| Ref2["Use Reference (Separate Collection)"]
+    Start["Modeling a Relationship"] --> Q1{"Is the child lifecycle owned by the parent?"}
+    Q1 -->|"No (shared entity like Customer)"| Ref1["Reference by ID"]
+    Q1 -->|"Yes"| Q2{"Is the child list strictly bounded (tens of items)?"}
+    Q2 -->|"Yes (Order items, Shipping address)"| Embed["Embed as subdocument or array"]
+    Q2 -->|"No (Unbounded: comments, audit logs)"| Ref2["Store in separate collection with parentId"]
 ```
 
-### The Unbounded Array Antipattern
+A common mistake is the **unbounded array antipattern**, such as pushing every user audit log or every comment on a popular article into an array on the parent document:
 
-A catastrophic mistake in MongoDB architecture is embedding collections that grow indefinitely over time:
+1. **Hard 16 MB BSON limit**: MongoDB rejects any single document that exceeds 16 MB.
+2. **Write amplification and cache pressure**: Appending to a multi-megabyte document forces WiredTiger to load and rewrite large pages in memory and on disk, hurting write throughput and evicting hot data from cache.
 
-```javascript
-// FATAL ANTIPATTERN: Unbounded array
-{
-  "_id": "USER-101",
-  "username": "alice",
-  "auditLogs": [ ... 500,000 log entries ... ] // DISASTER!
-}
-```
+Embed for **1-to-few** bounded data that is almost always read together with the parent (like shipping addresses and order line items). Reference for **1-to-many** unbounded collections or shared entities updated independently (like `customerId` above).
 
-1. **The 16MB Document Limit**: MongoDB strictly forbids any single BSON document from exceeding **16 Megabytes** in size.
-2. **Memory Thrashing**: Every time you update Alice's profile, MongoDB must read and rewrite the entire multi-megabyte document in memory and disk, thrashing the WiredTiger storage engine cache.
+### Spring Data MongoDB Example
 
-> [!TIP]
-> **Rule of Thumb**: Embed for **1-to-few** bounded relationships read together in 95% of queries. Reference for **1-to-many** and **1-to-unbounded** relationships.
-
----
-
-## Key-Value Stores: Redis Data Structures and Caching Patterns
-
-Redis (Remote Dictionary Server) is an in-memory, single-threaded (for command execution), network-accessible key-value database. 
-
-Calling Redis a "key-value store" is an understatement. Redis is an **In-Memory Data Structure Server**. It provides rich, native primitives executed with sub-millisecond latency:
-
-| Data Structure | Operations | Ideal Real-World Use Case |
-| :--- | :--- | :--- |
-| **String** | `SET`, `GET`, `INCRBY` | Caching serialized JSON, atomic global counters, idempotency keys. |
-| **Hash** | `HSET`, `HGET`, `HINCRBY` | Storing mutable objects (User Session, Cart state) without re-serializing. |
-| **List** | `LPUSH`, `RPOP`, `BRPOP` | Lightweight message queues, task pipelines. |
-| **Set** | `SADD`, `SINTER`, `SMEMBERS` | Unique tags, friend circles, tracking active IP addresses. |
-| **Sorted Set (ZSet)** | `ZADD`, `ZRANGEBYSCORE` | **Leaderboards, Priority queues, Rolling-window rate limiters**. |
-| **Stream** | `XADD`, `XREADGROUP` | Append-only event streams with persistent consumer groups. |
-
-### The Rolling-Window Rate Limiter Using Redis Sorted Sets
-
-A common senior engineering interview question is: *"How do you implement an API rate limiter allowing 100 requests per minute using Redis?"*
-
-A naive counter with TTL has a "boundary flaw": a user can make 100 requests at 00:59 and another 100 requests at 01:00, firing 200 requests in 2 seconds.
-
-Using a Redis **Sorted Set (ZSet)**, you can enforce a rolling-window limit with mathematical precision:
+With `spring-boot-starter-data-mongodb`, you map documents using `@Document` and query them with `MongoRepository` or `MongoTemplate`:
 
 ```java
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.Transaction;
+package com.javahub.catalog.mongo;
 
-public class RedisRollingRateLimiter {
-    private final Jedis jedis;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.mapping.Document;
 
-    public RedisRollingRateLimiter(Jedis jedis) {
-        this.jedis = jedis;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+
+@Document(collection = "orders")
+@CompoundIndex(name = "idx_customer_placed", def = "{'customerId': 1, 'placedAt': -1}")
+public class OrderDocument {
+
+    @Id
+    private String id;
+
+    // Referenced entity: Customer lives in its own collection
+    private String customerId;
+
+    private Instant placedAt;
+
+    // Embedded value object: owned by this order snapshot
+    private Address shippingAddress;
+
+    // Embedded bounded list: an order has a small, finite number of line items
+    private List<OrderLineItem> items;
+
+    private BigDecimal totalAmount;
+    private String status;
+
+    public record Address(String street, String city, String state, String zipCode) {}
+
+    public record OrderLineItem(String sku, String name, BigDecimal unitPrice, int qty) {}
+
+    // Standard constructors, getters, and setters omitted for brevity
+}
+```
+
+You can combine derived repository queries with targeted atomic updates through `MongoTemplate` so you do not have to pull and overwrite the whole document just to change one field:
+
+```java
+package com.javahub.catalog.mongo;
+
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+public interface OrderMongoRepository extends MongoRepository<OrderDocument, String> {
+    List<OrderDocument> findTop20ByCustomerIdOrderByPlacedAtDesc(String customerId);
+}
+
+@Service
+public class OrderDocumentService {
+
+    private final OrderMongoRepository repository;
+    private final MongoTemplate mongoTemplate;
+
+    public OrderDocumentService(OrderMongoRepository repository, MongoTemplate mongoTemplate) {
+        this.repository = repository;
+        this.mongoTemplate = mongoTemplate;
     }
 
-    public boolean isAllowed(String userId, int maxRequests, long windowSeconds) {
-        String key = "rate_limit:" + userId;
-        long now = System.currentTimeMillis();
-        long windowStart = now - (windowSeconds * 1000);
+    public List<OrderDocument> recentOrders(String customerId) {
+        return repository.findTop20ByCustomerIdOrderByPlacedAtDesc(customerId);
+    }
 
-        // Execute atomically in a Redis Pipeline / Multi block
-        Transaction t = jedis.multi();
-        
-        // 1. Remove all request timestamps older than the rolling window
-        t.zremrangeByScore(key, 0, windowStart);
-        
-        // 2. Add current request timestamp (Member = timestamp, Score = timestamp)
-        t.zadd(key, now, String.valueOf(now));
-        
-        // 3. Count how many requests are in the current window
-        t.zcard(key);
-        
-        // 4. Set TTL to auto-expire idle keys
-        t.expire(key, (int) windowSeconds + 1);
-        
-        var results = t.exec();
-        long requestCount = (Long) results.get(2);
-
-        return requestCount <= maxRequests;
+    public boolean markShipped(String orderId) {
+        Query query = Query.query(Criteria.where("_id").is(orderId).and("status").is("PAID"));
+        Update update = new Update().set("status", "SHIPPED");
+        return mongoTemplate.updateFirst(query, update, OrderDocument.class).getModifiedCount() == 1;
     }
 }
 ```
 
-### Caching Topologies and the Cache Stampede Hazard
+## Key-Value Stores: Redis for Caching
 
-The most popular caching pattern in Java is **Cache-Aside (Lazy Loading)**:
-1. Application queries Redis for `product:42`.
-2. If cache hit: Return data instantly.
-3. If cache miss: Query PostgreSQL, write data to Redis with a TTL, and return.
+Redis keeps its working dataset in RAM and processes commands on a single main event loop (with optional I/O threads for network reads/writes). That avoids lock contention inside the engine and keeps simple lookups under a millisecond on a local network.
+
+Rather than storing only opaque byte blobs, Redis exposes native data structures directly over the wire:
+
+| Data Structure | Core Commands | Common Java Backend Use Cases |
+| :--- | :--- | :--- |
+| **String** | `SET`, `GET`, `INCRBY`, `SET ... NX EX` | Serialized JSON caches, atomic counters, idempotency keys |
+| **Hash** | `HSET`, `HGET`, `HINCRBY` | Session attributes, shopping cart fields updated individually |
+| **List** | `LPUSH`, `RPOP`, `BLPOP` | Lightweight FIFO/LIFO queues, capped recent-activity feeds |
+| **Set** | `SADD`, `SISMEMBER`, `SINTER` | Deduplicated tags, active user sets, set intersections |
+| **Sorted Set (ZSet)** | `ZADD`, `ZRANGEBYSCORE`, `ZREMRANGEBYSCORE` | Leaderboards, delayed job queues, rolling-window rate limiters |
+| **Stream** | `XADD`, `XREADGROUP` | Append-only event logs with consumer groups |
+
+### Spring Data Redis Configuration and Cache-Aside
+
+One quirk trips up nearly every team using Spring Data Redis for the first time: by default, `RedisTemplate<Object, Object>` uses `JdkSerializationRedisSerializer`, which writes unreadable binary prefixes into your Redis keys and couples cached values to Java `Serializable` class versions. Always configure explicit string key serialization and JSON value serialization.
+
+```java
+package com.javahub.cache.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
+
+@Configuration
+public class RedisConfig {
+
+    @Bean
+    public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
+        RedisTemplate<String, Object> template = new RedisTemplate<>();
+        template.setConnectionFactory(connectionFactory);
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setHashKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(new GenericJackson2JsonRedisSerializer());
+        template.setHashValueSerializer(new GenericJackson2JsonRedisSerializer());
+        return template;
+    }
+}
+```
+
+With that template in place, a standard **Cache-Aside** read/write flow looks like this:
+
+```java
+package com.javahub.cache;
+
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+
+@Service
+public class ProductCacheService {
+
+    private static final String KEY_PREFIX = "product:";
+    private static final Duration CACHE_TTL = Duration.ofMinutes(15);
+
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final ProductJpaRepository productRepository;
+
+    public ProductCacheService(RedisTemplate<String, Object> redisTemplate,
+                               ProductJpaRepository productRepository) {
+        this.redisTemplate = redisTemplate;
+        this.productRepository = productRepository;
+    }
+
+    public ProductDto findById(Long productId) {
+        String key = KEY_PREFIX + productId;
+        ProductDto cached = (ProductDto) redisTemplate.opsForValue().get(key);
+        if (cached != null) {
+            return cached;
+        }
+
+        ProductDto fromDb = productRepository.findById(productId)
+                .map(ProductDto::fromEntity)
+                .orElse(null);
+
+        if (fromDb != null) {
+            redisTemplate.opsForValue().set(key, fromDb, CACHE_TTL);
+        }
+        return fromDb;
+    }
+
+    public ProductDto updatePrice(Long productId, java.math.BigDecimal newPrice) {
+        Product entity = productRepository.findById(productId).orElseThrow();
+        entity.setPrice(newPrice);
+        productRepository.save(entity);
+
+        // Evict instead of updating in place to reduce stale-write races
+        redisTemplate.delete(KEY_PREFIX + productId);
+        return ProductDto.fromEntity(entity);
+    }
+}
+```
 
 ```mermaid
 sequenceDiagram
-    participant App as Java App
-    participant Cache as Redis Cache
-    participant DB as PostgreSQL DB
+    participant App as Spring Boot App
+    participant Cache as Redis
+    participant DB as PostgreSQL
 
     App->>Cache: GET product:42
-    Note over Cache: KEY EXPIRED (Cache Miss!)
-    Cache-->>App: null
+    Cache-->>App: null (cache miss)
     App->>DB: SELECT * FROM products WHERE id = 42
-    DB-->>App: Live Row
-    App->>Cache: SET product:42 ... EX 300
-    App-->>App: Process Data
+    DB-->>App: Product row
+    App->>Cache: SET product:42 "{...}" EX 900
+    App-->>App: Return ProductDto
 ```
 
-### The Cache Stampede (Thundering Herd Problem)
+When a hot key expires under heavy concurrency, naive Cache-Aside is vulnerable to a **cache stampede** (many concurrent misses querying PostgreSQL for the exact same row). For high-traffic keys, combine this flow with per-key distributed locking, TTL jitter, and null caching or Bloom filters, covered in detail in the Distributed Locking and Cache Patterns lesson.
 
-What happens when a high-traffic key (e.g., the homepage hot-sale banner viewed by 50,000 requests per second) expires from Redis?
+### Rolling-Window Rate Limiter with `StringRedisTemplate` and Sorted Sets
 
-At the instant the key expires, all 50,000 concurrent threads experience a cache miss simultaneously. **All 50,000 threads fire the exact same expensive SQL query against PostgreSQL at the exact same millisecond.** 
+Redis is equally useful for fast coordination tasks like API rate limiting. A fixed-minute counter (`INCR rate:user:42:10:01`) has a boundary burst problem: a client can send 100 requests at `10:01:59` and 100 more at `10:02:00`, sending 200 requests in two seconds.
 
-The database server experiences a catastrophic connection spike, CPU hits 100%, and the database crashes—a disaster known as a **Cache Stampede**.
+A **Sorted Set (ZSet)** tracks exact request timestamps over a true rolling window. Note one subtle detail: the ZSet member must be unique per request (for example, `timestamp + ":" + uuid`), otherwise two requests arriving in the same millisecond overwrite the same member and only count as one.
 
-#### How to Prevent Cache Stampedes
-1. **Mutex Locking (Distributed Lock)**: When a thread experiences a cache miss, it attempts to acquire a short-lived Redis lock (`SET lock:product:42 my_id NX EX 5`). Only the single thread that wins the lock queries the database and populates the cache; all other threads sleep briefly and re-query Redis.
-2. **Probabilistic Early Expiration (XFetch Algorithm)**: As the key nears its expiration time, background threads calculate a probability function based on query latency and asynchronously refresh the cache in the background *before* it physically expires.
+```java
+package com.javahub.cache;
 
----
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.stereotype.Component;
 
-## Graph Databases: Neo4j and Index-Free Adjacency
+import java.util.List;
+import java.util.UUID;
 
-Relational databases can model relationships using foreign keys and join tables. However, when you query deep, highly connected networks:
-- *"Find all friends of friends within 4 hops who like jazz music."*
-- *"Identify money laundering rings where Account A transfers to B, B to C, and C transfers back to A."*
+@Component
+public class RollingWindowRateLimiter {
 
-A relational database must execute a 4-way self-join across multi-million-row join tables. Relational join cost scales quadratically with dataset size, rendering multi-hop queries impossibly slow.
+    private static final DefaultRedisScript<Long> RATE_LIMIT_SCRIPT = new DefaultRedisScript<>(
+            """
+            local key = KEYS[1]
+            local now = tonumber(ARGV[1])
+            local windowStart = tonumber(ARGV[2])
+            local maxRequests = tonumber(ARGV[3])
+            local member = ARGV[4]
+            local ttlSeconds = tonumber(ARGV[5])
 
-### The Superpower of Graph Databases: Index-Free Adjacency
+            redis.call('ZREMRANGEBYSCORE', key, 0, windowStart)
+            local currentCount = redis.call('ZCARD', key)
+            if currentCount >= maxRequests then
+                return 0
+            end
+            redis.call('ZADD', key, now, member)
+            redis.call('EXPIRE', key, ttlSeconds)
+            return 1
+            """,
+            Long.class
+    );
 
-**Neo4j** is a native graph database implementing the **Property Graph Model** (Nodes, Directed Relationships, and Key-Value Properties).
+    private final StringRedisTemplate redisTemplate;
 
-In a relational database, finding connected records requires looking up foreign keys in a B-Tree index (`O(log N)` per lookup). 
+    public RollingWindowRateLimiter(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
 
-In Neo4j, every node physically stores direct, native double-linked memory pointers to its adjacent relationships on disk and RAM. Traversing a relationship is a simple **`O(1)` pointer dereference**!
+    public boolean allowRequest(String userId, int maxRequests, long windowSeconds) {
+        long now = System.currentTimeMillis();
+        long windowStart = now - (windowSeconds * 1000L);
+        String uniqueMember = now + ":" + UUID.randomUUID();
 
-> [!NOTE]
-> **Index-Free Adjacency**: Traversal speed in a native graph database depends **only on the size of the subgraph being traversed**, and is completely independent of the total size of the global database (whether it contains 1,000 nodes or 10 billion nodes).
+        Long allowed = redisTemplate.execute(
+                RATE_LIMIT_SCRIPT,
+                List.of("rate_limit:" + userId),
+                String.valueOf(now),
+                String.valueOf(windowStart),
+                String.valueOf(maxRequests),
+                uniqueMember,
+                String.valueOf(windowSeconds + 1)
+        );
+        return Long.valueOf(1L).equals(allowed);
+    }
+}
+```
 
-### The Cypher Query Language
+Running the check and insert inside a single Lua script guarantees atomicity across all application pods and avoids adding rejected requests to the ZSet.
 
-Neo4j uses **Cypher**, an expressive, ASCII-art declarative pattern matching language:
+## Graph Databases: Neo4j Basics
+
+Relational databases represent relationships with foreign keys and join tables. That works cleanly for 1-hop or 2-hop lookups, but multi-hop graph questions get awkward and expensive quickly:
+
+- *"Find accounts connected to this flagged card within 4 hops through shared devices, IP addresses, or transfers."*
+- *"Recommend people 2 to 3 degrees away sorted by mutual connections."*
+
+In PostgreSQL, each extra hop adds another self-join and B-Tree index lookup (`O(log N)` per lookup across the full table size), and intermediate row counts fan out rapidly.
+
+### Property Graphs and Index-Free Adjacency
+
+**Neo4j** uses the **Property Graph** model:
+
+- **Nodes** represent entities (such as `:Person`, `:Account`, `:Device`) and hold key-value properties.
+- **Relationships** are directed, typed edges between nodes (such as `[:FRIENDS_WITH]`, `[:TRANSFERRED_TO]`) and can also hold properties like `amount` or `since`.
+
+What makes a native graph database fast at deep traversals is **index-free adjacency**. Once Neo4j uses an index to find the starting node (such as Alice), each node record physically stores direct pointers to its adjacent relationships, and each relationship stores pointers to its connected nodes. Stepping from one node to its neighbor is an `O(1)` pointer traversal rather than a global index lookup. Traversal time depends on the size of the local subgraph you walk, not the total number of nodes in the database.
+
+### Querying with Cypher
+
+Neo4j queries are written in **Cypher**, a declarative pattern-matching language where nodes are wrapped in parentheses `()` and relationships in arrows `-->`:
 
 ```cypher
-// Discover friends-of-friends recommendations (2 to 3 hops away)
-MATCH (user:Person {email: "alice@example.com"})-[:FRIENDS_WITH*2..3]-(fof:Person)
-WHERE NOT (user)-[:FRIENDS_WITH]-(fof) AND user <> fof
-RETURN fof.name, count(*) AS mutualFriendsCount
-ORDER BY mutualFriendsCount DESC
+// Friends-of-friends recommendations (2 to 3 hops away)
+MATCH (user:Person {email: "alice@example.com"})-[:FRIENDS_WITH*2..3]-(candidate:Person)
+WHERE NOT (user)-[:FRIENDS_WITH]-(candidate) AND user <> candidate
+RETURN candidate.name AS name, count(*) AS mutualConnections
+ORDER BY mutualConnections DESC
 LIMIT 10;
 ```
 
----
+### Spring Data Neo4j Example
 
-## NoSQL Storage Models Comparison Matrix
+With `spring-boot-starter-data-neo4j`, you map nodes and relationships directly onto Java classes and run custom Cypher queries through `Neo4jRepository`:
 
-| Model | Representative Engine | Data Structure Primitive | Primary Optimization | Weakness / Trade-off |
+```java
+package com.javahub.graph;
+
+import org.springframework.data.neo4j.core.schema.GeneratedValue;
+import org.springframework.data.neo4j.core.schema.Id;
+import org.springframework.data.neo4j.core.schema.Node;
+import org.springframework.data.neo4j.core.schema.Relationship;
+
+import java.util.HashSet;
+import java.util.Set;
+
+@Node("Person")
+public class PersonNode {
+
+    @Id
+    @GeneratedValue
+    private Long id;
+
+    private String email;
+    private String name;
+
+    @Relationship(type = "FRIENDS_WITH", direction = Relationship.Direction.OUTGOING)
+    private Set<PersonNode> friends = new HashSet<>();
+
+    public PersonNode(String email, String name) {
+        this.email = email;
+        this.name = name;
+    }
+
+    public Long getId() { return id; }
+    public String getEmail() { return email; }
+    public String getName() { return name; }
+    public Set<PersonNode> getFriends() { return friends; }
+}
+```
+
+```java
+package com.javahub.graph;
+
+import org.springframework.data.neo4j.repository.Neo4jRepository;
+import org.springframework.data.neo4j.repository.query.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+
+public interface PersonGraphRepository extends Neo4jRepository<PersonNode, Long> {
+
+    record Recommendation(String name, long mutualConnections) {}
+
+    @Query("""
+            MATCH (u:Person {email: $email})-[:FRIENDS_WITH*2..3]-(candidate:Person)
+            WHERE NOT (u)-[:FRIENDS_WITH]-(candidate) AND u <> candidate
+            RETURN candidate.name AS name, count(*) AS mutualConnections
+            ORDER BY mutualConnections DESC
+            LIMIT 10
+            """)
+    List<Recommendation> findFriendRecommendations(@Param("email") String email);
+}
+```
+
+Keep Neo4j's trade-off in mind as well: it shines on local multi-hop traversals, not on full-table analytical scans or high-throughput transactional ledgers. In most enterprise stacks, Neo4j holds a projection of relationship data synced asynchronously from the primary relational database.
+
+## Storage Model Comparison
+
+| Model | Examples | Core Primitive | Where It Excels | Key Trade-Offs |
 | :--- | :--- | :--- | :--- | :--- |
-| **Relational** | PostgreSQL, MySQL | Normalized Tables, Rows, Foreign Keys | ACID Transactions, Ad-hoc joins, 3NF Integrity | Horizontal sharding complexity, rigid schema migrations |
-| **Document** | MongoDB, Couchbase | Hierarchical BSON / JSON documents | Fast aggregate retrieval, flexible schemas | 16MB document cap, joins across collections require manual $lookup |
-| **Key-Value** | Redis, Memcached | In-memory key mappings, Sets, Hashes | Sub-millisecond latency, atomic counters, caching | Memory cost per byte, limited query capability without key |
-| **Graph** | Neo4j, Amazon Neptune | Nodes, Directed Edges, Properties | Deep multi-hop network traversals (`O(1)` pointer hops) | High write overhead for graph indexing, global aggregations are slow |
+| **Relational** | PostgreSQL, MySQL | Tables, rows, foreign keys, `JSONB` | ACID transactions, strict invariants, ad-hoc joins, reporting | Horizontal write sharding takes effort; rigid schema migrations on huge tables |
+| **Document** | MongoDB, Couchbase | BSON/JSON documents in collections | Whole-aggregate reads, varying per-record schemas, built-in sharding | 16 MB doc limit; cross-collection joins (`$lookup`) are slower than relational joins |
+| **Key-Value** | Redis, Valkey | In-memory keys, Hashes, Sets, ZSets, Streams | Sub-millisecond caching, counters, rate limits, ephemeral state | High cost per GB of RAM; limited ad-hoc querying without secondary indexes |
+| **Graph** | Neo4j, Amazon Neptune | Nodes, directed edges, properties | Variable-depth multi-hop traversals, fraud rings, dependency graphs | Slower global aggregations; extra sync pipeline when used alongside SQL |
 
----
+## Practical Questions
 
-## Senior Engineer Interview Crucible
+### If a team needs to store variable product attributes (electronics specs vs. clothing sizes), should they immediately adopt MongoDB?
 
-### Explain the PACELC theorem and how it expands upon the classic CAP theorem.
-The CAP theorem assumes that network partitions are the only trade-off boundary in distributed systems. It states that during a partition (P), you must choose between Availability (A) and Consistency (C). However, real distributed networks operate normally without partitions 99.9% of the time.
+Not automatically. If the rest of the domain (orders, inventory, pricing, tax rules) already lives in PostgreSQL, storing the variable attributes in a PostgreSQL `JSONB` column with a GIN index gives you flexible attributes while keeping foreign keys, joins, and single-database operations intact. MongoDB makes more sense when the catalog is a large, independently owned microservice with deeply nested document aggregates, frequent schema evolution across teams, or write/storage volume that benefits from native horizontal sharding.
 
-The PACELC theorem (formulated by Daniel Abadi) completes the picture:
-- **If there is a Partition (P)**, trade off **Availability (A)** vs **Consistency (C)**;
-- **Else (E)** (normal network operation), trade off **Latency (L)** vs **Consistency (C)**.
+### How does PACELC refine the CAP theorem for everyday backend design?
 
-For example, when a cluster is completely healthy, maintaining strong single-copy consistency (C) requires synchronously waiting for acknowledgments across all replicas before returning, which increases write Latency (L). Alternatively, choosing low Latency (L) means returning immediately after updating a local node, accepting eventual consistency across replicas.
+CAP only addresses behavior during a network partition, which is an edge case compared to normal operation. PACELC reminds you that even when the network is completely healthy, there is still a trade-off between **Latency (L)** and **Consistency (C)**. Waiting for synchronous replica acknowledgments before returning a write guarantees fresher reads across nodes, while acknowledging locally keeps tail latency low at the cost of temporary replication lag.
 
-### What is "Index-Free Adjacency" in Neo4j, and why does it make deep graph traversals dramatically faster than relational joins?
-In relational databases, evaluating relationships requires querying secondary B-Tree indexes on join tables, which takes `O(log N)` time per hop and degrades exponentially as tables grow into millions of rows.
+### Why is embedding an unbounded array in a MongoDB document dangerous, and how should you remodel it?
 
-In Neo4j's native graph storage engine, nodes and relationships are stored as raw physical memory records containing direct pointers (file offsets/memory addresses) to adjacent nodes. When traversing an edge, the engine dereferences the pointer directly in `O(1)` time without consulting any global index. Consequently, query execution time is proportional strictly to the size of the traversed subgraph, completely independent of the total volume of data stored in the database.
+An array that grows without limit (such as IoT readings, order history on a user profile, or comments on a post) will eventually hit MongoDB's 16 MB BSON document limit and will degrade write performance long before that because WiredTiger has to read and rewrite oversized documents on every update. Move those child records into their own collection with an indexed parent reference (`userId` or `postId`), or use the bucket pattern (grouping fixed-size batches, such as 100 readings per document) for time-series workloads.
 
-### In MongoDB, what is the "Unbounded Array Antipattern", and how do you decide whether to embed or reference child documents?
-The Unbounded Array Antipattern occurs when an entity embeds an array of child subdocuments that can grow indefinitely over time (such as comments on a viral post, IoT device telemetry, or user audit logs). 
+### Why does Neo4j outperform PostgreSQL on 4-hop relationship queries, and when should you avoid using it?
 
-This is fatal in MongoDB because:
-1. MongoDB enforces a hard **16 Megabyte limit** per BSON document.
-2. Growing documents force the WiredTiger storage engine to repeatedly reallocate memory and move document pages on disk, degrading write performance and causing memory fragmentation.
-
-To decide:
-- **Embed**: When the relationship is **1-to-few**, the array is strictly bounded (e.g., maximum 50 order items or 5 addresses), and child data is queried together with the parent in 90%+ of use cases.
-- **Reference**: When the relationship is **1-to-many** or **1-to-unbounded**, or when child entities are queried and updated independently.
-
-### What is a Cache Stampede (Thundering Herd Problem), and what strategies can be used in Java/Redis architectures to prevent it?
-A Cache Stampede occurs when a hot, high-traffic cached key (accessed by thousands of concurrent threads per second) expires from Redis. Because the key is missing, all concurrent requests experience a cache miss simultaneously and hammer the underlying relational database with the exact same query, causing connection pool exhaustion, CPU saturation, and database crashes.
-
-To prevent it:
-1. **Distributed Mutex Locking**: The first thread to encounter the cache miss acquires a distributed lock in Redis using `SET lock:key token NX EX 5`. Only this thread executes the database query and repopulates the cache; all other threads sleep briefly and retry the cache read.
-2. **Probabilistic Early Expiration (XFetch)**: Background worker threads calculate a random probability function based on query duration and TTL. As the key nears expiration, a worker recomputes and refreshes the cache in the background *before* the key physically expires, ensuring user requests always experience a cache hit.
+PostgreSQL evaluates each hop by probing a B-Tree index (`O(log N)` per lookup) across join tables, so cost grows with both table size and hop depth. Neo4j stores direct physical pointers between connected nodes and relationships (index-free adjacency), making each hop an `O(1)` pointer traversal whose cost depends only on the local neighborhood visited. Avoid Neo4j as a general-purpose transactional store or for global table-wide aggregations (like monthly revenue rollups), where relational or analytical databases are much simpler and faster.

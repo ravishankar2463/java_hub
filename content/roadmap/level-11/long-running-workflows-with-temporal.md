@@ -1,252 +1,338 @@
-# Long-Running Workflows with Temporal
+---
+title: "Long-Running Workflows with Temporal"
+description: "How Temporal implements durable execution for long-running Java processes using event history replay, deterministic workflow code, retriable activities, signals, durable timers, and safe workflow versioning."
+category: "level-11"
+date: "2026-10-29T10:00:00Z"
+---
 
-Consider a common enterprise business process: **Customer Loan Approval and Disbursal**.
-1. Verify customer identity via an external government API.
-2. Run credit scoring through a third-party bureau.
-3. Wait up to 5 days for a human risk officer to approve or reject the application.
-4. If approved, disburse funds via a banking clearinghouse.
-5. If disbursal fails, initiate compensating reversals across internal accounts.
-6. Send email and SMS confirmations.
+Think about what it takes to implement a multi-day business process such as customer loan approval and disbursal:
 
-How do most engineering teams implement this today?
-- They build a state machine in a relational database with 15 status flags (`PENDING_APPROVAL`, `WAITING_FOR_DOCS`, `DISBURSING`).
-- They create 5 Kafka topics and 5 microservices choreographing events back and forth.
-- They schedule a dozen Spring `@Scheduled` cron jobs polling the database every 60 seconds to check: *"Has the user been waiting more than 5 days?"*
+1. Verify customer identity against a government KYC API.
+2. Fetch a credit score from a third-party bureau.
+3. Wait up to 5 days for a human underwriter to approve or reject the application.
+4. If approved, transfer funds through a banking clearinghouse.
+5. If disbursal fails, reverse internal ledger holds and notify operations.
+6. Send email and SMS updates to the applicant.
 
-This ad-hoc architecture is notoriously brittle. If a network blip drops a Kafka message, if a server reboots mid-transaction, or if a cron job times out, the workflow gets stuck in an inconsistent state. Debugging requires joining five distributed databases and grepping through millions of log lines to reconstruct what happened.
+Without a workflow engine, teams usually assemble this out of several moving parts: a database table with a dozen status columns (`PENDING_KYC`, `WAITING_FOR_UNDERWRITER`, `DISBURSING`), several Kafka topics passing events between services, and Spring `@Scheduled` jobs polling the database every minute to check whether any application has been waiting longer than 5 days.
 
-The modern distributed systems paradigm that solves this is **Durable Execution**, pioneered by **Temporal**.
+That setup works on day one, then gets harder to reason about every quarter. A pod restarts between a database write and a Kafka publish, a cron job double-fires during a deployment, or a downstream bank API goes down for four hours. Reconstructing what happened to a single loan means correlating logs across five services and querying three databases.
+
+**Temporal** replaces that patchwork of status tables, polling jobs, and ad-hoc retry queues with **durable execution**: you write the orchestration as plain Java code, and Temporal persists every step so execution resumes cleanly after crashes, deployments, or multi-week waits.
 
 ---
 
-## What is Durable Execution?
+## Orchestration Complexity vs. Durable Execution
 
-**Durable Execution** is a programming model where code executes reliably to completion, regardless of infrastructure failures.
-
-In Temporal, you write standard, idiomatic Java code—using loops, conditionals, and standard try-catch blocks:
+With durable execution, control flow lives in ordinary Java statements—`if/else` branches, loops, and `try/catch` blocks—rather than scattered across message listeners and cron expressions:
 
 ```java
-// Conceptual Temporal Workflow in Java
+// Conceptual Temporal workflow method
 @WorkflowMethod
-public void processLoanApplication(LoanRequest request) {
-    creditCheckActivity.verifyCredit(request);
+public LoanOutcome processLoan(LoanApplication application) {
+    kycActivities.verifyIdentity(application.applicantId());
+    int creditScore = creditActivities.fetchCreditScore(application.applicantId());
 
-    // Sleep for 3 days without holding a thread or memory!
-    Workflow.sleep(Duration.ofDays(3));
-
-    // Wait for human signal via web portal
-    Workflow.await(() -> isHumanApproved || isHumanRejected);
-
-    if (isHumanApproved) {
-        disbursementActivity.disburseFunds(request);
-        notificationActivity.sendConfirmation(request);
+    if (creditScore < 620) {
+        notificationActivities.sendRejection(application.applicantId(), "Credit threshold not met");
+        return LoanOutcome.REJECTED;
     }
+
+    // Suspends without holding a JVM thread or heap memory for up to 5 days
+    boolean decisionArrived = Workflow.await(Duration.ofDays(5), () -> decisionReceived);
+
+    if (!decisionArrived) {
+        escalationActivities.escalateToSeniorUnderwriter(application.loanId());
+        return LoanOutcome.ESCALATED;
+    }
+
+    if (approved) {
+        disbursalActivities.disburseFunds(application.loanId(), application.amount());
+        notificationActivities.sendApproval(application.applicantId());
+        return LoanOutcome.DISBURSED;
+    }
+
+    notificationActivities.sendRejection(application.applicantId(), reviewerNotes);
+    return LoanOutcome.REJECTED;
 }
 ```
 
-If the Kubernetes pod executing this code is terminated by an OOM killer, if the underlying cloud VM experiences a kernel panic, or if a network partition isolates the data center on day 2 of the 3-day sleep, **the execution state is never lost**. A new worker pod on the other side of the planet picks up execution and resumes on the exact line of code where the previous worker died.
+If the Kubernetes pod running this workflow is killed by an OOM error or evicted during a cluster upgrade on day 3 of the 5-day wait, the workflow does not lose its local variables or forget that `verifyIdentity` and `fetchCreditScore` already ran. Another worker pod picks up the workflow when the timer fires or the signal arrives, reconstructs its state from persisted history, and continues on the next line.
 
 ---
 
-## Temporal Architecture: The Server vs The Worker
+## Temporal Architecture: Cluster, Workers, and Task Queues
 
-A common misconception is that Temporal runs your Java code inside the Temporal cluster. It does not.
+A common early misunderstanding is thinking that Temporal executes your Java code inside the Temporal Server. It does not. Your compiled application code stays inside your own services (called **Workers**), inside your own VPC and Kubernetes clusters.
 
 ```mermaid
 flowchart TD
-    subgraph TemporalCluster["Temporal Cluster (Orchestration Engine)"]
+    subgraph TemporalCluster["Temporal Service Cluster"]
         Frontend["Frontend Service (gRPC)"]
-        History["History Service (State Transitions & Replay Log)"]
+        History["History Service (Event Log & Timers)"]
         Matching["Matching Service (Task Queues)"]
-        DB[("Cluster Persistence (PostgreSQL / Cassandra / MySQL)")]
-        
+        DB[("Persistence Store (PostgreSQL / Cassandra)")]
+
         Frontend --> History
         History --> Matching
         History --> DB
     end
 
-    subgraph UserWorkers["Your Java Application (Kubernetes Pods)"]
-        Worker1["Java Worker 1 (Workflow & Activity Executors)"]
-        Worker2["Java Worker 2 (Workflow & Activity Executors)"]
+    subgraph AppCluster["Your Java Services (Kubernetes)"]
+        Worker1["Java Worker Pod 1"]
+        Worker2["Java Worker Pod 2"]
     end
 
-    subgraph ExternalWorld["External Systems"]
+    subgraph External["External Dependencies"]
         BankAPI["Banking Clearinghouse"]
-        EmailAPI["SendGrid Email"]
+        EmailAPI["Email Provider"]
     end
 
-    Worker1 <-->|"Long-Poll gRPC Task Queues"| Matching
-    Worker2 <-->|"Long-Poll gRPC Task Queues"| Matching
+    Worker1 <-->|"Long-poll gRPC Task Queues"| Matching
+    Worker2 <-->|"Long-poll gRPC Task Queues"| Matching
 
     Worker1 --> BankAPI
     Worker2 --> EmailAPI
 ```
 
-### The Architectural Separation of Concerns
+The responsibilities are cleanly separated:
 
-1. **Temporal Cluster:** The state orchestrator. It manages task queues, tracks workflow execution history, schedules timers, and coordinates task dispatching. The cluster never executes your business code; it only stores immutable event history logs.
-2. **Temporal Workers:** Your Spring Boot microservices. They run your compiled Java code, long-poll the Temporal cluster for tasks over gRPC, execute activities, and report results back to the cluster.
-3. **Task Queues:** Dynamic queues hosted by the Temporal cluster where tasks wait to be picked up by available workers.
+- **Temporal Cluster (Workflow Engine):** Stores immutable workflow event histories, manages durable timers, tracks activity retries, and routes tasks through task queues. It never runs business logic and never needs network access to your internal databases or third-party APIs.
+- **Task Queues:** Lightweight, dynamically created queues hosted by Temporal's Matching Service. Workflows and Activities are dispatched onto named task queues (such as `"loan-processing-queue"`). Because workers pull work via gRPC long-polling, you do not need to open inbound firewall ports to workers, and load balancing scales naturally as you add pods.
+- **Workers:** Processes inside your Java or Spring Boot application that host your Workflow and Activity implementations, poll Task Queues, execute code, and report commands/results back to the cluster.
 
----
+Here is how a Java service connects to Temporal and registers a worker on a Task Queue:
 
-## Workflows vs Activities: The Two Core Pillars
+```java
+package com.example.loan.worker;
 
-Temporal strictly bifurcates code into **Workflows** and **Activities**:
+import com.example.loan.activity.LoanActivitiesImpl;
+import com.example.loan.workflow.LoanApprovalWorkflowImpl;
+import io.temporal.client.WorkflowClient;
+import io.temporal.serviceclient.WorkflowServiceStubs;
+import io.temporal.worker.Worker;
+import io.temporal.worker.WorkerFactory;
 
-```mermaid
-flowchart LR
-    subgraph Workflow["Workflow (Orchestrator)"]
-        WF_Code["Deterministic Orchestration<br/>- Branching logic (if/else)<br/>- State machine transitions<br/>- Durable Timers (sleep)<br/>- Sagas & Compensations"]
-    end
+public class LoanWorkerBootstrap {
 
-    subgraph Activities["Activities (Execution Engines)"]
-        A1["Activity 1: REST call to Stripe"]
-        A2["Activity 2: SQL write to PostgreSQL"]
-        A3["Activity 3: File generation to S3"]
-    end
+    public static final String LOAN_TASK_QUEUE = "loan-processing-queue";
 
-    Workflow -->|"Invokes with automatic retries"| A1
-    Workflow -->|"Invokes with timeouts"| A2
-    Workflow -->|"Invokes with circuit breaker"| A3
+    public static void main(String[] args) {
+        WorkflowServiceStubs service = WorkflowServiceStubs.newLocalServiceStubs();
+        WorkflowClient client = WorkflowClient.newInstance(service);
+
+        WorkerFactory factory = WorkerFactory.newInstance(client);
+        Worker worker = factory.newWorker(LOAN_TASK_QUEUE);
+
+        // Register workflow implementation class (instantiated per workflow execution)
+        worker.registerWorkflowImplementationTypes(LoanApprovalWorkflowImpl.class);
+
+        // Register stateless, thread-safe activity implementations
+        worker.registerActivitiesImplementations(new LoanActivitiesImpl());
+
+        // Starts polling the task queue for workflow and activity tasks
+        factory.start();
+    }
+}
 ```
 
-### Workflows (Pure, Deterministic Orchestration)
-A Workflow is the coordinator. Its job is to orchestrate the flow of control, evaluate business decisions, and invoke activities.
-- **The Golden Rule:** Workflows must be **100% deterministic**. Given the exact same inputs and history of events, a workflow must execute the exact same sequence of statements.
-
-### Activities (Non-Deterministic Side Effects)
-An Activity performs real-world I/O: calling downstream REST APIs, querying databases, generating PDFs, or dispatching emails.
-- Activities can fail transiently. Temporal wraps activities with declarative **RetryOptions** (exponential backoff, jitter, maximum attempts) and comprehensive timeouts (heartbeats, schedule-to-close, start-to-close).
+If you use `temporal-spring-boot-starter`, Spring Boot handles `WorkflowServiceStubs`, `WorkflowClient`, and `WorkerFactory` auto-configuration based on `spring.temporal.*` properties and `@WorkflowImpl` / `@ActivityImpl` annotations.
 
 ---
 
-## The Replay Engine and the Determinism Law
+## Event History Replay and Deterministic Java Workflows
 
-How does Temporal recover a workflow's in-memory variables and execution position when a worker crashes, without saving the JVM's physical thread stack?
+Temporal splits your code into two distinct building blocks:
 
-It uses **Event Sourcing Replay**:
+- **Workflows:** Pure, deterministic orchestration logic. They decide what to run, in what order, when to sleep, and how to recover on error.
+- **Activities:** Regular Java methods that perform non-deterministic I/O (HTTP calls, SQL queries, Kafka publishes, file writes).
+
+Temporal does not serialize JVM thread stacks or heap memory to disk. Instead, it uses **event sourcing replay**. Every time a workflow schedules an activity, receives an activity result, starts a timer, or receives a signal, Temporal appends an immutable event to that workflow's **Event History**.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Worker1 as Worker Pod 1 (Dies!)
-    participant Cluster as Temporal History Service
-    participant Worker2 as Worker Pod 2 (New)
+    participant W1 as "Worker Pod 1"
+    participant Cluster as "Temporal History Service"
+    participant W2 as "Worker Pod 2"
 
-    Worker1->>Cluster: WorkflowStarted
-    Worker1->>Cluster: ScheduleActivityTask("VerifyCredit")
-    Cluster-->>Worker1: ActivityTaskCompleted(Score: 780)
-    Note over Worker1: Worker 1 suddenly OOMKilled by Kubernetes!
+    W1->>Cluster: "WorkflowExecutionStarted"
+    W1->>Cluster: "ScheduleActivityTask (fetchCreditScore)"
+    Cluster-->>W1: "ActivityTaskCompleted (score = 780)"
+    Note over W1: Worker Pod 1 crashes (OOMKilled)
 
-    Note over Worker2: Worker 2 takes over task from queue
-    Cluster->>Worker2: Replay Event History: [WorkflowStarted, VerifyCredit Completed (780)]
-    Note over Worker2: Replay Engine runs Java code from line 1!<br/>When it hits verifyCredit(), it sees the result in history!<br/>It SKIPS re-executing the activity and instantly restores state!
-    Worker2->>Cluster: ScheduleActivityTask("DisburseFunds")
+    Note over W2: Worker Pod 2 polls task queue
+    Cluster->>W2: "Send Event History [Started, fetchCreditScore = 780]"
+    Note over W2: SDK replays workflow method from line 1
+    Note over W2: fetchCreditScore() returns 780 from history without re-running HTTP call
+    W2->>Cluster: "ScheduleActivityTask (disburseFunds)"
 ```
 
-### How Replay Works:
-1. Every time a workflow schedules a timer, awaits a signal, or completes an activity, the Temporal cluster records an immutable event in the workflow's history log.
-2. When a worker crashes and a new worker takes over, Temporal feeds the entire **Event History** to the new worker.
-3. The new worker executes the Java workflow method **from the very beginning (line 1)**.
-4. When the code encounters an activity invocation that already completed in history, the Temporal SDK intercepts the call, retrieves the return value from the history log, and returns it immediately **without re-executing the activity**.
-5. Within milliseconds, the code replays through past events and resumes execution at the exact line that was pending when the crash occurred.
+When Worker Pod 2 takes over, the Temporal Java SDK runs your `@WorkflowMethod` from line 1. Whenever execution reaches an activity call that already completed in the Event History, the SDK intercepts the call and immediately returns the recorded result instead of invoking the activity again. Within a few milliseconds, all local variables and control-flow positions are reconstructed, and the worker executes the next unrecorded command.
 
-### The Strict Rules of Workflow Determinism
+### Concrete Rules for Deterministic Workflows
 
-Because replay relies on identical code execution paths, **you must never do the following inside a `@WorkflowMethod`**:
+Because replay re-executes your workflow method from the start and compares the commands your code emits against the recorded Event History, **workflow code must always take the exact same execution path for a given history**.
 
-- Never call `System.currentTimeMillis()` or `Instant.now()`. Use `Workflow.currentTimeMillis()` instead (which returns the recorded event timestamp during replay).
-- Never call `UUID.randomUUID()`. Use `Workflow.randomUUID()` (which generates deterministic pseudorandom values recorded in history).
-- Never execute database queries, HTTP calls, or file I/O directly in a workflow (delegate them to an Activity).
-- Never use standard Java threads (`new Thread()`, `Executors`). Use `Async.function()` or `Workflow.newPromise()`.
-- Never modify global or static mutable state.
+Never call standard non-deterministic Java APIs inside a `@WorkflowMethod`:
 
-Violating these rules causes Temporal's validation engine to detect a mismatch between history and code, throwing a fatal `NonDeterministicWorkflowException`.
+| Avoid in Workflow Code | Use Instead in Temporal | Why |
+| :--- | :--- | :--- |
+| `Instant.now()` / `System.currentTimeMillis()` | `Workflow.currentTimeMillis()` | System clock changes between original run and replay |
+| `UUID.randomUUID()` / `new Random()` | `Workflow.randomUUID()` / `Workflow.newRandom()` | Unseeded randomness produces different IDs on replay |
+| `Thread.sleep(...)` | `Workflow.sleep(Duration)` | Blocks an OS thread and is not durable across crashes |
+| `new Thread(...)` / `CompletableFuture.supplyAsync` | `Async.function(...)` / `Workflow.newPromise()` | External threads break Temporal's deterministic scheduler |
+| Direct JDBC, JPA `@Repository`, or `RestClient` | Invoke an `@ActivityInterface` stub | DB rows and HTTP responses change over time |
+| `LoggerFactory.getLogger(...)` | `Workflow.getLogger(...)` | Suppresses duplicate log lines during history replay |
+| Iterating over `HashSet` / `HashMap` to schedule work | `LinkedHashMap`, `TreeMap`, or sorted `List` | Unordered iteration can schedule activities in a different order |
+
+Consider what happens if you ignore the clock rule:
+
+```java
+// Broken: non-deterministic workflow code
+public void processInvoice(Invoice invoice) {
+    // On original run (Monday), this is false -> schedules sendReminder()
+    // On replay (Wednesday after worker restart), this is true -> schedules applyLateFee()
+    if (Instant.now().isAfter(invoice.dueDate())) {
+        billingActivities.applyLateFee(invoice.id());
+    } else {
+        billingActivities.sendReminder(invoice.id());
+    }
+}
+```
+
+When the worker replays the workflow on Wednesday, the Event History says the first command was `ScheduleActivityTask(sendReminder)`, while the replayed code tries to emit `ScheduleActivityTask(applyLateFee)`. Temporal detects the mismatch and throws `io.temporal.worker.NonDeterministicException`, failing the workflow task so it does not corrupt state.
+
+Replacing `Instant.now()` with `Instant.ofEpochMilli(Workflow.currentTimeMillis())` fixes the bug because `Workflow.currentTimeMillis()` returns the timestamp recorded in the workflow task's history event.
 
 ---
 
-## Implementing the Saga Pattern with Temporal
+## Activity Options, Retries, and Saga Compensations
 
-In distributed architectures, multi-service transactions cannot use database 2-phase commit. Instead, we use the **Saga Pattern**: execute a series of forward local transactions, and if any step fails, execute compensating transactions in reverse order to restore consistency.
-
-Writing Sagas by hand with event choreography is complex and error-prone. In Temporal, the Java SDK provides a built-in `Saga` orchestrator:
+Real-world downstream services time out, return HTTP 503, and drop TCP connections. In Temporal, you handle transient failures declaratively with `ActivityOptions` and `RetryOptions` rather than writing manual retry loops.
 
 ```java
-package com.javahub.temporal.workflow;
+package com.example.order.activity;
 
-import com.javahub.temporal.activity.BankingActivities;
+import io.temporal.activity.ActivityInterface;
+import io.temporal.activity.ActivityMethod;
+
+import java.math.BigDecimal;
+import java.util.UUID;
+
+@ActivityInterface
+public interface FulfillmentActivities {
+
+    @ActivityMethod
+    void reserveInventory(UUID orderId, String sku, int quantity);
+
+    @ActivityMethod
+    void releaseInventory(UUID orderId);
+
+    @ActivityMethod
+    String chargeCard(UUID orderId, UUID customerId, BigDecimal amount);
+
+    @ActivityMethod
+    void refundCard(String chargeId);
+
+    @ActivityMethod
+    void createShipment(UUID orderId, String destination);
+}
+```
+
+Notice two practical details when configuring `ActivityOptions` in the workflow:
+
+1. **Always set `startToCloseTimeout` (or `scheduleToCloseTimeout`):** Temporal requires a timeout on every activity so a wedged worker is detected and retried on another pod. For long-running activities (like processing a 500 MB video), also set a `heartbeatTimeout` and call `Activity.getExecutionContext().heartbeat(progress)` periodically.
+2. **Mark permanent business errors as non-retryable:** If a credit card is declined for insufficient funds, retrying 50 times will not help. Configure `setDoNotRetry(...)` or throw `ApplicationFailure.newNonRetryableFailure(...)` from the activity so Temporal stops retrying immediately and hands control to your `catch` block.
+
+Temporal's Java SDK also ships with a built-in `Saga` helper for registering compensating activities and running them in reverse order on failure:
+
+```java
+package com.example.order.workflow;
+
+import com.example.order.activity.FulfillmentActivities;
+import io.temporal.activity.ActivityOptions;
+import io.temporal.common.RetryOptions;
 import io.temporal.failure.ActivityFailure;
 import io.temporal.workflow.Saga;
 import io.temporal.workflow.Workflow;
 import org.slf4j.Logger;
 
+import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.UUID;
 
 public class OrderFulfillmentWorkflowImpl implements OrderFulfillmentWorkflow {
 
     private static final Logger log = Workflow.getLogger(OrderFulfillmentWorkflowImpl.class);
 
-    private final BankingActivities activities = Workflow.newActivityStub(
-            BankingActivities.class,
-            Workflow.newActivityOptionsBuilder()
+    private final FulfillmentActivities activities = Workflow.newActivityStub(
+            FulfillmentActivities.class,
+            ActivityOptions.newBuilder()
                     .setStartToCloseTimeout(Duration.ofSeconds(30))
+                    .setRetryOptions(RetryOptions.newBuilder()
+                            .setInitialInterval(Duration.ofSeconds(1))
+                            .setBackoffCoefficient(2.0)
+                            .setMaximumInterval(Duration.ofMinutes(1))
+                            .setMaximumAttempts(5)
+                            .setDoNotRetry("CardDeclinedException", "InsufficientStockException")
+                            .build())
                     .build()
     );
 
     @Override
     public void fulfillOrder(OrderRequest request) {
-        // 1. Configure the Saga orchestrator
-        Saga.Options sagaOptions = new Saga.Options.Builder()
-                .setParallelCompensation(false) // Compensate in strict reverse sequential order
-                .build();
-        Saga saga = new Saga(sagaOptions);
+        Saga saga = new Saga(new Saga.Options.Builder()
+                .setParallelCompensation(false) // Run compensations in strict reverse order
+                .setContinueWithError(true)     // Attempt remaining compensations even if one fails
+                .build());
 
         try {
-            // Step 1: Reserve Inventory
-            activities.reserveInventory(request.orderId(), request.items());
-            // Register compensation immediately: what to run if downstream steps fail!
-            saga.addCompensation(() -> activities.cancelInventoryReservation(request.orderId()));
+            activities.reserveInventory(request.orderId(), request.sku(), request.quantity());
+            saga.addCompensation(activities::releaseInventory, request.orderId());
 
-            // Step 2: Authorize Payment
-            activities.chargeCustomer(request.customerId(), request.totalAmount());
-            saga.addCompensation(() -> activities.refundPayment(request.customerId(), request.totalAmount()));
+            String chargeId = activities.chargeCard(
+                    request.orderId(), request.customerId(), request.totalAmount());
+            saga.addCompensation(activities::refundCard, chargeId);
 
-            // Step 3: Dispatch Shipping
-            activities.dispatchShipment(request.orderId(), request.shippingAddress());
+            activities.createShipment(request.orderId(), request.shippingAddress());
+            log.info("Order {} fulfilled", request.orderId());
 
-            log.info("Order {} fulfilled successfully!", request.orderId());
-
-        } catch (ActivityFailure e) {
-            log.error("Workflow failed at step! Initiating automated compensating rollback.", e);
-            // 2. Automatically triggers all registered compensations in reverse order!
+        } catch (ActivityFailure failure) {
+            log.warn("Order {} failed; running saga compensations", request.orderId(), failure);
             saga.compensate();
-            throw e;
+            throw failure;
         }
     }
+
+    public record OrderRequest(UUID orderId, UUID customerId, String sku, int quantity,
+                               BigDecimal totalAmount, String shippingAddress) {}
 }
 ```
 
-If Step 3 (Shipping) fails after 5 retries, the `catch` block catches the `ActivityFailure`, invokes `saga.compensate()`, and Temporal automatically runs `refundPayment()` followed by `cancelInventoryReservation()`.
+Because `releaseInventory` and `refundCard` are themselves Temporal activities, they automatically inherit durable retries. Even if the payment gateway is briefly unreachable during rollback, Temporal keeps retrying `refundCard` according to its retry policy until it succeeds.
 
 ---
 
-## Asynchronous Human-in-the-Loop: Signals and Queries
+## Signals, Queries, and Durable Timers
 
-Many enterprise processes require human input: a fraud analyst approving a suspicious transfer, an author reviewing an article draft, or a manager authorizing an expense report.
+Long-running workflows rarely run straight through without external input. A manager needs to approve an expense report, a customer might cancel an order before shipment, or a web UI needs to display the current step of an onboarding pipeline.
 
-Temporal handles this natively using **Signals** and **Queries**:
+Temporal handles external interaction with two annotations on the `@WorkflowInterface`:
 
-- **Signal:** An asynchronous write into a running workflow from an external system (e.g., REST controller).
-- **Query:** A synchronous read to inspect a running workflow's current in-memory state without modifying history.
+- **`@SignalMethod`:** An asynchronous, durable message sent into a running workflow. Signals are recorded in Event History and can mutate workflow fields or wake up a `Workflow.await(...)` condition.
+- **`@QueryMethod`:** A synchronous, read-only inspection of a workflow's current state. Queries must never mutate state or schedule activities, and they are not appended to Event History.
 
 ```java
-package com.javahub.temporal.workflow;
+package com.example.expense.workflow;
 
 import io.temporal.workflow.QueryMethod;
 import io.temporal.workflow.SignalMethod;
 import io.temporal.workflow.WorkflowInterface;
 import io.temporal.workflow.WorkflowMethod;
+
+import java.math.BigDecimal;
+import java.util.UUID;
 
 @WorkflowInterface
 public interface ExpenseApprovalWorkflow {
@@ -254,119 +340,186 @@ public interface ExpenseApprovalWorkflow {
     @WorkflowMethod
     void processExpense(ExpenseClaim claim);
 
-    // Human-in-the-loop signal from frontend manager dashboard
     @SignalMethod
-    void submitManagerDecision(boolean approved, String reviewerNotes);
+    void recordManagerDecision(boolean approved, String reviewerNotes);
 
-    // Synchronous read to check current state from REST API
     @QueryMethod
-    String getCurrentStatus();
+    ExpenseStatus getStatus();
+
+    record ExpenseClaim(UUID claimId, UUID employeeId, BigDecimal amount) {}
+    record ExpenseStatus(String stage, String reviewerNotes) {}
 }
 ```
 
-### Implementing Signals and Timers:
+Inside the workflow implementation, `Workflow.await(Duration, Supplier<Boolean>)` combines a durable timer with a signal predicate. If the signal arrives on day 2, execution resumes immediately. If 7 days pass with no signal, the timer fires and the workflow escalates:
 
 ```java
-package com.javahub.temporal.workflow;
+package com.example.expense.workflow;
 
+import com.example.expense.activity.ExpenseActivities;
+import io.temporal.activity.ActivityOptions;
 import io.temporal.workflow.Workflow;
+
 import java.time.Duration;
 
 public class ExpenseApprovalWorkflowImpl implements ExpenseApprovalWorkflow {
 
-    private boolean isApproved = false;
+    private final ExpenseActivities activities = Workflow.newActivityStub(
+            ExpenseActivities.class,
+            ActivityOptions.newBuilder()
+                    .setStartToCloseTimeout(Duration.ofSeconds(20))
+                    .build()
+    );
+
     private boolean decisionReceived = false;
-    private String status = "PENDING_MANAGER_REVIEW";
+    private boolean approved = false;
+    private String reviewerNotes = "";
+    private String stage = "PENDING_MANAGER_REVIEW";
 
     @Override
     public void processExpense(ExpenseClaim claim) {
-        // Wait up to 7 days for manager to click Approve/Reject in web portal!
+        activities.notifyManager(claim.claimId());
+
+        // Durable wait: consumes zero worker threads while suspended
         boolean signalArrived = Workflow.await(
                 Duration.ofDays(7),
                 () -> decisionReceived
         );
 
         if (!signalArrived) {
-            // Manager timed out after 7 days: Auto-escalate to VP!
-            status = "ESCALATED_TO_VP";
-            escalationActivity.escalateToVP(claim);
+            stage = "ESCALATED_TO_VP";
+            activities.escalateToVp(claim.claimId());
             return;
         }
 
-        if (isApproved) {
-            status = "APPROVED";
-            accountingActivity.reimburseEmployee(claim);
+        if (approved) {
+            stage = "REIMBURSED";
+            activities.reimburseEmployee(claim.employeeId(), claim.amount());
         } else {
-            status = "REJECTED";
-            notificationActivity.sendRejectionEmail(claim);
+            stage = "REJECTED";
+            activities.notifyEmployeeRejected(claim.employeeId(), reviewerNotes);
         }
     }
 
     @Override
-    public void submitManagerDecision(boolean approved, String reviewerNotes) {
-        this.isApproved = approved;
+    public void recordManagerDecision(boolean approved, String reviewerNotes) {
+        this.approved = approved;
+        this.reviewerNotes = reviewerNotes;
         this.decisionReceived = true;
     }
 
     @Override
-    public String getCurrentStatus() {
-        return this.status;
+    public ExpenseStatus getStatus() {
+        return new ExpenseStatus(stage, reviewerNotes);
     }
 }
 ```
 
-`Workflow.await(Duration.ofDays(7), ...)` does not block a thread. The worker suspends execution, frees all resources, and the workflow state rests peacefully on disk in the Temporal cluster until either the 7-day timer fires or the manager submits a signal.
+From a Spring Boot REST controller, you interact with the running workflow using its deterministic business ID (for example, `"expense-" + claimId`):
+
+```java
+package com.example.expense.api;
+
+import com.example.expense.workflow.ExpenseApprovalWorkflow;
+import io.temporal.client.WorkflowClient;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/expenses")
+public class ExpenseController {
+
+    private final WorkflowClient workflowClient;
+
+    public ExpenseController(WorkflowClient workflowClient) {
+        this.workflowClient = workflowClient;
+    }
+
+    @PostMapping("/{claimId}/decision")
+    public void submitDecision(@PathVariable UUID claimId, @RequestBody DecisionRequest body) {
+        ExpenseApprovalWorkflow workflow = workflowClient.newWorkflowStub(
+                ExpenseApprovalWorkflow.class,
+                "expense-" + claimId
+        );
+        // Delivers durable signal asynchronously to the running workflow
+        workflow.recordManagerDecision(body.approved(), body.notes());
+    }
+
+    @GetMapping("/{claimId}/status")
+    public ExpenseApprovalWorkflow.ExpenseStatus getStatus(@PathVariable UUID claimId) {
+        ExpenseApprovalWorkflow workflow = workflowClient.newWorkflowStub(
+                ExpenseApprovalWorkflow.class,
+                "expense-" + claimId
+        );
+        return workflow.getStatus();
+    }
+
+    public record DecisionRequest(boolean approved, String notes) {}
+}
+```
 
 ---
 
-## Senior Engineer Interview Crucible
+## Safe Workflow Evolution: Avoiding `NonDeterministicException`
 
-### How does Temporal's Event History Replay restore a workflow's execution state after a worker crashes without checkpointing JVM heap memory?
+Because a Temporal workflow can remain open for days, months, or even years (think annual subscription billing), deploying a new version of your Java code creates a versioning problem.
 
-Temporal achieves durable state recovery without saving heavyweight JVM heap memory dumps by using **deterministic event sourcing replay**:
+Suppose 10,000 loan workflows are currently paused at `Workflow.await(Duration.ofDays(5), ...)`. Today you deploy a code change that adds a new `fraudCheckActivity.checkFraud(...)` call *before* `Workflow.await(...)`. When one of those existing 10,000 workflows wakes up tomorrow, the worker replays its Event History from line 1. The new code tries to schedule `fraudCheckActivity`, but the recorded history has a timer start at that position. Replay fails with `NonDeterministicException`.
 
-1. During execution, every external interaction (activity scheduling, activity completion, timer start, signal receipt) is recorded as an immutable event in the workflow's **Event History** on the Temporal cluster.
-2. When a worker pod crashes, the cluster detects the timeout and reassigns the workflow execution to an available worker.
-3. The new worker loads the complete Event History and begins executing the Java workflow method **from the very first line of code**.
-4. When the code encounters an activity or timer call that already completed in history, the Temporal Java SDK intercepts the call, suppresses actual network execution, and immediately injects the recorded return value from the history log.
-5. In milliseconds, the code replays through historical execution paths and reconstructs all local variables, loop counters, and call stacks in memory, resuming forward execution from the point of failure.
+Temporal offers two main mechanisms to evolve workflow code safely:
+
+### Patching with `Workflow.getVersion`
+
+`Workflow.getVersion(changeId, minSupported, maxSupported)` records a version marker in Event History for new executions while letting older executions replay their original branch:
+
+```java
+public void processExpense(ExpenseClaim claim) {
+    activities.notifyManager(claim.claimId());
+
+    int version = Workflow.getVersion("add-compliance-audit", Workflow.DEFAULT_VERSION, 1);
+    if (version == 1) {
+        // Only new workflow runs execute this activity
+        activities.runComplianceAudit(claim.claimId());
+    }
+
+    boolean signalArrived = Workflow.await(Duration.ofDays(7), () -> decisionReceived);
+    // ...
+}
+```
+
+- **Existing workflows (started before the deploy):** Their history does not contain the `"add-compliance-audit"` marker, so `Workflow.getVersion` returns `Workflow.DEFAULT_VERSION` (`-1`), skipping the new activity and replaying cleanly.
+- **New workflows (started after the deploy):** Temporal writes a version marker `1` into Event History and executes `runComplianceAudit`. On any future replay of those workflows, `Workflow.getVersion` returns `1`.
+
+Once all old executions have completed, you can bump `minSupported` to `1` and eventually remove the old branch.
+
+### Worker Versioning and Continue-As-New
+
+For teams deploying frequently or making larger structural rewrites, Temporal also supports **Worker Versioning** (pinning workflow executions to specific worker Build IDs so old executions continue routing to workers running the old artifact while new executions start on the latest Build ID).
+
+One more production limit to plan for: Temporal stores the full Event History for each execution and enforces soft/hard history limits (50,000 events / 50 MB). For perpetually running workflows such as monthly subscription billing, call `Workflow.continueAsNew(nextState)` at the end of each billing cycle. That atomically closes the current history and starts a fresh execution carrying forward the compact state.
 
 ---
 
-### Why is invoking `System.currentTimeMillis()` or injecting a standard Spring `@Repository` inside a Temporal `@WorkflowMethod` strictly forbidden?
+## Interview Questions
 
-Workflows must be **100% deterministic** because they are frequently replayed from history. 
+### How does Temporal restore a workflow's execution state after a worker crashes without serializing JVM heap memory?
 
-If a workflow method invokes `System.currentTimeMillis()`:
-- During the first execution, it returns `1793262000000`.
-- During replay 2 days later, it returns `1793434800000`.
-- If this timestamp was used in an `if (elapsed > 1000)` statement, the replay would take an entirely different code branch than the original execution, violating execution history and throwing `NonDeterministicWorkflowException`.
+Temporal uses deterministic event sourcing replay. Every external interaction (scheduling an activity, receiving an activity output, starting a timer, accepting a signal) is persisted as an immutable event in the workflow's Event History on the Temporal cluster. When a worker crashes and another worker picks up the task, the SDK runs the workflow method from the first line using that Event History. Whenever execution hits a previously completed activity or timer, the SDK supplies the recorded result from history without re-running the side effect, rebuilding local variables and resuming right where the dead worker left off.
 
-Similarly, injecting a Spring `@Repository` or performing HTTP calls directly inside a workflow method introduces non-determinism: database rows change and external services can return different responses during replay. All non-deterministic operations (I/O, database access, external APIs, clock checks) must reside strictly within `@ActivityInterface` implementations, where results are recorded in the event history and replayed deterministically.
+### Why does calling `Instant.now()` or querying a Spring `@Repository` directly inside a `@WorkflowMethod` cause `NonDeterministicException`?
 
----
+Both operations can return different values during replay than they returned during the initial run. If an `if` condition branches on `Instant.now()` or a database column that was later updated, the replaying worker may attempt to schedule a different activity or timer than the one recorded in Event History. Temporal detects that the emitted command sequence diverges from the history log and throws `NonDeterministicException`. Put all database queries, HTTP calls, and external reads inside `@ActivityInterface` methods, and use `Workflow.currentTimeMillis()`, `Workflow.randomUUID()`, and `Workflow.sleep()` inside workflow code.
 
-### How does `Workflow.sleep(Duration.ofDays(30))` work under the hood without consuming OS threads or JVM memory for 30 days?
+### How does `Workflow.sleep(Duration.ofDays(30))` work without holding a JVM thread for 30 days?
 
-When `Workflow.sleep(Duration.ofDays(30))` is invoked:
-1. The Temporal Java SDK generates a `StartTimer` command with a 30-day duration and sends it to the Temporal cluster over gRPC.
-2. The cluster records a `TimerStarted` event in the workflow's history log and assigns a durable timer in its internal persistence layer.
-3. The worker completes its current task pass and **releases the Java thread back to the worker thread pool**. The workflow's in-memory state is garbage-collected from the worker JVM. Zero CPU cycles, zero OS threads, and zero heap memory are consumed.
-4. Exactly 30 days later, the Temporal cluster's internal timer service fires, appends a `TimerFired` event to the history, and enqueues a new workflow task.
-5. An available worker picks up the task, replays the event history up to the timer, and continues execution past the `Workflow.sleep()` line.
+Calling `Workflow.sleep(Duration.ofDays(30))` emits a `StartTimer` command to the Temporal cluster. The cluster appends a `TimerStarted` event to the workflow's history and persists a durable timer in its database. The worker immediately finishes the workflow task and returns its Java thread to the pool; the workflow object can be evicted from the worker's in-memory cache with zero CPU or thread overhead. Thirty days later, the cluster fires the timer, appends `TimerFired`, and places a new workflow task on the Task Queue for any available worker to replay and continue.
 
----
+### When should you reach for Temporal instead of plain Kafka choreography?
 
-### Contrast Choreography (event-driven Kafka choreography) with Orchestration (Temporal Durable Execution). When does choreography become an unmaintainable anti-pattern?
-
-- **Event Choreography (Decentralized Pub/Sub):** Each microservice listens to incoming Kafka events, executes its business logic, and emits a new event for the next service to consume. There is no central coordinator.
-- **Orchestration (Temporal Durable Execution):** A centralized workflow explicitly dictates the execution order, timeouts, conditional branches, and compensations across services.
-
-**When Choreography Becomes an Anti-Pattern:**
-Choreography works well for simple, decoupled 2-step event notifications (e.g., `UserRegistered` -> `SendWelcomeEmail`). However, when applied to complex multi-step business transactions (like loans, fulfillment, or multi-day approval sagas), it degrades into an unmaintainable architectural mess known as **Distributed Spaghetti**:
-1. **Hidden Business Logic:** No single engineer or codebase knows the complete end-to-end business flow. It is implicitly scattered across 10 different Kafka consumers and configuration files.
-2. **Brittle Timeout and Failure Handling:** Implementing a business rule like *"If Service C doesn't reply within 48 hours, cancel Service A and alert Service B"* in pure choreography requires building custom state stores, timer tables, and compensator topics in every single microservice.
-3. **Observability Nightmares:** Tracking the current progress of a single customer order requires tracing distributed trace IDs across dozens of asynchronous topics.
-
-Temporal replaces choreography with an explicit, readable, code-defined workflow where timeouts, retries, and saga rollbacks are clearly expressed in a single, type-safe Java class.
-
+Kafka choreography is a good fit for loosely coupled pub/sub notifications with two or three steps, such as emitting a `UserSignedUp` event so separate services send a welcome email and update an analytics warehouse. Once a business process spans many steps, involves multi-day timers, human approvals, conditional branching, or strict Saga compensations, pure choreography scatters the workflow across multiple repositories and custom polling tables. Temporal keeps the orchestration readable in one codebase with built-in retries, timeouts, timers, and execution history inspection.

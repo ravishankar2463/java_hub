@@ -1,94 +1,114 @@
 ---
 title: "SOLID Principles Basics"
-description: "Master the foundational object-oriented heuristics: SRP, OCP, LSP, ISP, and DIP. Learn how senior architects build resilient domain boundaries without over-engineering."
+description: "A practical guide to SRP, OCP, LSP, ISP, and DIP in Java, with before-and-after refactorings, real failure modes, and honest guidance on when not to add another abstraction."
 category: "level-6"
 date: "2026-10-29T10:00:00Z"
 ---
 
-Every software engineer has walked into a legacy codebase where touching three lines of code in the checkout controller breaks the PDF invoice generator, corrupts database transactions, and causes twenty unit tests to fail.
+In a codebase that has grown without clear boundaries, small changes start causing unrelated failures. Editing a checkout flow breaks invoice formatting, changing an email template forces you to retest tax calculations, and every unit test needs half a dozen mocks just to instantiate one service.
 
-This fragility is known as **code rot**. It is not caused by lack of effort; it is caused by uncontrolled coupling and misplaced responsibilities.
+That kind of fragility usually comes from misplaced responsibilities and tight coupling between business rules and infrastructure. In the early 2000s, Robert C. Martin gathered five object-oriented design principles that Michael Feathers later organized under the acronym **SOLID**:
 
-In the early 2000s, Robert C. Martin ("Uncle Bob") curated five foundational object-oriented design heuristics, later popularized by Michael Feathers under the acronym **SOLID**:
 - **S**: Single Responsibility Principle (SRP)
 - **O**: Open/Closed Principle (OCP)
 - **L**: Liskov Substitution Principle (LSP)
 - **I**: Interface Segregation Principle (ISP)
 - **D**: Dependency Inversion Principle (DIP)
 
-SOLID principles are not dogmatic laws that require creating twenty interfaces for a ten-line script. They are **defensive heuristics** designed to create clear seams, isolate business policy from infrastructure details, and ensure that your codebase can absorb continuous business change without collapsing.
+Treat SOLID as a set of design heuristics rather than rigid rules. They help you place clean boundaries where code is likely to change, keep core business logic independent of databases and third-party APIs, and catch risky inheritance hierarchies early. Applied blindly, they also have a cost: extra files, extra indirection, and harder navigation. Knowing both how to apply each principle and where to stop is what makes them useful in real Java projects.
 
 ```mermaid
 flowchart TD
-    subgraph "The SOLID Architecture Symphony"
-        SRP["SRP: Single Responsibility<br/>(One Reason to Change / One Actor)"]
-        OCP["OCP: Open / Closed<br/>(Extensible via Polymorphism)"]
-        LSP["LSP: Liskov Substitution<br/>(Subtypes Honor Behavioral Contracts)"]
-        ISP["ISP: Interface Segregation<br/>(Lean, Client-Focused Role Interfaces)"]
-        DIP["DIP: Dependency Inversion<br/>(High-Level Policy Owns the Seams)"]
+    subgraph "How the SOLID Principles Connect"
+        SRP["SRP: Single Responsibility<br/>(One source of change per module)"]
+        OCP["OCP: Open / Closed<br/>(Extend behavior without editing core logic)"]
+        LSP["LSP: Liskov Substitution<br/>(Subtypes honor base contracts)"]
+        ISP["ISP: Interface Segregation<br/>(Small, client-focused interfaces)"]
+        DIP["DIP: Dependency Inversion<br/>(Core policy owns the abstractions)"]
     end
 
-    SRP -->|Isolates Changes| OCP
-    OCP -->|Requires Valid Subtypes| LSP
-    LSP -->|Demands Focused Contracts| ISP
-    ISP -->|Provides Clean Seams for| DIP
+    SRP -->|"isolates reasons to change"| OCP
+    OCP -->|"depends on safe subtypes"| LSP
+    LSP -->|"needs focused contracts"| ISP
+    ISP -->|"creates clean boundaries for"| DIP
 ```
 
 ---
 
 ## Single Responsibility Principle (SRP)
 
-> *"A class should have one, and only one, reason to change."* — Robert C. Martin
+> *"A class should have one, and only one, reason to change."* (Robert C. Martin)
 
-Many junior developers misinterpret SRP to mean "a class should only do one thing" or "a class should only have one method." That is a misunderstanding. 
+A common misreading of SRP is "a class should only do one thing" or "a class should only have one method." Taken literally, that leads to tiny single-method classes scattered across dozens of packages.
 
-Uncle Bob later clarified the true intent of SRP: **"A module should be responsible to one, and only one, actor or stakeholder."**
+Martin later restated SRP more clearly: **a module should be responsible to one, and only one, actor.** An actor is a group of stakeholders or a system concern that drives changes for its own reasons, such as finance (tax rules), customer support or marketing (email formatting), or platform engineering (database schema and persistence). When one class serves multiple actors, changes requested by one team can accidentally break behavior relied on by another.
 
-An actor is a source of change: the CFO (financial rules), the COO (inventory operations), or the CTO/DBA (database persistence and infrastructure). When a single class attempts to satisfy multiple actors, changes requested by one stakeholder will inadvertently break functionality relied upon by another.
+### Before: One Class Serving Three Actors
 
-### The God-Class Antipattern
+Consider an `OrderService` that handles tax calculation, email composition, and direct JDBC persistence all inside one method:
 
 ```java
-// VIOLATION OF SRP: Satisfies the CFO, the Marketing Lead, and the DBA in one class
+import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+
+// Bad: mixes finance rules, email delivery, and raw JDBC persistence
 public class OrderService {
     public void processOrder(Order order) {
-        // 1. Accounting Policy (Actor: Finance / CFO)
-        BigDecimal tax = order.calculateVatTax();
+        // 1. Accounting rule (Finance team)
+        BigDecimal tax = order.subtotal().multiply(new BigDecimal("0.20"));
         order.applyTax(tax);
 
-        // 2. Notification Policy (Actor: Marketing / Customer Support)
-        String htmlEmail = "<h1>Thank you for your order!</h1>";
-        SmtpClient.sendEmail(order.getCustomerEmail(), htmlEmail);
+        // 2. Customer notification (Marketing / Support team)
+        String htmlBody = "<h1>Order Confirmed</h1><p>Total: " + order.total() + "</p>";
+        SmtpClient.sendEmail(order.customerEmail(), "Your order", htmlBody);
 
-        // 3. Persistence Policy (Actor: DBA / Infrastructure)
-        try (Connection conn = DriverManager.getConnection("jdbc:postgresql://...")) {
-            PreparedStatement ps = conn.prepareStatement("INSERT INTO orders VALUES (...)");
+        // 3. Persistence (Database / Infrastructure team)
+        try (Connection conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/shop");
+             PreparedStatement ps = conn.prepareStatement(
+                     "INSERT INTO orders (id, customer_email, total) VALUES (?, ?, ?)")) {
+            ps.setString(1, order.id());
+            ps.setString(2, order.customerEmail());
+            ps.setBigDecimal(3, order.total());
             ps.executeUpdate();
         } catch (SQLException e) {
-            throw new RuntimeException("Database error", e);
+            throw new IllegalStateException("Failed to persist order " + order.id(), e);
         }
     }
 }
 ```
 
-If Marketing decides to migrate email delivery to SendGrid or reformat the HTML template, you are forced to edit and recompile `OrderService`. A syntax error or regression introduced for Marketing now risks taking down core order processing and financial tax calculation.
+If marketing switches email templates or moves from raw SMTP to SendGrid, you have to edit `OrderService`. If the database schema changes, you edit `OrderService` again. Even worse, you cannot unit-test the tax logic without either hitting a live PostgreSQL instance and SMTP server or hacking around static calls.
 
-### The Refactored Architecture
+### After: Separating Responsibilities by Actor
 
-Decompose responsibilities so that each class answers to a single stakeholder:
+Split the class so each collaborator owns one concern and `OrderProcessor` focuses strictly on coordinating the order workflow:
 
 ```java
 import java.math.BigDecimal;
 import java.util.Objects;
 
-// 1. Domain Service: Answers strictly to Finance / Business Operations
+public interface TaxCalculator {
+    BigDecimal computeTax(Order order);
+}
+
+public interface OrderRepository {
+    void save(Order order);
+}
+
+public interface NotificationService {
+    void sendOrderConfirmation(Order order);
+}
+
 public class OrderProcessor {
     private final TaxCalculator taxCalculator;
     private final OrderRepository orderRepository;
     private final NotificationService notificationService;
 
-    public OrderProcessor(TaxCalculator taxCalculator, 
-                          OrderRepository orderRepository, 
+    public OrderProcessor(TaxCalculator taxCalculator,
+                          OrderRepository orderRepository,
                           NotificationService notificationService) {
         this.taxCalculator = Objects.requireNonNull(taxCalculator);
         this.orderRepository = Objects.requireNonNull(orderRepository);
@@ -98,67 +118,74 @@ public class OrderProcessor {
     public void process(Order order) {
         BigDecimal tax = taxCalculator.computeTax(order);
         order.applyTax(tax);
-        
+
         orderRepository.save(order);
-        notificationService.notifyCustomer(order);
+        notificationService.sendOrderConfirmation(order);
     }
 }
-
-// 2. Infrastructure Interfaces: Seams isolated from the domain
-interface TaxCalculator { BigDecimal computeTax(Order order); }
-interface OrderRepository { void save(Order order); }
-interface NotificationService { void notifyCustomer(Order order); }
 ```
+
+Now a template redesign touches only the `NotificationService` implementation, a SQL change stays inside the `OrderRepository` implementation, and `OrderProcessor` can be tested in milliseconds with simple fakes.
+
+### Where People Overdo SRP
+
+Splitting responsibilities is helpful when concerns genuinely change for different reasons or belong to different layers (domain vs. I/O). Splitting a cohesive 60-line class into six single-method helper classes just to keep file lengths under 20 lines makes the code harder to read, not easier. If two pieces of logic always change together and share the same data invariants, they usually belong in the same class.
 
 ---
 
 ## Open/Closed Principle (OCP)
 
-> *"Software entities (classes, modules, functions) should be open for extension, but closed for modification."* — Bertrand Meyer
+> *"Software entities (classes, modules, functions) should be open for extension, but closed for modification."* (Bertrand Meyer)
 
-When new business requirements arrive (such as adding crypto payment processing, a new shipping carrier, or an export format), you should be able to extend the system's behavior **without editing existing, battle-tested source code**.
+When your application grows to support a new payment provider, shipping carrier, or report format, ideally you should be able to add that behavior by writing new code rather than editing a central conditional block. Every time you open an existing, working class to add another `else if` branch, you risk breaking existing branches and have to re-verify all of them.
 
-If adding a new payment method requires opening a core service class and adding another `else if` branch to a 500-line `switch` statement, your architecture violates OCP. Every edit to an existing class re-opens it to regression risks, requiring complete re-testing of all previous payment pathways.
-
-### The Brittle Switch Antipattern
+### Before: Growing Conditional Chains
 
 ```java
-// VIOLATION OF OCP: Every new gateway modifies this core class
+import java.math.BigDecimal;
+
+public enum PaymentType {
+    CREDIT_CARD, PAYPAL, BANK_TRANSFER
+}
+
+// Bad: every new payment provider requires modifying this class
 public class PaymentGateway {
     public void executePayment(PaymentType type, BigDecimal amount) {
         if (type == PaymentType.CREDIT_CARD) {
-            // Process Stripe charge
+            System.out.println("Charging card for " + amount);
         } else if (type == PaymentType.PAYPAL) {
-            // Process PayPal OAuth and transfer
-        } else if (type == PaymentType.BITCOIN) {
-            // Process blockchain transaction
+            System.out.println("Initiating PayPal transfer for " + amount);
+        } else if (type == PaymentType.BANK_TRANSFER) {
+            System.out.println("Submitting wire transfer for " + amount);
         } else {
-            throw new UnsupportedOperationException("Unknown payment type");
+            throw new UnsupportedOperationException("Unknown payment type: " + type);
         }
     }
 }
 ```
 
-### The Strategy & Registry Pattern
+In a real system, each branch pulls in its own SDK client, retry rules, and error mapping. Adding Apple Pay means editing `PaymentGateway`, adding new constructor dependencies to it, and re-running the full suite for every existing payment type.
 
-Make the core orchestrator closed to modification, while keeping the pipeline open to new strategies:
+### After: Polymorphic Strategy and Registry
+
+Define a narrow `PaymentMethod` interface and let `PaymentEngine` dispatch by provider name:
 
 ```java
 import java.math.BigDecimal;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
-// 1. The Stable Strategy Contract
 public interface PaymentMethod {
     String providerName();
     void pay(BigDecimal amount);
 }
 
-// 2. Closed Orchestrator: Never modifies when new providers are added
 public class PaymentEngine {
     private final Map<String, PaymentMethod> registry = new ConcurrentHashMap<>();
 
     public void register(PaymentMethod method) {
+        Objects.requireNonNull(method);
         registry.put(method.providerName(), method);
     }
 
@@ -171,114 +198,203 @@ public class PaymentEngine {
     }
 }
 
-// 3. New Extensions: Purely additive code in new files
 public final class ApplePayPaymentMethod implements PaymentMethod {
-    @Override public String providerName() { return "APPLE_PAY"; }
-    @Override public void pay(BigDecimal amount) {
+    @Override
+    public String providerName() {
+        return "APPLE_PAY";
+    }
+
+    @Override
+    public void pay(BigDecimal amount) {
         System.out.println("Processing Apple Pay token for amount: " + amount);
     }
 }
 ```
 
+In a Spring application, Spring can even inject `List<PaymentMethod>` directly into `PaymentEngine`'s constructor, so dropping in a new `@Component` automatically registers the new provider without touching `PaymentEngine`.
+
+### Trade-Off: Open Polymorphism vs. Exhaustive Sealed Types
+
+OCP does not mean every `switch` statement is bad. You should only make an axis of variation open for extension when you actually expect new variants over time.
+
+When the set of variants is fixed and well known (for example, the possible states of a payment result: `Approved`, `Declined`, `PendingReview`), Java 21's `sealed` interfaces combined with pattern matching in `switch` are often a better choice. With a sealed hierarchy, if someone adds a fourth variant later, the compiler flags every `switch` expression in the codebase that forgot to handle it. Use open interfaces for extensible plugins; use sealed hierarchies when you want compiler-checked exhaustiveness across a closed set of cases.
+
 ---
 
 ## Liskov Substitution Principle (LSP)
 
-> *"Subtypes must be behaviorally substitutable for their base types without altering the correctness of the program."* — Barbara Liskov
+> *"Subtypes must be behaviorally substitutable for their base types without altering the correctness of the program."* (Barbara Liskov)
 
-LSP is the most mathematically rigorous and frequently violated principle in object-oriented programming. 
+The Java compiler checks method signatures: names, parameter types, return types, and checked exceptions. It cannot check whether a subclass actually preserves the *behavior* that callers expect from the parent type. That gap is where LSP violations live.
 
-Many developers assume that if code compiles, subtyping is safe. But Java's type checker only validates method names, parameter types, and return types. **The compiler cannot verify behavioral contracts, invariants, or runtime semantics.**
+For a subtype `S` to safely stand in for a supertype `T`, four behavioral rules have to hold:
 
-### The Formal Rules of Substitutability
+1. **Preconditions cannot be strengthened**: A subtype cannot reject inputs that the base type accepts. If `Base.deposit(BigDecimal amount)` accepts any positive amount, `Sub.deposit(BigDecimal amount)` cannot throw an exception for amounts under 100.
+2. **Postconditions cannot be weakened**: A subtype must deliver at least the state guarantees the base type promises after a call completes.
+3. **Invariants must be preserved**: Any rule the base type guarantees about its internal state must still hold in the subtype.
+4. **No surprise exceptions**: Java already stops subclasses from adding new checked exceptions, but throwing unexpected unchecked exceptions (like `UnsupportedOperationException`) to disable inherited methods still breaks callers at runtime.
 
-For a subtype `S` to safely substitute for base type `T`:
-1. **Preconditions cannot be strengthened in a subtype**: A subclass cannot demand stricter validation or narrower inputs than the parent. If `Parent.deposit(double amount)` accepts any amount greater than zero, `Child.deposit(double amount)` cannot throw an exception when the amount is less than 1,000.
-2. **Postconditions cannot be weakened in a subtype**: A subclass cannot return looser guarantees or incomplete state than the parent promised.
-3. **Invariants of the supertype must be preserved**: Any internal condition that the supertype holds true must remain true in the subtype.
-4. **No unexpected exceptions**: A subtype cannot throw checked exceptions that the base type method signature did not declare.
+### Classic Example 1: The Rectangle and Square Problem
 
-### The Classic LSP Violation: ReadOnlyList
-
-A famous LSP violation in Java occurs when developers attempt to reuse an existing collection via inheritance:
+In geometry, a square is a rectangle. In mutable object-oriented code, `Square extends Rectangle` breaks callers almost immediately:
 
 ```java
-import java.util.ArrayList;
+// Bad: Square breaks Rectangle's behavioral invariant
+public class Rectangle {
+    protected int width;
+    protected int height;
 
-// VIOLATION OF LSP: Mathematical model clashes with behavioral contract
-public class ReadOnlyList<E> extends ArrayList<E> {
+    public void setWidth(int width) {
+        this.width = width;
+    }
+
+    public void setHeight(int height) {
+        this.height = height;
+    }
+
+    public int area() {
+        return width * height;
+    }
+}
+
+public class Square extends Rectangle {
     @Override
-    public boolean add(E e) {
-        // BREAKS LSP! Violates the behavioral contract of List.add()
-        throw new UnsupportedOperationException("This list is read-only!");
+    public void setWidth(int width) {
+        this.width = width;
+        this.height = width;
+    }
+
+    @Override
+    public void setHeight(int height) {
+        this.width = height;
+        this.height = height;
     }
 }
 ```
 
-A client receiving `List<String>` expects `list.add("hello")` to succeed and append the element. When `ReadOnlyList` throws an `UnsupportedOperationException`, the client program crashes because the subtype failed to honor the behavioral contract of the supertype.
+Now look at a caller written against `Rectangle`:
+
+```java
+void resizeAndVerify(Rectangle rect) {
+    rect.setWidth(5);
+    rect.setHeight(4);
+    // Caller reasonably expects 5 * 4 = 20.
+    // With a Square, height overwrote width, so area() returns 16!
+    if (rect.area() != 20) {
+        throw new AssertionError("Expected area 20, got " + rect.area());
+    }
+}
+```
+
+The problem is that `Rectangle` implicitly promises that width and height can vary independently. `Square` violates that invariant because its sides must stay equal.
+
+The fix is to stop modeling `Square` as a mutable subclass of `Rectangle`. Instead, let both implement a shared read-only `Shape` interface (and prefer immutable records when mutation is not needed):
+
+```java
+public sealed interface Shape permits ImmutableRectangle, ImmutableSquare {
+    int area();
+}
+
+public record ImmutableRectangle(int width, int height) implements Shape {
+    @Override
+    public int area() {
+        return width * height;
+    }
+}
+
+public record ImmutableSquare(int side) implements Shape {
+    @Override
+    public int area() {
+        return side * side;
+    }
+}
+```
+
+### Classic Example 2: Unsupported Collection Operations
+
+Another common LSP problem shows up when someone subclasses a mutable collection to make it read-only:
+
+```java
+import java.util.ArrayList;
+
+// Bad: breaks the List.add() contract inherited from ArrayList
+public class ReadOnlyList<E> extends ArrayList<E> {
+    @Override
+    public boolean add(E element) {
+        throw new UnsupportedOperationException("This list is read-only");
+    }
+}
+```
 
 ```mermaid
 flowchart TD
     subgraph "LSP Behavioral Contract Violation"
-        Client["Client Code: process(List<T> list)"]
-        ListContract["Supertype Contract: list.add() returns true"]
-        ReadOnlySubtype["ReadOnlyList Subtype: throws UnsupportedOperationException!"]
-        
-        Client -->|Expects| ListContract
-        Client -.->|Substitutes| ReadOnlySubtype
-        ReadOnlySubtype -->|CRASH!| Explode["Client Invariant Broken"]
+        Client["Client code: process(List of String)"]
+        Contract["Expected contract: list.add() appends item"]
+        Subtype["ReadOnlyList: throws UnsupportedOperationException"]
+
+        Client -->|"expects"| Contract
+        Client -.->|"receives"| Subtype
+        Subtype -->|"breaks caller at runtime"| Failure["Caller fails unexpectedly"]
     end
 ```
 
+Notice that even the Java standard library makes a deliberate compromise here: `List.of(...)`, `Arrays.asList(...)`, and `Collections.unmodifiableList(...)` all implement `List<E>` and document mutators like `add()` as *optional operations* that throw `UnsupportedOperationException`. The JDK designers accepted that trade-off back in Java 1.2 to avoid doubling the number of collection interfaces (`ReadableList` vs. `MutableList`).
+
+In your own domain code, you do not have the JDK's backward-compatibility constraints. If you find yourself overriding inherited methods just to throw `UnsupportedOperationException`, treat that as a signal that inheritance is the wrong relationship. Wrap the list with composition and expose only the read methods callers are actually allowed to invoke.
+
 > [!IMPORTANT]
-> If a subtype must throw `UnsupportedOperationException` to disable inherited methods, **that inheritance relationship is an architectural error**. Use composition instead.
+> When a subclass has to disable or throw exceptions on inherited methods to stay valid, replace inheritance with composition or introduce a narrower shared interface.
 
 ---
 
 ## Interface Segregation Principle (ISP)
 
-> *"Clients should not be forced to depend upon interfaces that they do not use."* — Robert C. Martin
+> *"Clients should not be forced to depend upon interfaces that they do not use."* (Robert C. Martin)
 
-The Interface Segregation Principle warns against creating **"Fat Interfaces"** (monolithic interfaces containing dozens of unrelated methods).
+ISP targets "fat interfaces" that bundle unrelated capabilities into one contract. When an interface grows too wide, implementers have to write stub methods or throw `UnsupportedOperationException` for capabilities they do not support. Callers also end up coupled to methods they never invoke, which means changes for one caller ripple into unrelated parts of the codebase.
 
-When an interface contains methods that serve multiple distinct client needs, every implementing class is forced to provide dummy implementations or throw runtime exceptions for the methods it does not support. Even worse, whenever a method signature changes for Client A, Client B is forced to recompile, even though it never called that method.
-
-### The Fat Interface Antipattern
+### Before: One Fat Interface
 
 ```java
-// VIOLATION OF ISP: A monolithic interface coupling unrelated workflows
-public interface MultiFunctionWorker {
+// Bad: bundles human and automated responsibilities into one interface
+public interface Worker {
     void writeCode();
-    void attendMeeting();
-    void eatLunch();
     void reviewPullRequest();
+    void attendStandup();
+    void submitTimesheet();
 }
 
-// A Continuous Integration Bot implementing the fat interface:
-public class AutomationBot implements MultiFunctionWorker {
-    @Override public void writeCode() { /* Automated codegen */ }
-    @Override public void reviewPullRequest() { /* Static analysis check */ }
-
+public class CiAutomationBot implements Worker {
     @Override
-    public void attendMeeting() {
-        // BOT DOES NOT ATTEND MEETINGS! Forced dummy code:
-        throw new UnsupportedOperationException("Bots do not attend meetings");
+    public void writeCode() {
+        System.out.println("Generating API client stubs");
     }
 
     @Override
-    public void eatLunch() {
-        // BOT DOES NOT EAT! Forced dummy code:
-        throw new UnsupportedOperationException("Bots do not eat");
+    public void reviewPullRequest() {
+        System.out.println("Running static analysis checks");
+    }
+
+    @Override
+    public void attendStandup() {
+        throw new UnsupportedOperationException("Bots do not attend standups");
+    }
+
+    @Override
+    public void submitTimesheet() {
+        throw new UnsupportedOperationException("Bots do not submit timesheets");
     }
 }
 ```
 
-### The Role Interface Pattern
+Notice how ISP and LSP reinforce each other: the fat interface forced `CiAutomationBot` into an LSP violation.
 
-Split fat interfaces into cohesive, client-specific **Role Interfaces**:
+### After: Small Role Interfaces
+
+Break the wide contract into small interfaces grouped by how clients actually use them:
 
 ```java
-// Cohesive, surgical role interfaces
 public interface CodeProducer {
     void writeCode();
 }
@@ -287,75 +403,94 @@ public interface CodeReviewer {
     void reviewPullRequest();
 }
 
-public interface MeetingParticipant {
-    void attendMeeting();
+public interface TeamMember {
+    void attendStandup();
+    void submitTimesheet();
 }
 
-// Human software engineer implements all three roles:
-public class SoftwareEngineer implements CodeProducer, CodeReviewer, MeetingParticipant {
-    @Override public void writeCode() { System.out.println("Writing Java..."); }
-    @Override public void reviewPullRequest() { System.out.println("Reviewing diffs..."); }
-    @Override public void attendMeeting() { System.out.println("Discussing sprint goals..."); }
+public class SoftwareEngineer implements CodeProducer, CodeReviewer, TeamMember {
+    @Override public void writeCode() { System.out.println("Implementing feature"); }
+    @Override public void reviewPullRequest() { System.out.println("Reviewing PR diff"); }
+    @Override public void attendStandup() { System.out.println("Sharing status update"); }
+    @Override public void submitTimesheet() { System.out.println("Logging hours"); }
 }
 
-// Automation bot implements only the roles it actually fulfills:
-public class CiBot implements CodeProducer, CodeReviewer {
-    @Override public void writeCode() { System.out.println("Auto-generating client stubs..."); }
-    @Override public void reviewPullRequest() { System.out.println("Checking SonarQube quality gate..."); }
+public class CiAutomationBot implements CodeProducer, CodeReviewer {
+    @Override public void writeCode() { System.out.println("Generating API client stubs"); }
+    @Override public void reviewPullRequest() { System.out.println("Running static analysis checks"); }
 }
 ```
 
-The Java standard library provides masterclass examples of ISP: `Comparable<T>`, `Iterable<T>`, `AutoCloseable`, `Callable<V>`, and `Runnable`. Each is a focused, single-purpose role interface.
+The Java standard library gives good examples of well-segregated interfaces: `Comparable<T>`, `Iterable<T>`, `AutoCloseable`, `Runnable`, and `Closeable`. Each expresses a clear capability that classes can adopt independently.
+
+One caveat: ISP does not require every interface to have exactly one method. `ListIterator` or a repository with `findById` and `save` are fine when clients genuinely use those operations together. Split an interface when distinct groups of callers only ever touch distinct subsets of its methods.
 
 ---
 
 ## Dependency Inversion Principle (DIP)
 
-> *"High-level modules should not depend on low-level modules. Both should depend on abstractions. Abstractions should not depend on details; details should depend on abstractions."* — Robert C. Martin
+> *"High-level modules should not depend on low-level modules. Both should depend on abstractions. Abstractions should not depend on details; details should depend on abstractions."* (Robert C. Martin)
 
-In traditional procedural programming, dependencies flow downward: High-Level Business Rules call Data Access Objects, which call Low-Level Database Drivers and SQL statements.
+Without DIP, dependencies follow the call stack downward: high-level business logic directly imports and instantiates concrete database classes, HTTP clients, or SDKs.
 
+### Before: Business Policy Coupled to Persistence Details
+
+```java
+import java.math.BigDecimal;
+
+// Bad: high-level transfer logic is directly tied to PostgreSQL
+public class TransferFundsService {
+    private final PostgresAccountDao accountDao = new PostgresAccountDao();
+
+    public void transfer(String fromId, String toId, BigDecimal amount) {
+        Account from = accountDao.queryById(fromId);
+        Account to = accountDao.queryById(toId);
+
+        from.debit(amount);
+        to.credit(amount);
+
+        accountDao.executeUpdateSql(from);
+        accountDao.executeUpdateSql(to);
+    }
+}
 ```
-Traditional Flow:  [Business Domain] ---> [Postgres Database SQL]
-```
 
-The fatal flaw with downward dependency is that **your business domain becomes held hostage by your infrastructure**. If you switch from PostgreSQL to MongoDB or want to run a mock database in a unit test, you must rewrite your high-level business logic.
+Here `TransferFundsService` cannot be tested without PostgreSQL, cannot switch storage engines without editing business logic, and even leaks SQL terminology (`executeUpdateSql`) into the domain layer.
 
-The Dependency Inversion Principle **inverts the direction of control**:
-- The high-level business domain defines its own seams (**Ports / Interfaces**).
-- The low-level database, message broker, and HTTP frameworks implement those interfaces (**Adapters**).
+### After: Inverting the Dependency Direction
+
+With DIP, the high-level domain defines the interface it needs (often called a **port** in Hexagonal Architecture), and low-level infrastructure modules implement that interface (an **adapter**).
 
 ```mermaid
 flowchart LR
     subgraph "Domain Core (High-Level Policy)"
-        Service["CheckoutService"] --> Port["<<interface>><br/>OrderStoragePort"]
+        UseCase["TransferFundsUseCase"] --> Port["AccountRepository (interface)"]
     end
 
-    subgraph "Infrastructure (Low-Level Detail)"
-        PgAdapter["PostgresOrderAdapter"] -.->|implements| Port
-        MongoAdapter["MongoOrderAdapter"] -.->|implements| Port
+    subgraph "Infrastructure (Low-Level Details)"
+        PgAdapter["PostgresAccountAdapter"] -.->|"implements"| Port
+        InMemory["InMemoryAccountRepository"] -.->|"implements (tests)"| Port
     end
 ```
 
-Notice the arrow direction: the low-level infrastructure module points **inward** toward the high-level domain interface. The domain has zero compile-time dependencies on databases or external frameworks!
-
-### Hexagonal Architecture (Ports and Adapters) in Pure Java
+Notice the arrow direction: the compile-time dependency from `PostgresAccountAdapter` now points *inward* toward the domain's `AccountRepository` interface, even though runtime calls still flow outward from the use case to PostgreSQL.
 
 ```java
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
-// 1. High-Level Domain Contract (The "Port") - Lives in the domain package
+// 1. Domain interface (owned by the high-level package)
 public interface AccountRepository {
     Account findById(String accountId);
-    void updateBalance(Account account);
+    void save(Account account);
 }
 
-// 2. High-Level Business Policy - Zero imports of JDBC, Hibernate, or Spring!
+// 2. High-level policy: no JDBC, Hibernate, or Spring imports
 public class TransferFundsUseCase {
     private final AccountRepository repository;
 
-    // Injected via Constructor (Dependency Injection)
     public TransferFundsUseCase(AccountRepository repository) {
         this.repository = Objects.requireNonNull(repository);
     }
@@ -367,80 +502,86 @@ public class TransferFundsUseCase {
         from.debit(amount);
         to.credit(amount);
 
-        repository.updateBalance(from);
-        repository.updateBalance(to);
+        repository.save(from);
+        repository.save(to);
     }
 }
 
-// 3. Low-Level Detail (The "Adapter") - Lives in the infrastructure package
+// 3. Infrastructure adapter (lives in the persistence package)
 public class PostgresAccountAdapter implements AccountRepository {
     @Override
     public Account findById(String accountId) {
-        // Raw JDBC / Hibernate query execution
+        // Run SELECT query using JDBC or Spring Data JPA
         return new Account(accountId, BigDecimal.valueOf(5000));
     }
 
     @Override
-    public void updateBalance(Account account) {
-        // Execute SQL UPDATE accounts SET balance = ? WHERE id = ?
+    public void save(Account account) {
+        // Run UPDATE accounts SET balance = ? WHERE id = ?
+    }
+}
+
+// 4. Lightweight in-memory adapter for fast unit tests
+public class InMemoryAccountRepository implements AccountRepository {
+    private final Map<String, Account> store = new HashMap<>();
+
+    public void seed(Account account) {
+        store.put(account.id(), account);
+    }
+
+    @Override
+    public Account findById(String accountId) {
+        Account account = store.get(accountId);
+        if (account == null) {
+            throw new IllegalArgumentException("Unknown account: " + accountId);
+        }
+        return account;
+    }
+
+    @Override
+    public void save(Account account) {
+        store.put(account.id(), account);
     }
 }
 ```
 
-### Clarifying the Terminology: DIP vs IoC vs DI
+### Keeping DIP, IoC, and DI Straight
 
-- **Dependency Inversion Principle (DIP)**: The high-level architectural rule stating that high-level policies should not depend on low-level details.
-- **Inversion of Control (IoC)**: The broad design pattern where the control flow of a program is inverted (e.g., frameworks calling your code via lifecycles rather than your code calling libraries).
-- **Dependency Injection (DI)**: The specific creational mechanism used to deliver concrete dependencies into an object (e.g., via constructor arguments or frameworks like Spring / Guice).
+These three terms are closely related and often mixed up in interviews and code reviews:
+
+- **Dependency Inversion Principle (DIP)**: The design principle saying high-level policies and low-level details should both depend on abstractions owned by the high-level side.
+- **Inversion of Control (IoC)**: A broader architectural pattern where a framework or container controls application flow and calls your code (for example, Spring MVC invoking your controller method on an HTTP request).
+- **Dependency Injection (DI)**: The concrete technique of passing dependencies into an object from the outside (typically through constructor parameters) rather than creating them with `new` inside the class.
+
+You can use Dependency Injection without DIP (injecting a concrete `PostgresAccountDao` still couples you to PostgreSQL), and you can practice DIP with plain Java constructors without using a framework like Spring.
 
 ---
 
-## Pragmatic Architecture: Avoiding the "Architecture Astronaut" Trap
+## Knowing When Not to Abstract
 
-A junior developer writes code without abstractions. A mid-level developer uses abstractions everywhere. A senior architect knows when **not** to abstract.
+SOLID principles are easy to over-apply. A classic symptom in Java codebases is creating a matching interface for every single service class (`OrderService` and `OrderServiceImpl`) even when there will never be a second implementation, or introducing strategy registries and five layers of wrappers around a 25-line calculation.
 
-Blindly applying SOLID to every trivial class leads to the **Architecture Astronaut Antipattern**:
-- Creating an interface with only one implementation (`OrderService` and `OrderServiceImpl`) when no polymorphism or alternative implementation will ever exist.
-- Creating 15 separate micro-classes for a simple 30-line calculation.
-- Sacrificing readability and navigability in your IDE for theoretical extensibility that never gets utilized.
+Every abstraction adds indirection. When you jump to definition in an IDE and land on a single-implementation interface, you have paid a readability tax without getting flexibility in return.
 
 > [!TIP]
-> **The Rule of Three**: Do not introduce an interface or strategy abstraction the very first time you write a feature. Wait until you see a concrete second or third variation. Allow the design to emerge naturally from real business requirements rather than speculative anticipation.
+> **Start concrete, extract when friction appears.** Write clear, cohesive concrete classes first. Introduce interfaces and extension seams when you hit a real driver: isolating external I/O (databases, HTTP APIs, clocks), supporting a second production implementation, or decoupling modules owned by different teams.
 
 ---
 
-## Senior Engineer Interview Crucible
+## Interview Questions
 
-### How does Uncle Bob's definition of SRP ("one reason to change") map to business stakeholders, and how do you detect when a class violates it?
-Uncle Bob defined a "reason to change" as an **actor or stakeholder** who requests changes to the software. A class violates SRP when it mixes responsibilities that serve distinct business actors (such as financial calculation rules requested by the CFO, notification templates requested by Marketing, and database persistence schemas managed by the DBA). 
+### How does "one reason to change" in SRP map to a real codebase, and what signs tell you a class is violating it?
 
-You can detect SRP violations when:
-1. Multiple developers working on completely unrelated business stories must modify the same class file concurrently, causing frequent merge conflicts.
-2. A bug fix for one feature (e.g., changing email formatting) inadvertently breaks an unrelated feature (e.g., invoice total computation).
-3. The class requires dozens of diverse mocks and dependencies simply to run a focused unit test.
+In practice, a "reason to change" maps to an actor or stakeholder whose requirements evolve independently. In an e-commerce service, finance owns tax rules, marketing owns notification copy, and infrastructure owns persistence. When one class contains all three, you start seeing concrete warning signs: developers working on unrelated tickets hit merge conflicts in the same file, a formatting tweak breaks calculation tests, or unit testing a simple rule requires mocking database connections and HTTP clients.
 
-### Give a concrete example of a Liskov Substitution Principle violation involving preconditions and postconditions.
-Consider a base class `BankAccount`:
-```java
-public class BankAccount {
-    public void withdraw(BigDecimal amount) {
-        // Precondition: amount > 0
-        // Postcondition: balance is reduced by amount
-    }
-}
-```
-If a subclass `PremiumAccount` overrides `withdraw` and adds a check `if (amount < 100) throw new IllegalArgumentException("Minimum withdrawal is 100")`, it has **strengthened the precondition**. Client code written against `BankAccount` that successfully passes an amount of 50 will now crash unexpectedly when given a `PremiumAccount`.
+### Give an example of an LSP violation involving preconditions or postconditions.
 
-Conversely, if `SpecialAccount` overrides `withdraw` but fails to update the balance or returns without executing the debit, it has **weakened the postcondition**, violating the caller's guarantee that the funds were deducted.
+Suppose `BankAccount.withdraw(BigDecimal amount)` has the precondition `amount > 0` and the postcondition that the account balance decreases by `amount`. If a subclass `CorporateAccount` overrides `withdraw` and throws an exception whenever `amount < 100`, it has strengthened the precondition: callers that validly withdrew 50 from a `BankAccount` now fail when handed a `CorporateAccount`. Similarly, if a subclass overrides `withdraw` and skips updating the balance under some condition without throwing, it has weakened the postcondition that callers depend on.
 
-### How do the Open/Closed Principle and the Dependency Inversion Principle work together to enable Hexagonal (Ports and Adapters) architecture?
-DIP and OCP are symbiotic in Hexagonal Architecture. 
+### How do OCP and DIP work together in Hexagonal Architecture?
 
-DIP dictates that the high-level business core defines its own interfaces ("Ports") without depending on external databases, web frameworks, or third-party APIs. Infrastructure adapters implement these ports, pointing inward. 
+DIP puts the interfaces ("ports") inside the domain core so business logic has no compile-time dependency on databases, queues, or web frameworks. Infrastructure adapters implement those ports from the outside. Because the domain talks exclusively to its own interfaces, it stays closed for modification when you swap PostgreSQL for DynamoDB or replace an HTTP client with an in-memory stub, while staying open for extension through new adapter implementations.
 
-Because the domain core coordinates workflows exclusively through these port abstractions, the application is **Closed for modification** (the core domain logic never changes when infrastructure changes). Simultaneously, the application is **Open for extension** (OCP) because engineers can plug in new database adapters, mock test adapters, or message queue consumers simply by implementing the existing port interface, without touching a single line of domain code.
+### When is a `switch` statement on a `sealed` interface better than OCP-style polymorphism?
 
-### When does adhering strictly to SOLID lead to the "Architecture Astronaut" antipattern, and how do you balance pragmatism with purity?
-Strict, unyielding adherence to SOLID leads to over-engineering when developers introduce abstractions speculatively before any real variation exists. Common symptoms include creating paired interfaces for every single class (`UserService` / `UserServiceImpl`), writing extensive boilerplate adapters for single-use internal helpers, and fragmenting logic across dozens of microscopic classes, making standard code navigation difficult.
-
-Pragmatic architects balance SOLID by applying the **YAGNI (You Aren't Gonna Need It)** principle and the **Rule of Three**. Start with simple, cohesive concrete classes. Extract interfaces and inversion seams only when a real need arises—such as writing isolated unit tests, supporting multiple production implementations, or isolating volatile third-party libraries.
+When the set of cases is fixed and you want the compiler to enforce that every consumer handles all of them. For instance, if a payment processor returns a `sealed interface PaymentOutcome permits Approved, Declined, TimedOut`, using pattern matching in a `switch` expression gives you compile-time exhaustiveness checking. If you instead expect teams to keep adding new plugins (like new payment gateways or file exporters) without modifying core code, an open interface is the better fit.

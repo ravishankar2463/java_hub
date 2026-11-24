@@ -1,351 +1,458 @@
 ---
 title: "Relational Database Fundamentals & Advanced SQL"
-description: "Master relational database internals in PostgreSQL 17: ACID physics, WAL mechanics, MVCC row versioning, B-Tree index anatomy, EXPLAIN ANALYZE tuning, and window functions."
+description: "Understand ACID guarantees, relational normalization, composite B-Tree indexes with EXPLAIN ANALYZE, Common Table Expressions, and SQL window functions."
 category: "level-7"
 date: "2026-10-29T10:00:00Z"
 ---
 
-Many modern Java developers treat relational databases as magical black boxes hidden behind an Object-Relational Mapping (ORM) framework like Hibernate. They write clean Java entity code, deploy to production, and celebrate—until traffic surges.
+ORMs like Hibernate let Java teams move quickly on straightforward CRUD features, which makes it easy to treat the relational database as an implementation detail. That works fine until a table grows past a few million rows, a schema shortcut turns into inconsistent financial data, or a reporting endpoint starts taking several seconds because an index is being ignored.
 
-Suddenly, an API endpoint takes 14 seconds to respond. Database CPU spikes to 100%. Active connection pools are exhausted, and deadlock alerts trigger in the middle of the night.
+SQL is not just a query syntax you pass through a repository method. The schema you design, the constraints you declare, and the execution plans your queries generate determine whether your application stays predictable under load. This guide covers the four pillars every backend engineer relies on daily: ACID transactions, normalization (and when to bend the rules), B-Tree indexes with `EXPLAIN ANALYZE`, and analytical SQL using CTEs and window functions.
 
-Frameworks come and go, but the relational database remains the permanent, authoritative state of your business. To build scalable enterprise systems, you must understand the underlying physics of relational storage engines: how data pages are written to physical disk, how Multi-Version Concurrency Control (MVCC) isolates transactions, how the query planner navigates B-Tree indexes, and how to write expressive, high-performance SQL.
+## ACID Properties in Practice
+
+When two services update the same rows at the same time, or when a server loses power halfway through a multi-step write, the database has to keep stored data trustworthy. The ACID acronym describes the four guarantees relational databases use to do that.
 
 ```mermaid
 flowchart TD
-    subgraph "PostgreSQL Storage Engine Architecture"
-        SQL["Incoming SQL Query"] --> Parser["Parser & Query Planner"]
-        Parser --> Plan["Execution Plan (Index Scan / Seq Scan)"]
-        Plan --> Executor["Execution Engine"]
-        
-        Executor --> Buffers["Shared Buffers Pool (8KB Pages in RAM)"]
-        Buffers -.->|"Buffer Miss: Random I/O"| DiskData["Data Files on Disk (Heap Tables)"]
-        
-        Executor -->|"Transaction Commit"| WAL["Write-Ahead Log Buffer (WAL)"]
-        WAL -->|"Sequential Flush (fsync)"| WALDisk["WAL Logs on Disk (Durability Guarantee)"]
+    subgraph "Transaction Lifecycle in PostgreSQL"
+        Begin["BEGIN Transaction"] --> Ops["SQL Statements (UPDATE / INSERT)"]
+        Ops --> Checks{"Constraints Valid? (CHECK / FK / UNIQUE)"}
+        Checks -->|"No"| Rollback["ROLLBACK (Atomicity)"]
+        Checks -->|"Yes"| WAL["Append to Write-Ahead Log & fsync (Durability)"]
+        WAL --> Commit["COMMIT Visible to Concurrent Readers (Isolation)"]
     end
 ```
 
----
+### Atomicity
 
-## The Physical Reality of ACID and Write-Ahead Logging (WAL)
+A transaction is all-or-nothing. Either every statement inside `BEGIN ... COMMIT` takes effect, or none of them do. If your application debits one account and then hits a constraint violation or network disconnect before crediting the second account, the database rolls back the debit automatically so money never disappears mid-transfer.
 
-We all memorize the ACID acronym for interviews: **Atomicity, Consistency, Isolation, and Durability**. But what does the database engine physically do to guarantee these properties without grinding performance to a halt?
+### Consistency
 
-### The Latency Dilemma: Random vs Sequential I/O
+Consistency means a transaction moves the database from one valid state to another, respecting every rule defined in the schema. Unlike the other three letters, consistency is a shared responsibility between the database and your application. The database enforces structural rules such as `PRIMARY KEY`, `FOREIGN KEY`, `UNIQUE`, `NOT NULL`, and `CHECK` constraints, while your application enforces cross-row business rules inside the transaction boundary.
 
-A PostgreSQL table is organized into physical 8KB data blocks ("pages") stored on disk. When you execute `UPDATE accounts SET balance = balance - 100 WHERE id = 42`, the modified page lives in memory inside the **Shared Buffers** pool.
+### Isolation
 
-If the database were forced to write that 8KB page directly back to the physical table file on disk every time a transaction committed, performance would collapse. Table pages are scattered randomly across the storage drive; writing random blocks would force the storage controller into catastrophic random I/O thrashing.
+Concurrent transactions should not interfere with each other in ways that corrupt results. Full serializability is expensive, so SQL defines four isolation levels (`READ UNCOMMITTED`, `READ COMMITTED`, `REPEATABLE READ`, and `SERIALIZABLE`) that trade stricter concurrency protection against throughput. Most relational engines, including PostgreSQL and MySQL InnoDB, rely on Multi-Version Concurrency Control (MVCC) so readers do not block writers and writers do not block readers.
 
-### The Write-Ahead Log (WAL) Solution
+### Durability
 
-Relational databases solve this with the **Write-Ahead Log (WAL)** (known as the Redo Log in Oracle and MySQL InnoDB):
+Once a database acknowledges a `COMMIT`, the change survives process crashes and power loss. Instead of flushing scattered 8 KB table pages directly to disk on every commit, engines like PostgreSQL append a compact change record to a sequential Write-Ahead Log (WAL) and flush it with `fsync`. Background processes write the modified table pages to disk asynchronously. If the server crashes before those pages are flushed, startup recovery replays the WAL from the last checkpoint.
 
-1. **In-Memory Modification**: The query updates the row in the shared buffer cache in RAM. The 8KB page is marked "dirty".
-2. **Append-Only Sequential Logging**: Before acknowledging the commit to the Java client, the database writes a compact binary record describing the modification into the WAL buffer and flushes it sequentially to disk using an OS `fsync` syscall.
-3. **Instant Acknowledgment**: Because appending to a sequential log file is orders of magnitude faster than random table writes, the transaction commits in sub-millisecond time.
-4. **Asynchronous Checkpointing**: Background database processes (the Checkpointer) periodically write dirty in-memory pages back to the physical table heap files in batches.
+Here is a concrete PostgreSQL example showing atomicity and schema-level consistency working together during an order placement:
 
-If power fails or the operating system crashes at 2:00:00 PM:
-- In-memory shared buffers are lost.
-- Upon reboot, the database scans the sequential WAL file starting from the last valid checkpoint and replays all committed transactions back into the data pages (**Crash Recovery**). This is how Durability is guaranteed.
+```sql
+CREATE TABLE accounts (
+    id         bigint PRIMARY KEY,
+    balance    numeric(12, 2) NOT NULL CHECK (balance >= 0)
+);
 
----
+CREATE TABLE ledger_entries (
+    id          bigserial PRIMARY KEY,
+    from_id     bigint NOT NULL REFERENCES accounts(id),
+    to_id       bigint NOT NULL REFERENCES accounts(id),
+    amount      numeric(12, 2) NOT NULL CHECK (amount > 0),
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
 
-## Multi-Version Concurrency Control (MVCC)
+BEGIN;
 
-Traditional database textbooks describe concurrency using shared read locks and exclusive write locks. In that naive model, whenever a reporting query reads 50,000 rows, no other thread can update those rows until the read finishes.
+-- Debit sender; if balance would drop below 0, the CHECK constraint fails
+UPDATE accounts
+SET balance = balance - 250.00
+WHERE id = 101;
 
-Modern relational databases (PostgreSQL, MySQL InnoDB, Oracle) reject this model using **Multi-Version Concurrency Control (MVCC)**.
+-- Credit recipient
+UPDATE accounts
+SET balance = balance + 250.00
+WHERE id = 202;
+
+-- Record audit trail
+INSERT INTO ledger_entries (from_id, to_id, amount)
+VALUES (101, 202, 250.00);
+
+COMMIT;
+```
+
+Notice the `CHECK (balance >= 0)` constraint on `accounts`. Even if a bug in a Java service skips a balance check, the database rejects the first `UPDATE`, aborts the transaction, and leaves both balances and `ledger_entries` untouched. Putting invariants directly in the schema is far safer than trusting every future caller to enforce them in application code.
 
 > [!NOTE]
-> **The Golden Law of MVCC**: *Readers never block writers, and writers never block readers.*
+> Under PostgreSQL's default `READ COMMITTED` isolation, concurrent updates to the same row wait for the first transaction's row lock and then re-evaluate the `WHERE` clause and `CHECK` constraints against the newly committed balance. For multi-row invariants where two transactions update *different* rows, you will need `SELECT ... FOR UPDATE` or `SERIALIZABLE` isolation, which we cover in detail in the storage engine internals lesson.
 
-### How PostgreSQL Implements MVCC
+## Normalization and Pragmatic Denormalization
 
-In PostgreSQL, an `UPDATE` does not overwrite the existing row in place. Instead, it creates a **brand-new version of the row (tuple)**!
+Normalization is the process of structuring tables so each piece of data has one clear home. Without it, schemas suffer from three classic problems:
 
-Every physical tuple on disk contains two hidden system columns:
-- `xmin`: The transaction ID that inserted/created this row version.
-- `xmax`: The transaction ID that deleted or replaced this row version (defaults to 0 if the row is currently live).
+- **Update anomalies**: Changing a customer's city requires updating 500 historical order rows; missing one leaves contradictory data.
+- **Insertion anomalies**: You cannot record a new department until at least one employee is assigned to it, because department details only live inside the `employees` table.
+- **Deletion anomalies**: Deleting the last order for a product accidentally wipes out the only copy of that product's supplier contact info.
 
-```mermaid
-flowchart TD
-    subgraph "Heap Table (account_id = 42)"
-        V1["Tuple Version 1<br/>xmin: 100 | xmax: 105<br/>balance: $500 (DEAD)"]
-        V2["Tuple Version 2<br/>xmin: 105 | xmax: 0<br/>balance: $400 (LIVE)"]
-    end
+### Walking Through 1NF, 2NF, and 3NF
 
-    Tx102["Transaction 102 (Started early)"] -->|Sees Snapshot at Tx 102| V1
-    Tx106["Transaction 106 (Started late)"] -->|Sees Snapshot at Tx 106| V2
-```
-
-1. **Insert**: Transaction 100 inserts an account with balance 500. A tuple is written with `xmin = 100, xmax = 0`.
-2. **Update**: Transaction 105 updates the balance to 400. PostgreSQL does not delete the old row! It sets `xmax = 105` on the first tuple, and inserts a second tuple with `balance = 400, xmin = 105, xmax = 0`.
-3. **Visibility Check**: If a long-running reporting query started at Transaction 102, its transaction snapshot tells it that Transaction 105 has not happened yet. It continues reading Tuple Version 1 without blocking the update!
-
-### The Operational Cost: Table Bloat and VACUUM
-
-Because updates and deletes leave dead tuples on disk, tables accumulate "bloat". 
-
-PostgreSQL runs a background daemon called **Auto-VACUUM** that periodically scans pages, identifies tuples where `xmax` is older than any active transaction in the system, marks the dead space as reusable for future inserts, and updates table statistics.
-
----
-
-## Transaction Isolation Levels and Anomalies
-
-The SQL-92 standard defines four transaction isolation levels designed to balance data consistency against concurrent throughput.
-
-| Isolation Level | Dirty Read | Non-Repeatable Read | Phantom Read | Serialization Anomaly / Write Skew |
-| :--- | :--- | :--- | :--- | :--- |
-| **Read Uncommitted** | Possible (Not in PG) | Possible | Possible | Possible |
-| **Read Committed** (Default) | Prevented | Possible | Possible | Possible |
-| **Repeatable Read** | Prevented | Prevented | Prevented (in PG) | Possible (Write Skew) |
-| **Serializable** | Prevented | Prevented | Prevented | Prevented |
-
-### Understanding the Anomalies
-
-- **Dirty Read**: Transaction A reads data modified by Transaction B before Transaction B commits. If Transaction B rolls back, Transaction A acted on ghost data. (PostgreSQL treats Read Uncommitted as Read Committed; dirty reads are physically impossible in PG).
-- **Non-Repeatable Read**: Transaction A reads a row (`balance = 100`). Transaction B updates that row to 150 and commits. Transaction A re-reads the row and observes a different value within the same transaction.
-- **Phantom Read**: Transaction A queries `SELECT COUNT(*) FROM orders WHERE customer_id = 5` and gets 3. Transaction B inserts a 4th order for that customer and commits. Transaction A re-runs the count and gets 4.
-- **Write Skew**: Two concurrent transactions read overlapping data sets, satisfy an invariant independently, and make conflicting updates that violate a global business constraint.
+Suppose you inherit a flat table for an online store:
 
 ```sql
--- WRITE SKEW SCENARIO (On-call doctors invariant: at least 1 doctor must be on duty)
--- Both Doctor Alice and Doctor Bob are currently on call. Both request leave at the exact same moment.
-
--- Transaction 1 (Doctor Alice):
-BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
-SELECT COUNT(*) FROM doctors WHERE on_duty = true; -- Returns 2 (Safe to take leave!)
-UPDATE doctors SET on_duty = false WHERE id = 'ALICE';
-COMMIT;
-
--- Transaction 2 (Doctor Bob - Concurrent):
-BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
-SELECT COUNT(*) FROM doctors WHERE on_duty = true; -- Returns 2 (Safe to take leave!)
-UPDATE doctors SET on_duty = false WHERE id = 'BOB';
-COMMIT;
-
--- RESULT: Both transactions commit successfully under Repeatable Read!
--- The invariant is broken: ZERO doctors are now on duty!
+-- Unnormalized: repeating comma-separated values and mixed entities
+CREATE TABLE bad_orders (
+    order_id       bigint,
+    customer_name  text,
+    product_ids    text,      -- e.g. '10,42,88' (violates 1NF)
+    product_names  text,
+    zip_code       text,
+    city           text
+);
 ```
 
-> [!CAUTION]
-> To eliminate Write Skew, you must either use **`SERIALIZABLE`** isolation (which uses Serializable Snapshot Isolation to abort conflicting transactions) or use **Pessimistic Locking** (`SELECT ... FOR UPDATE`).
-
----
-
-## Relational Normalization vs Strategic Denormalization
-
-Normalization is the mathematical discipline of organizing relational tables to eliminate redundancy and prevent insertion, update, and deletion anomalies.
-
-- **First Normal Form (1NF)**: Every cell contains an atomic value (no JSON arrays or comma-delimited strings in columns), and the table has a primary key.
-- **Second Normal Form (2NF)**: Must be in 1NF, and all non-key columns must depend on the **entire** primary key (eliminating partial functional dependencies on composite keys).
-- **Third Normal Form (3NF)**: Must be in 2NF, and no non-key column may depend on another non-key column (eliminating transitive dependencies). As the adage goes: *"Every column must depend on the key, the whole key, and nothing but the key, so help me Codd."*
-
-### The Practical Rule: Historical Snapshots vs Live Lookups
-
-Junior developers often over-normalize historical transactions. Consider an e-commerce order line:
+**First Normal Form (1NF)** requires a primary key and atomic column values (no repeating groups or delimited lists packed into a single cell). Splitting line items into their own table fixes 1NF:
 
 ```sql
--- NORMALIZATION DISASTER:
-CREATE TABLE order_items (
-    order_id bigint REFERENCES orders(id),
-    product_id bigint REFERENCES products(id),
-    quantity integer NOT NULL,
+-- 1NF, but still has a 2NF violation
+CREATE TABLE order_lines_1nf (
+    order_id      bigint,
+    product_id    bigint,
+    product_name  text,       -- depends ONLY on product_id, not the full composite key
+    quantity      integer NOT NULL,
     PRIMARY KEY (order_id, product_id)
 );
 ```
 
-Where is the price? If the query calculates order totals by joining `order_items` to `products.price`, what happens when the merchant raises the price of the product next month? **Every past order in your company's accounting history retroactively changes its total!**
+**Second Normal Form (2NF)** builds on 1NF and removes partial dependencies on composite primary keys. Every non-key column must depend on the *entire* primary key. In `order_lines_1nf`, `quantity` depends on `(order_id, product_id)`, but `product_name` depends only on `product_id`. Moving `product_name` to a dedicated `products` table satisfies 2NF.
 
-A senior database engineer distinguishes between **mutable catalog state** and **immutable historical facts**:
+**Third Normal Form (3NF)** builds on 2NF and removes transitive dependencies, where one non-key column depends on another non-key column rather than directly on the primary key. For example, if a `customers` table stores `(customer_id, zip_code, city, state)`, then `city` and `state` depend on `zip_code`, not directly on `customer_id`. Extracting a `postal_codes(zip_code, city, state)` lookup table satisfies 3NF.
+
+In day-to-day backend design, 3NF is a sensible default starting point. Going further (BCNF, 4NF, 5NF) is occasionally useful for specialized modeling, but 3NF already eliminates the vast majority of write anomalies.
+
+### When Denormalization Makes Sense
+
+Strictly following 3NF everywhere can actually introduce bugs if you confuse **live catalog data** with **historical facts**. Consider an e-commerce order line:
 
 ```sql
-CREATE TABLE order_items (
-    order_id bigint REFERENCES orders(id),
-    product_id bigint REFERENCES products(id),
-    quantity integer NOT NULL CHECK (quantity > 0),
-    unit_price_at_purchase numeric(12, 2) NOT NULL CHECK (unit_price_at_purchase >= 0),
-    tax_rate_at_purchase numeric(5, 4) NOT NULL,
+-- Problematic over-normalization: no price captured on the order line
+CREATE TABLE order_items_flawed (
+    order_id    bigint REFERENCES orders(id),
+    product_id  bigint REFERENCES products(id),
+    quantity    integer NOT NULL,
     PRIMARY KEY (order_id, product_id)
 );
 ```
 
-The price charged at the moment of purchase is a historical invariant that must be permanently stored on the order item.
+If invoices calculate totals by joining `order_items_flawed` to `products.current_price`, then raising a product's price next month silently rewrites the totals of every historical order ever placed. The price charged at checkout is an immutable fact about that order, not a pointer to today's catalog:
 
----
+```sql
+CREATE TABLE order_items (
+    order_id                bigint NOT NULL REFERENCES orders(id),
+    product_id              bigint NOT NULL REFERENCES products(id),
+    quantity                integer NOT NULL CHECK (quantity > 0),
+    unit_price_at_purchase  numeric(12, 2) NOT NULL CHECK (unit_price_at_purchase >= 0),
+    tax_rate_at_purchase    numeric(5, 4) NOT NULL CHECK (tax_rate_at_purchase >= 0),
+    PRIMARY KEY (order_id, product_id)
+);
+```
 
-## B-Tree Indexes and EXPLAIN ANALYZE
+A second legitimate reason to denormalize is **read performance** on heavy aggregations, such as storing `order_total` on `orders` or maintaining a materialized view for a dashboard. The trade-off is clear: you gain faster reads, and in exchange you take on the responsibility of keeping the duplicated value in sync (via triggers, application code in the same transaction, or scheduled refreshes). Always normalize first, and only denormalize a specific column when you have either a historical snapshot requirement or measured query latency that indexes alone cannot solve.
 
-By default, PostgreSQL indexes are balanced search trees (**B-Trees**). A B-Tree maintains sorted order across arbitrary data types, allowing lookups, range scans, and prefix searches in `O(log N)` time.
+## Indexes and Query Execution Plans
+
+Without an index, finding matching rows forces the database to read every page of the table from start to finish (a sequential scan). On a 50-million-row table, that means reading gigabytes from memory or disk on every request.
+
+In PostgreSQL, MySQL, and Oracle, the default index structure is a balanced **B-Tree** (specifically a B+ Tree variant). It keeps indexed keys in sorted order across tree pages so lookups, prefix matches, and range scans complete in `O(log n)` page reads.
 
 ```mermaid
 flowchart TD
-    subgraph "B-Tree Index Structure"
-        Root["Root Page [Key 100 | Key 500]"]
-        
-        Branch1["Branch Page [10..99]"]
-        Branch2["Branch Page [100..499]"]
-        Branch3["Branch Page [500..999]"]
-        
-        Root --> Branch1
-        Root --> Branch2
-        Root --> Branch3
-        
-        Leaf1["Leaf Page: Key 42 -> ctid(Page 12, Slot 4)"]
-        Branch1 --> Leaf1
+    subgraph "B-Tree Index Traversal"
+        Root["Root Page (Keys: 100 | 500)"]
+        B1["Branch Page (10..99)"]
+        B2["Branch Page (100..499)"]
+        B3["Branch Page (500..999)"]
+        Leaf["Leaf Page: Key 42 -> Heap ctid (Page 12, Slot 4)"]
+
+        Root --> B1
+        Root --> B2
+        Root --> B3
+        B1 --> Leaf
     end
 ```
 
-Every leaf node in the B-Tree stores the indexed key value along with a **Tuple ID (`ctid`)** indicating the physical 8KB page and slot number of the actual row in the heap table file.
+Each leaf entry stores the indexed key values alongside a pointer to the row in the table heap (in PostgreSQL, the physical tuple identifier `ctid`; in MySQL InnoDB, the primary key value).
 
-### The Leftmost Prefix Rule in Composite Indexes
+### Composite Indexes and the Leftmost Prefix Rule
 
-When you create a composite index on multiple columns:
+Most real queries filter on more than one column and sort by another. A **composite index** indexes multiple columns in a specific order:
 
 ```sql
-CREATE INDEX idx_orders_tenant_status_created 
+CREATE INDEX idx_orders_tenant_status_created
     ON orders (tenant_id, status, created_at DESC);
 ```
 
-The database sorts the index entries **first by `tenant_id`**, then by `status` within that tenant, and finally by `created_at` within that status.
+The B-Tree sorts entries first by `tenant_id`. Within the same `tenant_id`, entries are sorted by `status`. Within the same `(tenant_id, status)`, entries are sorted by `created_at DESC`.
 
-- **Uses Index Efficiently**:
-  - `WHERE tenant_id = 10`
-  - `WHERE tenant_id = 10 AND status = 'COMPLETED'`
-  - `WHERE tenant_id = 10 AND status = 'COMPLETED' AND created_at > '2026-01-01'`
-- **CANNOT Use Index Efficiently**:
-  - `WHERE status = 'COMPLETED'` (Violates the Leftmost Prefix Rule; the B-Tree cannot jump to status without knowing the tenant).
-  - `WHERE created_at > '2026-01-01'`
+Because the tree is organized from left to right, the database can only jump directly into the tree if your query constrains a **leftmost prefix** of the indexed columns:
 
-### Reading EXPLAIN (ANALYZE, BUFFERS) Like a Database Architect
+- `WHERE tenant_id = 42` uses the index cleanly.
+- `WHERE tenant_id = 42 AND status = 'PAID'` uses the first two columns.
+- `WHERE tenant_id = 42 AND status = 'PAID' ORDER BY created_at DESC LIMIT 10` uses all three columns and returns the 10 newest rows without a separate sort step.
+- `WHERE status = 'PAID'` cannot use the B-Tree efficiently because `status` values are scattered across every `tenant_id` subtree.
+- `WHERE created_at > '2026-01-01'` faces the same problem.
 
-When debugging slow queries, never guess. Run `EXPLAIN (ANALYZE, BUFFERS)` to observe the actual execution plan:
+A second rule of thumb for column ordering in composite indexes is **equality columns before range columns**. Suppose you flip the order to `(tenant_id, created_at DESC, status)` and run:
+
+```sql
+SELECT id, total_amount
+FROM orders
+WHERE tenant_id = 42
+  AND created_at >= '2026-01-01'
+  AND status = 'PAID';
+```
+
+Once the engine hits the range predicate (`created_at >= '2026-01-01'`), `status` values inside that date range are no longer grouped together, so the index stops narrowing rows on `status` and has to filter them afterward. Putting equality filters (`tenant_id`, `status`) first and the range or sort column (`created_at`) last gives the B-Tree maximum selectivity.
+
+### Covering Indexes and Partial Indexes
+
+Two index features often cut query latency in half on busy tables:
+
+- **Covering indexes (`INCLUDE`)**: Adding extra non-key columns to leaf pages lets PostgreSQL answer the query from the index alone (`Index Only Scan`) without touching the heap table.
+- **Partial indexes (`WHERE`)**: If 95% of rows in `orders` are `ARCHIVED` and your hot path only queries `PENDING` orders, indexing only `WHERE status = 'PENDING'` produces a tiny index that stays warm in RAM and adds almost zero write overhead for archived rows.
+
+```sql
+-- Covering partial index: small footprint, enables Index Only Scan for active queue polling
+CREATE INDEX idx_orders_pending_tenant_created
+    ON orders (tenant_id, created_at DESC)
+    INCLUDE (total_amount)
+    WHERE status = 'PENDING';
+```
+
+Remember that indexes are not free. Every `INSERT`, `DELETE`, and non-HOT `UPDATE` has to maintain every index on the table, increasing write I/O and WAL volume. Index for your actual query patterns, not every column in the table.
+
+### Reading `EXPLAIN (ANALYZE, BUFFERS)`
+
+Never guess whether an index is helping. Prefix your query with `EXPLAIN (ANALYZE, BUFFERS)` in PostgreSQL (`EXPLAIN ANALYZE` in MySQL 8+):
 
 ```sql
 EXPLAIN (ANALYZE, BUFFERS)
-SELECT id, amount, created_at
+SELECT id, total_amount, created_at
 FROM orders
-WHERE tenant_id = 42 AND status = 'PAID'
+WHERE tenant_id = 42
+  AND status = 'PAID'
 ORDER BY created_at DESC
 LIMIT 10;
 ```
 
-Sample output:
+A healthy execution plan looks like this:
+
 ```text
-Limit  (cost=0.42..15.80 rows=10 width=24) (actual time=0.042..0.058 rows=10 loops=1)
+Limit  (cost=0.43..14.92 rows=10 width=24) (actual time=0.038..0.052 rows=10 loops=1)
   Buffers: shared hit=4
-  ->  Index Scan using idx_orders_tenant_status_created on orders  
-      (cost=0.42..1540.20 rows=1000 width=24) (actual time=0.040..0.054 rows=10 loops=1)
-      Index Cond: ((tenant_id = 42) AND (status = 'PAID'::text))
-      Buffers: shared hit=4
-Planning Time: 0.120 ms
-Execution Time: 0.085 ms
+  ->  Index Scan using idx_orders_tenant_status_created on orders
+        (cost=0.43..1490.20 rows=1024 width=24) (actual time=0.036..0.049 rows=10 loops=1)
+        Index Cond: ((tenant_id = 42) AND (status = 'PAID'::text))
+        Buffers: shared hit=4
+Planning Time: 0.145 ms
+Execution Time: 0.078 ms
 ```
 
-Key metrics to inspect:
-1. **Scan Type**:
-   - `Seq Scan`: Scans every physical block of the table (fine for tiny tables, fatal for 100-million-row tables).
-   - `Index Scan`: Traverses the B-Tree to find matching `ctid` pointers, then visits the heap table to retrieve data columns.
-   - `Index Only Scan`: The fastest scan! All requested columns live inside the index itself (Covering Index). Zero heap page accesses required!
-   - `Bitmap Index Scan`: Collects matching pointers from multiple indexes into an in-memory bitmap, then visits table pages in physical disk order.
-2. **`shared hit` vs `shared read`**:
-   - `shared hit=4`: The 4 database pages were already cached in RAM (Shared Buffers). Zero physical disk I/O.
-   - `shared read=420`: The database had to perform 420 physical I/O reads from the SSD.
-3. **Estimated vs Actual Rows**: If the planner estimates `rows=1` but actual execution reports `rows=500000`, the table statistics are stale. Run `ANALYZE orders;` to refresh planner histograms!
+Four signals matter most when reading a plan:
 
----
+1. **Scan node type**:
+   - `Seq Scan`: Reads the whole table. Totally fine on a 200-row lookup table (often faster than an index), problematic on large tables when you only want a handful of rows.
+   - `Index Scan`: Walks the B-Tree and fetches matching rows from the heap table.
+   - `Index Only Scan`: Reads all required columns directly from the index leaf pages (assuming the visibility map shows the heap pages are all-visible).
+   - `Bitmap Index Scan` + `Bitmap Heap Scan`: Useful when a query matches thousands of rows; builds a bitmap of matching heap pages and reads them in physical disk order instead of random jumps.
+2. **Estimated vs. actual rows**: Compare `rows=1024` (planner estimate) with `actual ... rows=10` (note that `LIMIT 10` stopped the scan early here, which is normal). If an un-limited scan estimates `rows=5` but actually returns `rows=400000`, the planner likely picked a terrible join strategy because table statistics are stale. Run `ANALYZE orders;` to refresh column histograms.
+3. **Buffer usage (`shared hit` vs. `shared read`)**: `shared hit=4` means 4 pages were already in PostgreSQL's shared buffers (RAM). `shared read=850` means 850 pages had to be pulled from the OS page cache or disk. Low buffer counts usually matter even more than raw wall-clock time when tuning queries on a warm test machine.
+4. **Filter vs. Index Cond**: `Index Cond` means the B-Tree narrowed the rows directly. A `Filter` line with `Rows Removed by Filter: 95000` means the database pulled 95,000 rows only to throw them away. That is usually a sign that an index column is missing, out of order, or wrapped in a function like `WHERE LOWER(email) = ...` without a matching expression index.
 
-## Advanced SQL: Window Functions and CTEs
+> [!WARNING]
+> `EXPLAIN ANALYZE` actually *executes* the query. If you run it on an `UPDATE` or `DELETE`, wrap it in `BEGIN; EXPLAIN (ANALYZE, BUFFERS) DELETE ...; ROLLBACK;` so you do not modify live data while profiling.
 
-Standard SQL aggregation (`GROUP BY`) collapses multiple rows into a single summary row. 
+## Common Table Expressions (CTEs)
 
-A **Window Function** performs calculations across a set of table rows related to the current row, **without collapsing individual rows**. Every input row retains its distinct identity!
-
-### The Syntax of Window Functions
+As analytical queries grow, nesting three levels of subqueries quickly becomes hard to read and harder to debug. A **Common Table Expression (`WITH` clause)** gives each intermediate step a name, turning nested subqueries into a top-to-bottom pipeline.
 
 ```sql
-function_name() OVER (
-    PARTITION BY partition_column
-    ORDER BY sort_column
-    ROWS BETWEEN ...
+WITH monthly_revenue AS (
+    SELECT
+        tenant_id,
+        date_trunc('month', created_at) AS month_start,
+        SUM(total_amount) AS revenue
+    FROM orders
+    WHERE status = 'PAID'
+      AND created_at >= DATE '2026-01-01'
+    GROUP BY tenant_id, date_trunc('month', created_at)
+),
+tenant_averages AS (
+    SELECT
+        tenant_id,
+        AVG(revenue) AS avg_monthly_revenue
+    FROM monthly_revenue
+    GROUP BY tenant_id
+)
+SELECT
+    m.tenant_id,
+    m.month_start,
+    m.revenue,
+    ROUND(t.avg_monthly_revenue, 2) AS avg_monthly_revenue
+FROM monthly_revenue m
+JOIN tenant_averages t ON t.tenant_id = m.tenant_id
+WHERE m.revenue > t.avg_monthly_revenue * 1.25
+ORDER BY m.tenant_id, m.month_start;
+```
+
+In PostgreSQL 12 and newer, non-recursive CTEs referenced once are inlined by default, meaning the query planner can push outer `WHERE` filters down into the CTE and use indexes normally. If you deliberately want a CTE evaluated once and cached in memory as an optimization fence, you can write `WITH monthly_revenue AS MATERIALIZED (...)`, or force inlining with `NOT MATERIALIZED`.
+
+### Recursive CTEs for Hierarchical Data
+
+Standard SQL cannot easily traverse trees of arbitrary depth (such as organizational charts, category hierarchies, or bill-of-materials graphs) with fixed self-joins. A **recursive CTE** (`WITH RECURSIVE`) solves this cleanly by combining a base query (the anchor) with a recursive query that references the CTE itself, joined by `UNION ALL`:
+
+```sql
+WITH RECURSIVE org_tree AS (
+    -- Anchor member: start at the VP or root manager
+    SELECT
+        id,
+        name,
+        manager_id,
+        1 AS depth,
+        ARRAY[id] AS path
+    FROM employees
+    WHERE manager_id IS NULL
+
+    UNION ALL
+
+    -- Recursive member: join direct reports to the previous level
+    SELECT
+        e.id,
+        e.name,
+        e.manager_id,
+        ot.depth + 1,
+        ot.path || e.id
+    FROM employees e
+    JOIN org_tree ot ON e.manager_id = ot.id
+    WHERE NOT (e.id = ANY(ot.path)) -- Cycle guard against corrupted manager loops
+)
+SELECT
+    id,
+    repeat('  ', depth - 1) || name AS indented_name,
+    depth
+FROM org_tree
+ORDER BY path;
+```
+
+Notice the `WHERE NOT (e.id = ANY(ot.path))` check. Real production data eventually gets a cyclic reference (Alice reports to Bob, Bob reports to Alice). Without a cycle guard or PostgreSQL 14's `CYCLE` clause, a recursive CTE will loop until it hits a memory or statement timeout.
+
+## Window Functions
+
+A regular `GROUP BY` collapses all rows in a group into one output row. A **window function** calculates aggregates, rankings, or neighbor comparisons across a defined set of related rows *without* collapsing individual rows. Every input row stays in the result set with the computed value attached.
+
+The general syntax is:
+
+```sql
+function_name(...) OVER (
+    PARTITION BY group_column      -- Optional: resets calculation per group
+    ORDER BY sort_column           -- Optional: defines row ordering inside each partition
+    ROWS BETWEEN ... AND ...       -- Optional: defines the sliding frame relative to current row
 )
 ```
 
-### Ranking and Pagination: ROW_NUMBER vs RANK vs DENSE_RANK
+Window functions are evaluated *after* `WHERE`, `GROUP BY`, and `HAVING`, which is why you cannot filter on a window function result directly inside `WHERE`. Wrap the query in a CTE (or subquery) and filter in the outer `SELECT`.
+
+### Ranking: `ROW_NUMBER`, `RANK`, and `DENSE_RANK`
+
+These three functions all assign positions within each partition, differing only in how they handle ties:
 
 ```sql
 SELECT
     department,
     employee_name,
     salary,
-    ROW_NUMBER() OVER (PARTITION BY department ORDER BY salary DESC) as row_num,
-    RANK()       OVER (PARTITION BY department ORDER BY salary DESC) as rnk,
-    DENSE_RANK() OVER (PARTITION BY department ORDER BY salary DESC) as dense_rnk
+    ROW_NUMBER() OVER (PARTITION BY department ORDER BY salary DESC) AS row_num,
+    RANK()       OVER (PARTITION BY department ORDER BY salary DESC) AS rnk,
+    DENSE_RANK() OVER (PARTITION BY department ORDER BY salary DESC) AS dense_rnk
 FROM employees;
 ```
 
-Notice how tied salaries are handled:
+Given four engineers in the same department:
 
-| Employee | Salary | ROW_NUMBER | RANK | DENSE_RANK | Explanation |
+| Employee | Salary | `ROW_NUMBER()` | `RANK()` | `DENSE_RANK()` | Behavior |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Alice | 10,000 | 1 | 1 | 1 | Highest salary |
-| Bob | 9,000 | 2 | 2 | 2 | Tied for second |
-| Charlie | 9,000 | 3 | 2 | 2 | Tied for second |
-| David | 8,000 | 4 | 4 | 3 | **RANK skips to 4; DENSE_RANK continues to 3!** |
+| Alice | 150,000 | 1 | 1 | 1 | Highest salary |
+| Bob | 135,000 | 2 | 2 | 2 | Tied for second |
+| Charlie | 135,000 | 3 | 2 | 2 | Tied for second |
+| David | 120,000 | 4 | 4 | 3 | `RANK` skips 3; `DENSE_RANK` continues at 3 |
 
-### Common Table Expressions (CTEs) for Clean Analytics
+Use `ROW_NUMBER()` when you need exactly one deterministic row per group (for example, fetching the latest order per customer, using a tie-breaker like `ORDER BY created_at DESC, id DESC` so results are reproducible). Use `DENSE_RANK()` when you want "top 3 salary tiers per department" including ties.
 
-Use CTEs (`WITH` clauses) to break complex queries into readable, sequential pipelines:
+### Comparing Across Rows with `LAG` and `LEAD`
+
+`LAG(col, offset, default)` reads a column from an earlier row in the partition; `LEAD(col, offset, default)` peeks ahead at a later row. They eliminate slow self-joins for time-series deltas and event gap analysis:
 
 ```sql
--- Find the top 2 highest-earning employees per department:
-WITH RankedEmployees AS (
+WITH daily_sales AS (
     SELECT
-        department,
-        employee_name,
-        salary,
-        DENSE_RANK() OVER (
-            PARTITION BY department 
-            ORDER BY salary DESC
-        ) as ranking
-    FROM employees
+        created_at::date AS sale_date,
+        SUM(total_amount) AS revenue
+    FROM orders
+    WHERE status = 'PAID'
+    GROUP BY created_at::date
 )
-SELECT department, employee_name, salary
-FROM RankedEmployees
-WHERE ranking <= 2
-ORDER BY department, ranking;
+SELECT
+    sale_date,
+    revenue,
+    LAG(revenue, 1) OVER (ORDER BY sale_date) AS prev_day_revenue,
+    revenue - LAG(revenue, 1) OVER (ORDER BY sale_date) AS day_over_day_delta,
+    LEAD(sale_date, 1) OVER (ORDER BY sale_date) - sale_date AS days_until_next_sale
+FROM daily_sales
+ORDER BY sale_date;
 ```
 
----
+### Running Totals and Moving Averages
 
-## Senior Engineer Interview Crucible
+Passing an `ORDER BY` clause into `SUM()` or `AVG()` turns a regular aggregate into a cumulative calculation. Explicitly specifying a frame clause (`ROWS BETWEEN ...`) keeps the intent unmistakable and avoids surprises with duplicate sort keys:
 
-### Explain how Multi-Version Concurrency Control (MVCC) in PostgreSQL allows readers and writers to avoid blocking each other, and what operational problem it creates.
-In PostgreSQL, updating a row does not overwrite its bytes in place. Instead, the engine writes a brand-new version of the row (tuple) into the table heap. The old tuple's `xmax` header is stamped with the updating transaction ID, and the new tuple's `xmin` header is stamped with the same ID. 
+```sql
+WITH daily_sales AS (
+    SELECT
+        tenant_id,
+        created_at::date AS sale_date,
+        SUM(total_amount) AS revenue
+    FROM orders
+    WHERE status = 'PAID'
+    GROUP BY tenant_id, created_at::date
+)
+SELECT
+    tenant_id,
+    sale_date,
+    revenue,
+    SUM(revenue) OVER (
+        PARTITION BY tenant_id
+        ORDER BY sale_date
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS running_total,
+    ROUND(AVG(revenue) OVER (
+        PARTITION BY tenant_id
+        ORDER BY sale_date
+        ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+    ), 2) AS rolling_7_day_avg
+FROM daily_sales
+ORDER BY tenant_id, sale_date;
+```
 
-When a concurrent reader executes a query, its transaction snapshot determines visibility: it continues reading the older tuple where `xmin` is committed and `xmax` is either uncommitted or created in the future. As a result, readers never acquire read locks on data, allowing readers and writers to operate concurrently without blocking each other.
+> [!TIP]
+> Notice the subtle difference between `ROWS` and the default `RANGE` frame when `ORDER BY` contains duplicate values (such as two orders with the same timestamp). `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` includes *all* peer rows with the same sort key in the running total at once, whereas `ROWS` adds strictly one row at a time. When you want a true row-by-row running total, specify `ROWS` explicitly.
 
-The operational problem this creates is **table and index bloat**. Deleted and superseded tuples remain physically stored on disk. If updates are frequent, tables grow massive with dead tuples. PostgreSQL relies on the background **Auto-VACUUM** process to scan pages, freeze old transaction IDs, and mark dead tuple space as reusable.
+## Interview Questions
 
-### What is the Leftmost Prefix Rule in composite B-Tree indexes, and why will a query filtering on WHERE status = 'ACTIVE' fail to use an index on (tenant_id, status)?
-A composite B-Tree index on `(colA, colB)` sorts entries in the tree first by `colA`. For any given value of `colA`, entries are sorted by `colB`. 
+### Why is storing `unit_price_at_purchase` on `order_items` not considered a normalization mistake?
 
-Because the high-level tree branches are split exclusively on values of `colA`, the database cannot traverse the B-Tree root without knowing `colA`. Attempting to query `WHERE colB = 'ACTIVE'` without specifying `colA` violates the Leftmost Prefix Rule; the engine cannot navigate the tree hierarchy and must fall back to a full Sequential Scan of the table.
+Normalization aims to eliminate redundant storage of *mutable* attributes that belong to another entity. A product's current catalog price lives in `products` and changes over time. The price a customer actually paid on a past order is a separate, immutable historical fact that belongs to the `order_items` entity. If you omit it and join back to `products`, updating the catalog price retroactively corrupts historical invoices and accounting records.
 
-### Walk through the difference between RANK(), DENSE_RANK(), and ROW_NUMBER() with a concrete tied-score example.
-Given three students with exam scores of 100, 90, 90, and 80:
-- **`ROW_NUMBER()`**: Generates strictly unique sequential integers regardless of ties (`1, 2, 3, 4`). It assigns arbitrary distinct ranks to the two students with 90.
-- **`RANK()`**: Assigns identical ranks to tied values, but **skips subsequent ranks** to reflect the count of preceding rows (`1, 2, 2, 4`). The rank 3 is skipped.
-- **`DENSE_RANK()`**: Assigns identical ranks to tied values, but **never skips numbers** in the ranking sequence (`1, 2, 2, 3`). The next score after the tie receives rank 3.
+### Given a composite index on `(tenant_id, status, created_at DESC)`, which queries use it effectively and why?
 
-### What is Write Skew, which transaction isolation level allows it, and how do you protect against it?
-Write Skew occurs when two concurrent transactions read overlapping rows, check a shared business invariant, find that the invariant holds true, and perform distinct, non-overlapping updates that collectively break the invariant. 
+The index is sorted first by `tenant_id`, then by `status`, then by `created_at DESC`. Queries filtering on `tenant_id` alone, `(tenant_id, status)`, or `(tenant_id, status)` with an `ORDER BY created_at DESC` follow the leftmost prefix and can navigate the B-Tree directly. A query filtering only on `WHERE status = 'PAID'` or `WHERE created_at > ...` cannot jump into the tree root because those values appear across every `tenant_id` subtree, so the planner typically falls back to a sequential scan (or an index scan over the entire index if it is much smaller than the heap).
 
-It is allowed under **`REPEATABLE READ`** isolation because each transaction updates different rows, meaning no row-level write conflict is detected. 
+### Why can you not write `WHERE ROW_NUMBER() OVER (...) = 1` directly in SQL?
 
-To protect against Write Skew:
-1. Escalate the transaction isolation level to **`SERIALIZABLE`**. Modern databases use Serializable Snapshot Isolation (SSI) to track read-write dependency cycles (siREAD locks) and abort one of the transactions with a serialization failure.
-2. Use **Pessimistic Locking** (`SELECT ... FOR UPDATE`) in the query to explicitly lock all rows evaluated during the invariant check, forcing concurrent transactions to serialize.
+SQL evaluates clauses in a logical order: `FROM`/`JOIN` -> `WHERE` -> `GROUP BY` -> `HAVING` -> `SELECT` (including window functions) -> `ORDER BY` -> `LIMIT`. Because `WHERE` runs before window functions are computed, the ranking value does not exist yet at filter time. Wrapping the window query in a CTE or subquery computes the window column first so the outer `WHERE` can filter on it. (Some engines like Snowflake, BigQuery, and DuckDB offer a `QUALIFY` clause as syntactic sugar for this, though PostgreSQL and MySQL do not.)
+
+### When running `EXPLAIN (ANALYZE, BUFFERS)`, what does a huge gap between estimated rows and actual rows usually tell you?
+
+It means the query planner's table statistics are out of date or there is a strong correlation between two columns that independent column histograms do not capture. Bad row estimates cause cascading mistakes, such as choosing a nested loop join when a hash join would be orders of magnitude faster. Running `ANALYZE table_name;` refreshes statistics, and in PostgreSQL you can also create extended multivariate statistics (`CREATE STATISTICS`) when two columns are tightly correlated (such as `zip_code` and `city`).

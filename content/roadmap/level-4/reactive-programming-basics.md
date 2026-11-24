@@ -1,276 +1,286 @@
 ---
 title: "Reactive Programming Basics"
-description: "Master reactive systems in Java: Reactive Streams specification, Flow API, backpressure protocols, Project Reactor (Mono/Flux), Schedulers, and Loom trade-offs."
+description: "From the classic Observer pattern to Reactive Streams, backpressure, Project Reactor Mono and Flux, Schedulers, and how reactive fits alongside Java 21 Virtual Threads."
 category: "level-4"
 date: "2026-10-29T10:00:00Z"
 ---
 
-In traditional synchronous web applications (like classic Spring MVC), servers follow the **Thread-per-Request** model: each incoming HTTP request claims a dedicated operating system thread from a thread pool (e.g. Tomcat's pool of 200 threads).
+In a classic servlet server like Tomcat running Spring MVC, each incoming HTTP request claims an operating system thread from a fixed pool (often 200 threads by default). Whenever that request waits on a database query, a downstream REST call, or disk I/O, the thread sits blocked while still holding roughly 1 MB of stack memory. Under heavy I/O concurrency, those threads fill up quickly and incoming requests queue behind them.
 
-While the thread waits for a database query to return, an external microservice to respond, or a file to read from disk, **the thread is completely blocked**. It sits idle, doing zero CPU work, yet holding ~1 MB of native stack memory.
+Reactive programming emerged as one way to break that bottleneck: instead of parking a thread while waiting for I/O, a small pool of event-loop threads handles thousands of concurrent streams asynchronously, propagating data and flow-control signals as events arrive.
 
-When 10,000 concurrent users hit the server, the thread pool is instantly exhausted. Requests queue up, latency explodes, and the server crashes with `OutOfMemoryError`.
+To understand reactive libraries like Project Reactor (the engine behind Spring WebFlux), it helps to start with the design pattern they evolved from: the **Observer pattern**.
 
-To overcome this scaling barrier, the industry developed **Reactive Programming**.
+## From the Observer Pattern to Reactive Streams
 
-Reactive programming is an asynchronous programming paradigm focused on **non-blocking data streams** and the propagation of change through **Backpressure**. Understanding how the **Reactive Streams specification**, the **JDK `Flow` API**, and **Project Reactor (`Mono` and `Flux`)** work under the hood is crucial for architecting modern, high-throughput event-driven microservices.
-
----
-
-## The Four Tenets of The Reactive Manifesto
-
-In 2014, engineers from Lightbend, Netflix, and Pivotal published **The Reactive Manifesto**, outlining four architectural pillars for resilient distributed systems:
-
-```mermaid
-flowchart TD
-    Responsive["1. Responsive<br/>The system responds in a timely manner under all conditions."]
-    Resilient["2. Resilient<br/>The system remains responsive in the face of failure (isolation &amp; fallbacks)."]
-    Elastic["3. Elastic<br/>The system stays responsive under varying workload demands (dynamic scaling)."]
-    MessageDriven["4. Message Driven<br/>Asynchronous boundary isolation between decoupled components."]
-
-    MessageDriven --> Elastic
-    MessageDriven --> Resilient
-    Elastic --> Responsive
-    Resilient --> Responsive
-```
-
-1. **Responsive:** Consistently low latency, meeting strict SLAs.
-2. **Resilient:** Failures are isolated to individual components without cascading across the entire architecture.
-3. **Elastic:** Scales throughput up and down smoothly based on traffic demands.
-4. **Message-Driven:** Uses asynchronous non-blocking message passing to decouple senders from receivers.
-
----
-
-## The Reactive Streams Specification
-
-To standardize non-blocking asynchronous data pipelines across Java vendors (RxJava, Akka Streams, Project Reactor, Vert.x), the industry created the **Reactive Streams Specification**.
-
-In Java 9, the JDK officially integrated this contract directly into the standard library under **`java.util.concurrent.Flow`**:
-
-```mermaid
-flowchart LR
-    Publisher["Publisher&lt;T&gt;"]
-    Subscriber["Subscriber&lt;T&gt;"]
-    Subscription["Subscription"]
-
-    Publisher -->|"1. subscribe(subscriber)"| Subscriber
-    Publisher -->|"2. onSubscribe(subscription)"| Subscriber
-    Subscriber -->|"3. request(n)"| Subscription
-    Subscription -->|"4. onNext(item) [at most n times]"| Subscriber
-    Subscription -->|"5. onComplete() / onError(t)"| Subscriber
-```
-
-### The Four Interfaces of `java.util.concurrent.Flow`
-
-1. **`Publisher<T>`**: Emits an unbounded, sequenced stream of items to subscribers based on received demand:
-   ```java
-   public interface Publisher<T> {
-       void subscribe(Subscriber<? super T> subscriber);
-   }
-   ```
-2. **`Subscriber<T>`**: Receives stream events and items:
-   ```java
-   public interface Subscriber<T> {
-       void onSubscribe(Subscription subscription); // First signal received
-       void onNext(T item);                         // Data element received
-       void onError(Throwable throwable);          // Terminal error event
-       void onComplete();                           // Terminal success event
-   }
-   ```
-3. **`Subscription`**: The control link connecting one Publisher to one Subscriber. **This is where Backpressure lives!**
-   ```java
-   public interface Subscription {
-       void request(long n); // Subscriber requests 'n' items (flow control)
-       void cancel();        // Subscriber cancels the subscription
-   }
-   ```
-4. **`Processor<T, R>`**: A pipeline stage that acts simultaneously as both a `Subscriber<T>` and a `Publisher<R>`.
-
----
-
-## Backpressure: The Heart of Reactive Systems
-
-In classic asynchronous push architectures, a fast producer can emit 100,000 events per second, while a slow consumer (e.g., writing to a disk or external API) can only process 1,000 events per second. 
-
-Without flow control:
-- Events accumulate in unconstrained memory buffers.
-- The consumer runs out of heap space and crashes with `OutOfMemoryError`.
-
-```mermaid
-flowchart TD
-    subgraph PushDisaster ["Naive Push Architecture: Out of Memory"]
-        FastProd["Fast Producer<br/>(100k events/sec)"] -->|"Overwhelming flood"| SlowCons["Slow Consumer<br/>(Can only process 1k/sec)"]
-        SlowCons -->|"Queue fills RAM!"| Crash["💥 OutOfMemoryError!"]
-    end
-
-    subgraph ReactiveBackpressure ["Reactive Streams Dynamic Demand Flow"]
-        Prod["Publisher"]
-        Cons["Subscriber"]
-        Cons -->|"1. request(2) (I have room for 2 items)"| Prod
-        Prod -->|"2. onNext(item 1)"| Cons
-        Prod -->|"3. onNext(item 2)"| Cons
-        Cons -->|"4. Done processing! request(2) more..."| Prod
-    end
-```
-
-**Backpressure is dynamic pull-push flow control.** 
-- The Subscriber dictates the transmission rate by calling `subscription.request(n)`.
-- The Publisher is strictly forbidden from sending more than `n` items.
-- If the subscriber has no capacity, it does not request items, forcing the producer to slow down or apply an overflow strategy!
-
-### Backpressure Overflow Strategies
-When a producer cannot slow down (e.g., a hardware network socket receiving live telemetry), you must define an explicit overflow policy:
-- **`onBackpressureBuffer()`**: Queues elements in a bounded memory buffer until the subscriber catches up.
-- **`onBackpressureDrop()`**: Silently drops excess incoming items that exceed the consumer's demand.
-- **`onBackpressureLatest()`**: Keeps only the most recent item, overwriting previous unconsumed items (ideal for stock tickers and UI sliders).
-- **`onBackpressureError()`**: Emits an `IllegalStateException` immediately when the consumer is overwhelmed.
-
----
-
-## Project Reactor: `Mono` and `Flux`
-
-While the JDK provides the standard `Flow` interfaces, it contains no operational operators (like `map` or `filter`). In production, the enterprise standard library is **Project Reactor** (which powers Spring WebFlux).
-
-Reactor introduces two fundamental publishers:
-
-```mermaid
-flowchart LR
-    subgraph MonoDef ["Mono<T>: 0 or 1 Element"]
-        M1["[Optional Item] -&gt; onComplete() / onError()"]
-    end
-
-    subgraph FluxDef ["Flux<T>: 0 to N Elements"]
-        F1["Item 1 -&gt; Item 2 -&gt; ... -&gt; Item N -&gt; onComplete() / onError()"]
-    end
-```
-
-1. **`Mono<T>`**: Emits at most **one item** (0 or 1), then terminates. Ideal for asynchronous HTTP responses, database lookups by ID, or tasks returning `void` (`Mono<Void>`).
-2. **`Flux<T>`**: Emits **zero to many items** (0 to N), potentially infinite. Ideal for real-time WebSocket feeds, Kafka event streams, and file chunk processing.
-
-### The Golden Rule of Reactive Programming
-> **"NOTHING HAPPENS UNTIL YOU SUBSCRIBE!"**
-
-Writing a reactive pipeline simply builds an assembly blueprint. No database query is executed, no network socket is opened, and no memory is allocated until a subscriber triggers demand:
+In the classic Gang of Four **Observer pattern**, a subject maintains a list of listeners and pushes updates to them whenever its state changes:
 
 ```java
-// ⚠️ NO WORK HAPPENS HERE! This merely constructs a pipeline descriptor:
-Flux<String> userPipeline = Flux.just("alice", "bob", "charlie")
-        .filter(name -> name.startsWith("a"))
-        .map(String::toUpperCase);
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
-// ✅ WORK COMMENCES NOW! Calling .subscribe() triggers onSubscribe and request(n):
-userPipeline.subscribe(
-        item -> System.out.println("Received: " + item),     // onNext
-        error -> System.err.println("Error: " + error),      // onError
-        () -> System.out.println("Processing complete!")     // onComplete
-);
-```
+public interface PriceObserver {
+    void onPriceUpdate(String symbol, double price);
+}
 
----
+public class StockTicker {
+    private final List<PriceObserver> observers = new CopyOnWriteArrayList<>();
 
-## Hot vs. Cold Publishers
+    public void addObserver(PriceObserver observer) {
+        observers.add(observer);
+    }
 
-Understanding the temperature of your publisher prevents massive architectural bugs:
-
-```mermaid
-flowchart TD
-    subgraph ColdStream ["Cold Publisher (E.g. On-Demand HTTP/DB Query)"]
-        Sub1["Subscriber 1 subscribes"] --> Query1["Runs DB query for Sub 1"]
-        Sub2["Subscriber 2 subscribes"] --> Query2["Runs brand new DB query for Sub 2!"]
-    end
-
-    subgraph HotStream ["Hot Publisher (E.g. Live Stock Price Radio Broadcast)"]
-        LiveFeed["Live Market Feed (Always running)"]
-        SubA["Subscriber A joins at 10:00"] -->|"Hears 10:00 prices"| LiveFeed
-        SubB["Subscriber B joins at 10:05"] -->|"Missed 10:00! Hears only 10:05 prices"| LiveFeed
-    end
-```
-
-### Cold Publishers (The Default)
-A cold publisher generates data **fresh on-demand for each subscriber**.
-- Like streaming a movie on Netflix: whenever you press "Play", the movie starts from the beginning for you, completely independent of other viewers.
-- Examples: `Flux.just()`, `Flux.fromIterable()`, reactive database queries (R2DBC).
-
-### Hot Publishers
-A hot publisher emits data **regardless of whether any subscribers exist**.
-- Like a live FM radio broadcast: if you tune in 15 minutes late, you miss the first 15 minutes of the broadcast. All subscribers share the same active stream.
-- Examples: Kafka consumer topics, WebSocket price tickers, system mouse clicks.
-
----
-
-## Schedulers: Thread Hopping and Non-Blocking I/O
-
-In a reactive system, your pipeline runs on a tiny event-loop thread pool (Netty's event loop typically has only 1 thread per CPU core).
-
-> [!CAUTION]
-> **The Fatal Reactive Sin: Blocking the Event Loop!**
-> If you execute a blocking database call (JDBC) or `Thread.sleep()` inside a reactive operator, you freeze the Netty event loop thread. A single blocked thread can stall thousands of concurrent user connections!
-
-### Isolate Blocking Work with Schedulers
-Reactor provides **`Schedulers`** to control which thread pools execute different stages of the pipeline:
-
-- **`Schedulers.parallel()`**: Fixed-size pool for CPU-bound computations (sized to CPU cores).
-- **`Schedulers.boundedElastic()`**: Dynamically growing pool engineered to safely offload **legacy blocking I/O** (blocking JDBC calls, file reading) without starving the event loop.
-
-```mermaid
-flowchart LR
-    Netty["Netty Event Loop Thread"] -->|"Receives HTTP request"| Pipeline["Reactive Pipeline"]
-    Pipeline -->|"publishOn(Schedulers.boundedElastic())"| Worker["Isolated Elastic Thread"]
-    Worker -->|"Executes legacy blocking JDBC"| DB[("Legacy Database")]
-    Worker -->|"Streams results back to Netty"| Netty
-```
-
-```java
-public Mono<UserProfile> fetchUserProfile(String userId) {
-    return Mono.fromCallable(() -> legacyBlockingJdbcQuery(userId))
-            // Offloads blocking JDBC call to a dedicated thread pool!
-            .subscribeOn(Schedulers.boundedElastic())
-            .map(this::transformToDto);
+    public void publishPrice(String symbol, double price) {
+        for (PriceObserver observer : observers) {
+            observer.onPriceUpdate(symbol, price);
+        }
+    }
 }
 ```
 
-- **`subscribeOn(Scheduler)`**: Dictates which thread pool runs the source emission.
-- **`publishOn(Scheduler)`**: Switches thread context for all downstream operators following the `publishOn` call.
+The Observer pattern works well for simple in-process UI events or low-volume notifications, and it already decouples the producer from its consumers. However, once you try to use plain Observer for asynchronous network streams or high-throughput event pipelines, three structural gaps appear:
 
----
+1. **No completion signal**: An observer receives `onPriceUpdate(...)` calls, but there is no standard way for the subject to say "this stream has finished normally, clean up your resources."
+2. **No dedicated error channel**: If the upstream data source fails (say, a network socket drops), plain Observer has no standard `onError(Throwable)` callback to propagate that failure cleanly downstream.
+3. **Unbounded pure push (no backpressure)**: The subject pushes events as fast as it produces them. If a producer emits 50,000 events per second and a slow consumer writes to disk at 1,000 events per second, either the producer blocks on the consumer's thread or an intermediate queue grows until the JVM hits `OutOfMemoryError`.
 
-## Reactive Streams vs. Java 21 Project Loom (Virtual Threads)
+**Reactive Streams** builds directly on the Observer pattern and closes all three gaps. It adds explicit `onComplete()` and `onError(Throwable)` terminal signals, and introduces a `Subscription` control channel so the consumer can tell the producer how many items it is ready to accept.
 
-With the arrival of **Virtual Threads in Java 21**, developers often ask: *Is Reactive Programming obsolete?*
-
-The answer is **No, but the trade-offs have shifted fundamentally**:
-
-| Dimension | Reactive Programming (Project Reactor) | Project Loom (Virtual Threads) |
+| Capability | Classic Observer Pattern | Reactive Streams |
 |---|---|---|
-| **Programming Model** | **Declarative / Monadic:** Pipelines built via operators (`map`, `flatMap`, `zip`). | **Imperative / Synchronous:** Familiar `try-catch`, sequential loops, direct returns. |
-| **Backpressure Support** | **Built-in First Class:** Dynamic pull-push flow control (`request(n)`). | **None:** Must be implemented manually via semaphores, queues, or rate limiters. |
-| **Debugging & Stack Traces** | Notoriously difficult; stack traces span across async scheduler boundaries. | **Effortless:** Standard stack traces show the exact line and sequential call hierarchy. |
-| **Ideal Use Case** | Real-time event streams (WebSockets, SSE), complex multi-stream transformations, micro-batching. | High-throughput request-response REST APIs, standard database I/O services. |
+| Data delivery | `update(item)` | `onNext(item)` |
+| Normal termination | None built in | `onComplete()` |
+| Failure propagation | None built in | `onError(Throwable)` |
+| Flow control | Pure push (producer sets pace) | Pull-push backpressure (`Subscription.request(n)`) |
 
----
+## The Reactive Streams Specification and JDK `Flow` API
 
-## Summary & Mental Model Checkpoint
+In 2015, engineers from Lightbend, Pivotal, Netflix, and other JVM teams standardized the **Reactive Streams Specification** (`org.reactivestreams.*`) so reactive libraries like Project Reactor, RxJava, and Akka/Pekko Streams could interoperate cleanly. Java 9 brought the exact same four interfaces into the standard library under `java.util.concurrent.Flow`:
 
-1. **The Core Problem**: Blocking I/O wastes expensive OS threads, creating the thread-per-request scalability wall.
-2. **Four Roles of Flow**: `Publisher` (producer), `Subscriber` (consumer), `Subscription` (flow control link), and `Processor` (transformer).
-3. **Backpressure Contract**: The subscriber controls flow rate by calling `subscription.request(n)`. Producers must never exceed demand.
-4. **`Mono` vs `Flux`**: `Mono` emits 0 or 1 item; `Flux` emits 0 to N items.
-5. **Subscription Mandate**: Nothing executes in a reactive pipeline until `.subscribe()` is called.
-6. **Cold vs Hot**: Cold publishers generate data per subscriber (Netflix); Hot publishers broadcast regardless of subscribers (Live Radio).
-7. **Never Block Event Loops**: Always isolate legacy blocking I/O using `.subscribeOn(Schedulers.boundedElastic())`.
+```java
+public interface Publisher<T> {
+    void subscribe(Subscriber<? super T> subscriber);
+}
 
----
+public interface Subscriber<T> {
+    void onSubscribe(Subscription subscription);
+    void onNext(T item);
+    void onError(Throwable throwable);
+    void onComplete();
+}
 
-## 🎯 Senior Engineer Interview Questions
+public interface Subscription {
+    void request(long n);
+    void cancel();
+}
 
-### What is the Reactive Streams specification, and how does its `Subscription.request(long n)` mechanism implement backpressure?
-> **Answer:** The Reactive Streams specification (formalized in Java 9 as `java.util.concurrent.Flow`) is a standard for asynchronous stream processing with non-blocking backpressure. Under naive asynchronous push architectures, a fast publisher can flood a slower subscriber, causing queue saturation and eventual `OutOfMemoryError`. The `Subscription.request(long n)` method inverts control into a dynamic pull-push model: when a subscriber connects, it receives a `Subscription` handle via `onSubscribe()`. The subscriber must explicitly request demand by calling `subscription.request(n)`. The publisher is strictly forbidden by the specification from invoking `onNext()` more than `n` times until the subscriber issues further demand. If the subscriber is busy processing, it stops requesting items, forcing the publisher to pause emission, buffer within bounded limits, or drop elements according to a defined overflow policy.
+public interface Processor<T, R> extends Subscriber<T>, Publisher<R> {
+}
+```
 
-### What is the difference between a Cold Publisher and a Hot Publisher in Project Reactor? Give a real-world architectural example of each.
-> **Answer:** A **Cold Publisher** produces data on-demand and independently for each subscriber. The underlying data generation logic (such as opening a database cursor or creating an HTTP connection) is deferred until a subscriber calls `.subscribe()`. Every subscriber observes the entire sequence of data from the beginning. An example is a reactive database query using R2DBC (`repository.findById(id)`): each subscriber triggers a fresh database query. In contrast, a **Hot Publisher** emits data continuously regardless of whether any active subscribers exist. Subscribers that join mid-stream observe only data emitted after their subscription time, missing earlier items. An example is a real-world telemetry stream from an IoT sensor or a financial stock exchange price feed over WebSockets: market prices fluctuate whether or not a client is connected to receive them.
+Note a small ecosystem detail: Project Reactor implements `org.reactivestreams.Publisher` (for Java 8+ compatibility across the ecosystem), and Reactor provides `FlowAdapters` to convert directly between `org.reactivestreams.*` and JDK 9's `java.util.concurrent.Flow.*`.
 
-### What happens when you invoke a blocking operation (such as JDBC or `Thread.sleep()`) inside a Project Reactor operator without specifying a Scheduler? How do you fix it?
-> **Answer:** In reactive web frameworks like Spring WebFlux, the execution pipeline runs on a non-blocking event-loop thread pool (typically Netty worker threads sized to the number of physical CPU cores, e.g. 8 threads on an 8-core server). If a developer executes a blocking operation (like traditional blocking JDBC or `RestTemplate`) directly inside a reactive operator (such as `map` or `flatMap`), the underlying Netty event loop thread is halted in an OS blocked state waiting for I/O. Because the event loop thread pool is tiny, blocking just a few threads halts request processing for hundreds or thousands of concurrent user connections multiplexed on those threads, causing total system paralysis. To fix this, blocking operations must be explicitly isolated using the **`subscribeOn(Schedulers.boundedElastic())`** or **`publishOn(Schedulers.boundedElastic())`** operators. This instructs Reactor to offload the blocking task to an isolated, elastic thread pool with automatic thread capping and queueing, keeping the core event-loop threads free to service incoming network traffic.
+### The Signal Protocol
 
-### How do Java 21 Virtual Threads (Project Loom) alter the architectural justification for using reactive frameworks like Project Reactor for standard REST APIs?
-> **Answer:** Historically, reactive programming (e.g. Spring WebFlux with Project Reactor) was the only viable way in Java to achieve high concurrency (100,000+ simultaneous connections) without exhausting system memory, because standard OS threads allocate ~1 MB of stack memory each and incur heavy kernel context-switching overhead. However, reactive programming comes with massive cognitive overhead: asynchronous monadic syntax, loss of standard `try-catch` exception propagation, and unreadable stack traces that cross thread scheduling boundaries. Java 21 Virtual Threads solve the underlying scalability problem at the JVM runtime level. Virtual threads are extremely lightweight (~hundreds of bytes) and managed in user-space. When a virtual thread performs a blocking I/O operation (like blocking JDBC or HTTP), the JVM automatically unmounts it from its underlying OS carrier thread without blocking kernel resources. For standard request-response REST APIs, Virtual Threads allow developers to write simple, readable, synchronous imperative code that scales just as effectively as reactive code. However, reactive programming remains superior for **continuous streaming architectures, complex multi-stream transformations (`zip`, `merge`), and scenarios requiring granular backpressure flow control**.
+Every Reactive Streams interaction follows a strict sequence:
+
+```mermaid
+flowchart LR
+    pub["Publisher"] -->|"1. onSubscribe(subscription)"| sub["Subscriber"]
+    sub -->|"2. subscription.request(n)"| pub
+    pub -->|"3. onNext(item) up to n times"| sub
+    pub -->|"4. onComplete() or onError(t)"| sub
+```
+
+1. The consumer calls `publisher.subscribe(subscriber)`.
+2. The publisher passes a `Subscription` handle via `subscriber.onSubscribe(subscription)`.
+3. Nothing is emitted until the subscriber requests demand by calling `subscription.request(n)`.
+4. The publisher invokes `onNext(item)` at most `n` times, sequentially (never concurrently for the same subscriber).
+5. The stream ends with either `onComplete()` or `onError(throwable)` (at most once; after a terminal signal, no more `onNext` calls may arrive), or the subscriber stops early via `subscription.cancel()`.
+
+## Backpressure Handling
+
+Backpressure is the mechanism that keeps a fast producer from overwhelming a slow consumer. Instead of pure push, Reactive Streams uses **dynamic pull-push**: the consumer pulls demand (`request(n)`), and the producer pushes up to `n` items as they become available.
+
+```mermaid
+flowchart TD
+    subgraph push ["Without Backpressure (Pure Push)"]
+        p1["Fast producer (50k events/sec)"] -->|"Unbounded flood"| c1["Slow consumer (1k events/sec)"]
+        c1 --> oom["Unbounded queue grows until OutOfMemoryError"]
+    end
+
+    subgraph bp ["With Reactive Backpressure (Pull-Push)"]
+        c2["Subscriber"] -->|"request(10)"| p2["Publisher"]
+        p2 -->|"Emits at most 10 items"| c2
+        c2 -->|"Processes batch, then calls request(10)"| p2
+    end
+```
+
+### Requesting Batches with `BaseSubscriber`
+
+When you call `flux.subscribe(System.out::println)` in Project Reactor, Reactor requests `Long.MAX_VALUE` (unbounded demand) under the hood. To control demand explicitly, extend `BaseSubscriber` (or use operators like `limitRate(n)`):
+
+```java
+import org.reactivestreams.Subscription;
+import reactor.core.publisher.BaseSubscriber;
+import reactor.core.publisher.Flux;
+
+Flux<Integer> numbers = Flux.range(1, 100);
+
+numbers.subscribe(new BaseSubscriber<Integer>() {
+    private int processedInBatch = 0;
+    private static final int BATCH_SIZE = 5;
+
+    @Override
+    protected void hookOnSubscribe(Subscription subscription) {
+        request(BATCH_SIZE); // Ask for the first 5 items
+    }
+
+    @Override
+    protected void hookOnNext(Integer value) {
+        System.out.println("Processed: " + value);
+        processedInBatch++;
+        if (processedInBatch == BATCH_SIZE) {
+            processedInBatch = 0;
+            request(BATCH_SIZE); // Ready for the next 5
+        }
+    }
+});
+```
+
+In production pipelines, you rarely write custom `BaseSubscriber` classes by hand. Instead, you use `.limitRate(32)` to prefetch in bounded batches automatically.
+
+### Overflow Strategies When the Producer Cannot Slow Down
+
+Some sources (such as a database cursor or a file reader) can pause easily when demand drops to zero. Other sources (such as live IoT sensor packets, mouse movements, or market price ticks) keep arriving regardless of downstream demand. For those "hot" sources, Project Reactor provides explicit backpressure overflow operators:
+
+- **`onBackpressureBuffer(maxSize, overflowStrategy)`**: Buffers excess items up to a **bounded** capacity (avoid unbounded buffers in production, or you bring back the `OutOfMemoryError` risk).
+- **`onBackpressureDrop(dropped -> ...)`**: Drops incoming items that exceed current demand and optionally notifies a callback so you can increment a metric.
+- **`onBackpressureLatest()`**: Keeps only the single most recent item when the consumer falls behind, overwriting older unread values (well suited for live price tickers or telemetry gauges).
+- **`onBackpressureError()`**: Fails the stream immediately with `Exceptions.overflowException()` (`OverflowException`, a subclass of `IllegalStateException`) if the producer emits without downstream demand.
+
+```java
+Flux<PriceTick> safeTicks = liveMarketFeed
+        .onBackpressureLatest();
+
+Flux<TelemetryEvent> boundedFeed = sensorStream
+        .onBackpressureDrop(dropped -> metrics.incrementDropped(dropped.sensorId()));
+```
+
+## Project Reactor Basics: `Mono` and `Flux`
+
+The JDK `Flow` API defines only the four low-level interfaces; it includes no operators like `map`, `filter`, or `flatMap`. In the Spring ecosystem, **Project Reactor** provides those operators through two core `Publisher` implementations:
+
+- **`Mono<T>`**: Represents an asynchronous sequence of **0 or 1 item**, followed by `onComplete()` or `onError()`. It is the reactive counterpart to `Optional<T>` or `CompletableFuture<T>`, used for single HTTP responses, repository lookups by ID, or fire-and-complete actions (`Mono<Void>`).
+- **`Flux<T>`**: Represents an asynchronous sequence of **0 to N items** (finite or infinite), followed optionally by `onComplete()` or `onError()`. It is used for streaming query results, WebSockets, Server-Sent Events (SSE), and Kafka consumer pipelines.
+
+```mermaid
+flowchart LR
+    subgraph monoBox ["Mono (0 or 1 item)"]
+        m1["Item (optional) -> onComplete() or onError()"]
+    end
+
+    subgraph fluxBox ["Flux (0 to N items)"]
+        f1["Item 1 -> Item 2 -> ... -> onComplete() or onError()"]
+    end
+```
+
+### Assembly vs. Execution: Nothing Happens Until You Subscribe
+
+Like Java Streams, constructing a `Mono` or `Flux` pipeline does not execute any work. Calling `.filter()`, `.map()`, or `.flatMap()` only assembles a blueprint of operators. No query runs and no network request fires until a subscriber calls `.subscribe()` (or a framework like Spring WebFlux subscribes on behalf of an HTTP response):
+
+```java
+// Assembly phase: nothing executes yet
+Flux<String> activeAdminEmails = Flux.just("alice@corp.com", "bob@corp.com", "carol@corp.com")
+        .filter(email -> !email.startsWith("bob"))
+        .map(String::toUpperCase);
+
+// Execution phase: subscribe() triggers onSubscribe and demand
+activeAdminEmails.subscribe(
+        email -> System.out.println("Received: " + email),
+        error -> System.err.println("Failed: " + error.getMessage()),
+        () -> System.out.println("Done")
+);
+```
+
+A very common beginner bug in WebFlux is calling a method that returns `Mono<Void>` (such as `auditRepository.save(event)`) without returning it or chaining it via `flatMap`. Because nobody subscribes to the orphaned `Mono`, the save never happens.
+
+### Composing Async Operations and Handling Errors
+
+Use `map()` for synchronous one-to-one transformations and `flatMap()` when each element triggers another asynchronous `Mono` or `Flux`:
+
+```java
+public Mono<OrderSummary> getOrderSummary(String orderId) {
+    return orderClient.fetchOrder(orderId) // Mono<Order>
+            .flatMap(order -> customerClient.fetchCustomer(order.customerId())
+                    .map(customer -> new OrderSummary(order, customer)))
+            .onErrorResume(TimeoutException.class,
+                    ex -> Mono.just(OrderSummary.degraded(orderId)));
+}
+```
+
+### Cold vs. Hot Publishers
+
+Understanding whether a publisher is **cold** or **hot** prevents surprising duplicate calls:
+
+- **Cold publishers (default)**: Start fresh for every subscriber. If two subscribers attach to a cold `Mono` backed by an HTTP call or R2DBC query, the call runs twice, once per subscriber. Examples: `Flux.just()`, `Flux.fromIterable()`, `Mono.defer()`, and reactive database queries.
+- **Hot publishers**: Emit events independently of subscribers, like a live radio broadcast. Late subscribers only see events emitted after they join (unless replay buffering is explicitly configured with `Sinks.many().replay()`). Examples: `Sinks.Many`, Kafka streams, WebSocket feeds.
+
+You can turn a cold publisher into a shared stream using `.share()` or `.cache()` when multiple subscribers should observe the same upstream execution.
+
+## Schedulers and Threading Rules
+
+Reactor itself is concurrency-agnostic: unless you specify a `Scheduler` (or an async non-blocking driver like Netty or R2DBC switches threads), operators run on the thread that called `subscribe()`.
+
+In Spring WebFlux, requests arrive on **Netty's event-loop threads**, typically sized to the number of CPU cores (for example, 4 or 8 threads). Those threads must **never be blocked**. Calling `Thread.sleep()`, traditional blocking JDBC, or a synchronous HTTP client on an event-loop thread freezes every other request multiplexed onto that thread.
+
+When you have to call legacy blocking code from a reactive pipeline, isolate it onto `Schedulers.boundedElastic()`:
+
+```java
+public Mono<UserProfile> loadFromLegacyDatabase(String userId) {
+    return Mono.fromCallable(() -> legacyJdbcDao.findProfile(userId))
+            .subscribeOn(Schedulers.boundedElastic())
+            .map(this::toDto);
+}
+```
+
+Know the difference between the two scheduling operators:
+
+- **`subscribeOn(Scheduler)`**: Determines which thread runs the **subscription and source emission**, regardless of where in the chain you place it.
+- **`publishOn(Scheduler)`**: Switches the execution thread for all **downstream operators** that appear after it in the chain.
+
+The two main built-in pools are `Schedulers.parallel()` (fixed pool sized to CPU cores for non-blocking CPU work) and `Schedulers.boundedElastic()` (bounded pool intended for offloading legacy blocking calls).
+
+## Project Reactor vs. Java 21+ Virtual Threads
+
+Before Java 21, reactive programming was the main way to handle tens of thousands of concurrent I/O-bound connections on the JVM without exhausting OS threads. With **Virtual Threads** finalized in Java 21 (JEP 444), the architectural calculus has changed significantly.
+
+Virtual threads are lightweight JVM-managed threads that unmount from their underlying OS carrier thread whenever they hit blocking I/O (sockets, JDBC drivers, `HttpClient`). That lets you write ordinary imperative code with standard `try/catch` blocks, straightforward debugging, and readable stack traces while still scaling to high I/O concurrency. (Note: in Java 21, blocking inside a `synchronized` block could pin a carrier thread; that limitation was resolved in Java 24 via JEP 491.)
+
+| Dimension | Project Reactor (WebFlux) | Java 21+ Virtual Threads (Spring MVC) |
+|---|---|---|
+| Programming style | Declarative async pipelines (`Mono`, `Flux`, `flatMap`) | Imperative synchronous code (`try/catch`, loops) |
+| Debugging and stack traces | Harder; traces cross async scheduler boundaries | Standard linear stack traces |
+| Backpressure | First-class protocol (`request(n)`, overflow operators) | Not built in; must be built explicitly with queues or semaphores |
+| Ecosystem compatibility | Requires non-blocking drivers end to end (R2DBC, WebClient) | Works with standard blocking JDBC, JPA, and `RestClient` |
+| Best fit | Continuous streams (SSE, WebSockets, Kafka), complex fan-in/windowing, strict backpressure | High-concurrency request-response REST APIs and standard database services |
+
+For new request-response microservices backed by relational databases, Spring MVC on Java 21+ Virtual Threads is usually simpler to write, debug, and maintain than WebFlux. Project Reactor remains a strong fit when your domain genuinely models **continuous event streams**, needs rich temporal operators (`bufferTimeout`, `window`, `zip`, `merge`), or requires explicit end-to-end backpressure across services.
+
+## Interview Questions
+
+### How does the Reactive Streams specification improve on the classic Observer pattern?
+
+The classic Observer pattern only pushes data items to registered listeners. It lacks a standard completion signal, lacks an error channel, and has no flow-control mechanism, meaning a fast producer can flood a slow consumer's memory. Reactive Streams extends Observer with three additions: explicit `onComplete()` and `onError(Throwable)` terminal callbacks, and a `Subscription` object whose `request(long n)` method implements pull-push backpressure so consumers control how many items the producer is allowed to emit.
+
+### Why does a Project Reactor pipeline sometimes appear to "do nothing" in code?
+
+`Mono` and `Flux` pipelines are lazy. Calling operators like `filter`, `map`, and `flatMap` only constructs an operator chain; execution does not start until a terminal subscriber calls `.subscribe()` (or a framework such as Spring WebFlux subscribes to the returned `Publisher`). If a method creates a `Mono` (for example, an async database write) and neither subscribes to it nor chains it into the returned pipeline with `flatMap`/`then`, that operation never executes.
+
+### What is the difference between `subscribeOn` and `publishOn` in Project Reactor?
+
+`subscribeOn(Scheduler)` controls which thread executes the subscription and upstream source generation, no matter where it appears in the chain (if multiple `subscribeOn` calls exist, the one closest to the source wins). `publishOn(Scheduler)` changes the execution thread for all operators positioned **below** it in the chain, allowing you to switch threads mid-pipeline (for example, moving from `boundedElastic` after a blocking lookup back to `parallel` for downstream processing).
+
+### With Java 21+ Virtual Threads available, when does Reactive Programming still make sense?
+
+Virtual Threads remove the main reason teams previously adopted reactive frameworks for standard CRUD and REST services: you can now scale blocking I/O concurrency without sacrificing imperative control flow or readable stack traces. Reactive programming still shines when you are building continuous streaming systems (WebSockets, SSE, live telemetry, event-driven pipelines), composing multiple asynchronous streams with time-based operators (`window`, `bufferTimeout`, `zip`), or enforcing strict pull-push backpressure between producers and consumers of mismatched speeds.

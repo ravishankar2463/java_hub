@@ -84,7 +84,7 @@ export const roadmapData: RoadmapLevel[] = [
       },
       {
         title: "Inheritance",
-        details: ["The `extends` keyword", "The `super` keyword and constructor chaining", "Method Overriding vs Overloading", "The cosmic `Object` class"]
+        details: ["The `extends` keyword", "The `super` keyword and constructor chaining", "Method Overriding vs Overloading", "The `Object` base class"]
       },
       {
         title: "Abstraction",
@@ -149,8 +149,8 @@ export const roadmapData: RoadmapLevel[] = [
   {
     level: 3,
     title: "Level 3: The Core Master (Part 2)",
-    subtitle: "Data Structures & JVM Magic",
-    description: "Master the tools provided by the standard library to handle data, and learn how Java actually works under the hood.",
+    subtitle: "Data Structures & JVM Internals",
+    description: "Learn how Java's standard collections work internally, and understand what the JVM does with your classes and memory at runtime.",
     color: "from-cyan-500/20 to-cyan-500/5",
     badge: "bg-cyan-500/10 text-cyan-800 dark:text-cyan-300 border-cyan-500/30",
     topics: [
@@ -206,7 +206,7 @@ export const roadmapData: RoadmapLevel[] = [
       },
       {
         title: "Optional API",
-        details: ["Eradicating the `NullPointerException`", "Creating Optionals (`of`, `ofNullable`, `empty`)", "`ifPresent`, `orElse`, `orElseThrow`", "Mapping and chaining Optionals"]
+        details: ["Avoiding `NullPointerException`", "Creating Optionals (`of`, `ofNullable`, `empty`)", "`ifPresent`, `orElse`, `orElseThrow`", "Mapping and chaining Optionals"]
       },
       {
         title: "Reactive Programming Basics",
@@ -218,7 +218,7 @@ export const roadmapData: RoadmapLevel[] = [
     level: 5,
     title: "Level 5: The Concurrency Expert",
     subtitle: "Mastering Threads & Multicore",
-    description: "Write code that handles millions of requests safely. Deep dive into the Java Memory Model, locks, and the revolutionary Project Loom.",
+    description: "Write concurrent Java code safely. Understand the Java Memory Model, locks, thread pools, and Java 21 Virtual Threads (Project Loom).",
     color: "from-rose-500/20 to-rose-500/5",
     badge: "bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-500/30",
     topics: [
@@ -256,7 +256,7 @@ export const roadmapData: RoadmapLevel[] = [
     level: 6,
     title: "Level 6: The Architect",
     subtitle: "Design Patterns & Principles",
-    description: "Build enterprise muscle memory. Master the patterns that scale to millions of lines of code without collapsing.",
+    description: "Learn the object-oriented principles and architectural patterns that keep large Java codebases maintainable as teams and requirements grow.",
     color: "from-indigo-500/20 to-indigo-500/5",
     badge: "bg-indigo-500/10 text-indigo-800 dark:text-indigo-300 border-indigo-500/30",
     topics: [
@@ -354,7 +354,7 @@ export const roadmapData: RoadmapLevel[] = [
       },
       {
         title: "Spring Core Internals",
-        details: ["Inversion of Control (IoC) Principle", "Dependency Injection (Constructor vs Field injection)", "The Application Context and Bean Lifecycle", "Bean Scopes (Singleton, Prototype, Request)", "Auto-Configuration magic (`@EnableAutoConfiguration`)"]
+        details: ["Inversion of Control (IoC) Principle", "Dependency Injection (Constructor vs Field injection)", "The Application Context and Bean Lifecycle", "Bean Scopes (Singleton, Prototype, Request)", "Auto-Configuration (`@EnableAutoConfiguration`)"]
       },
       {
         title: "Aspect-Oriented Programming (AOP)",
@@ -450,7 +450,7 @@ export const roadmapData: RoadmapLevel[] = [
       },
       {
         title: "Transactional Outbox and Inbox Patterns",
-        details: ["The Dual-Write Problem Disaster", "Transactional Outbox Table with Database Commits", "Polling Publisher vs CDC Event Streaming", "Idempotent Consumer with the Inbox Pattern"]
+        details: ["The Dual-Write Problem", "Transactional Outbox Table with Database Commits", "Polling Publisher vs CDC Event Streaming", "Idempotent Consumer with the Inbox Pattern"]
       },
       {
         title: "Change Data Capture with Debezium",
@@ -500,7 +500,7 @@ export const roadmapData: RoadmapLevel[] = [
       },
       {
         title: "Long-Running Workflows with Temporal",
-        details: ["Orchestration Hell vs Durable Execution", "Temporal.io Architecture: Workflow Engine, Workers, Task Queues", "Writing Deterministic Java Workflows", "Activity Retries, Signals, and Timers"]
+        details: ["Manual Orchestration vs Durable Execution", "Temporal.io Architecture: Workflow Engine, Workers, Task Queues", "Writing Deterministic Java Workflows", "Activity Retries, Signals, and Timers"]
       },
       {
         title: "Distributed Rate Limiting and Throttling",
@@ -550,7 +550,7 @@ export const roadmapData: RoadmapLevel[] = [
     level: 13,
     title: "Level 13: High-Scale System Design, Profiling & SRE Observability",
     subtitle: "Hyperscale Architecture & Performance",
-    description: "The pinnacle of production engineering. Master JVM profiling with JFR, OpenTelemetry distributed tracing, database sharding, and zero-downtime migrations.",
+    description: "Build and operate Java services at scale. Cover JVM profiling with JFR and async-profiler, OpenTelemetry observability, database scaling, and zero-downtime deployments.",
     color: "from-emerald-500/20 to-emerald-500/5",
     badge: "bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 border-emerald-500/30",
     topics: [
@@ -584,13 +584,13 @@ export const roadmapData: RoadmapLevel[] = [
     level: 14,
     title: "Level 14: Enterprise Java & AI Orchestration",
     subtitle: "Modern AI Engineering in Java",
-    description: "Harness the modern frontier of Generative AI in enterprise Java. Master Spring AI, Vector Databases (pgvector), RAG architectures, and tool-calling agents.",
+    description: "Integrate Large Language Models into Spring Boot services using Spring AI, structured Java records, pgvector semantic search, RAG pipelines, and tool-calling agents.",
     color: "from-cyan-500/20 to-cyan-500/5",
     badge: "bg-cyan-500/10 text-cyan-800 dark:text-cyan-300 border-cyan-500/30",
     topics: [
       {
         title: "The AI Landscape for Java: Spring AI",
-        details: ["The GenAI Revolution for Java Engineers", "Spring AI Architecture: Models, Prompts, Output Parsers", "Comparing Spring AI vs LangChain4j", "Connecting to OpenAI, Anthropic, Gemini, & Local Ollama Models"]
+        details: ["Integrating Generative AI into Java Services", "Spring AI Architecture: Models, Prompts, Output Parsers", "Comparing Spring AI vs LangChain4j", "Connecting to OpenAI, Anthropic, Gemini, & Local Ollama Models"]
       },
       {
         title: "LLM Integration and Structured Records",
@@ -618,7 +618,7 @@ export const roadmapData: RoadmapLevel[] = [
     level: 15,
     title: "Level 15: Ultra-Low Latency & Mechanical Sympathy",
     subtitle: "Sub-Microsecond Systems & Hardware Alignment",
-    description: "The apex tier of high-performance Java engineering. Master mechanical sympathy, LMAX Disruptor lock-free ring buffers, Project Panama FFM off-heap memory, zero-allocation algorithms, and low-latency Aeron messaging.",
+    description: "Write latency-sensitive Java systems with hardware awareness: CPU cache lines, Project Panama off-heap memory, lock-free Disruptor ring buffers, zero-allocation patterns, and Aeron/Chronicle messaging.",
     color: "from-rose-500/20 to-rose-500/5",
     badge: "bg-rose-500/10 text-rose-800 dark:text-rose-300 border-rose-500/30",
     topics: [
@@ -632,7 +632,7 @@ export const roadmapData: RoadmapLevel[] = [
       },
       {
         title: "The LMAX Disruptor and Lock-Free Ring Buffers",
-        details: ["The Contention Nightmare of BlockingQueues", "Circular Ring Buffer Topology with Power-of-Two Masking", "Sequencer Architecture: Single-Producer vs Multi-Producer", "Memory Barriers without Mutex Locks", "Wait Strategies: YieldingWaitStrategy vs BusySpinWaitStrategy"]
+        details: ["Why BlockingQueues Stall Under Contention", "Circular Ring Buffer Topology with Power-of-Two Masking", "Sequencer Architecture: Single-Producer vs Multi-Producer", "Memory Barriers without Mutex Locks", "Wait Strategies: YieldingWaitStrategy vs BusySpinWaitStrategy"]
       },
       {
         title: "Zero-Allocation Java and Garbage-Free Patterns",

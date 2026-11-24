@@ -1,211 +1,237 @@
 ---
 title: "Java Platform Module System (JPMS)"
-description: "Master Project Jigsaw, module-info.java, strong encapsulation, qualified exports, reflection boundaries, and lightweight jlink container runtimes."
+description: "How Project Jigsaw structures the JDK and applications with module-info.java, enforces strong encapsulation against reflection, handles split packages and the unnamed module, and builds slim runtimes with jlink."
+category: "level-3"
+date: "2026-10-29T10:00:00Z"
 ---
 
-For the first two decades of Java's existence, the JVM's dependency resolution mechanism was notoriously crude: the **Flat Classpath**. 
+For Java's first twenty years, dependency resolution relied on a flat classpath. You handed the JVM a list of directories and JAR files via `-classpath`, and the class loader scanned them linearly until it found the first `.class` file matching a requested name.
 
-You dumped dozens of JAR files into a folder, set `-classpath`, and the JVM searched for classes in whatever arbitrary order the operating system returned them. If two JARs contained classes with identical package and class names, the JVM silently loaded whichever file it encountered first, leading to mysterious runtime `NoSuchMethodError` crashes. Worse, Java had no concept of access boundaries between packages: if a class was marked `public`, it was exposed to the entire world. Frameworks and libraries routinely reflected into internal JVM implementation classes (such as `sun.misc.Unsafe`), preventing the OpenJDK team from refactoring core libraries without breaking the global Java ecosystem.
+That flat model created two long-running problems. First, the JVM could not detect missing or duplicate dependencies ahead of time; two JARs shipping different versions of the same class silently shadowed each other until a `NoSuchMethodError` appeared at runtime. Second, Java had no encapsulation boundary above the package level. Any class marked `public` so another package inside the same library could call it was also public to every consumer on earth. Libraries routinely depended on internal JDK classes like `sun.misc.Unsafe` or reflected into private fields of `java.base`, making it nearly impossible for OpenJDK maintainers to refactor core libraries safely.
 
-Introduced in Java 9 under **Project Jigsaw**, the **Java Platform Module System (JPMS)** fundamentally transformed the JDK from a monolithic runtime into an interconnected graph of reusable, strongly encapsulated modules. 
+Java 9 introduced the **Java Platform Module System (JPMS)** under **Project Jigsaw**. It broke the monolithic JDK (`rt.jar`) into a graph of explicitly defined modules (such as `java.base`, `java.sql`, and `java.net.http`) and gave application developers the same mechanism to declare dependencies, hide internal packages, and assemble minimal custom runtimes with `jlink`.
 
-In this deep dive, we explore how `module-info.java` controls dependency graphs, how Strong Encapsulation restricts invasive reflection, how to diagnose split package disasters, and how to build hyper-lean, 35MB custom runtime images using `jlink`.
+## Project Jigsaw and `module-info.java`
 
----
-
-### The Architecture of module-info.java
-
-A Java module is a named, self-describing collection of code and data. At the root of its source tree (directly under `src/main/java`), every module declares a metadata descriptor file: `module-info.java`.
+A Java module is a named group of packages paired with a compiled descriptor at the root of its source tree: `src/main/java/module-info.java`. When `javac` compiles it into `module-info.class`, both the compiler and the JVM read that descriptor to verify the module dependency graph before executing a single line of application code.
 
 ```java
-module com.enterprise.billing {
-    // 1. Direct dependencies
+module com.example.billing {
+    // Direct compile-time and runtime dependencies
     requires java.sql;
-    requires com.enterprise.security;
+    requires com.example.security;
 
-    // 2. Transitive dependency (Implied Readability)
-    requires transitive com.enterprise.common.dto;
+    // Transitive dependency: callers of billing automatically read common.dto
+    requires transitive com.example.common.dto;
 
-    // 3. Publicly exposed API packages
-    exports com.enterprise.billing.api;
-    exports com.enterprise.billing.model;
+    // Optional compile-time dependency (not required to be present at runtime)
+    requires static org.jspecify;
 
-    // 4. Qualified exports (restricted to specific modules)
-    exports com.enterprise.billing.internal to com.enterprise.auditing;
+    // Public API packages visible to any module that requires billing
+    exports com.example.billing.api;
+    exports com.example.billing.model;
 
-    // 5. Reflection access for frameworks (Spring, Jackson, Hibernate)
-    opens com.enterprise.billing.entities to org.hibernate.orm.core, com.fasterxml.jackson.databind;
+    // Qualified export: visible only to the named friend module
+    exports com.example.billing.internal to com.example.auditing;
 
-    // 6. Service Provider Interface (SPI) mechanics
-    uses com.enterprise.billing.spi.PaymentGatewayProvider;
-    provides com.enterprise.billing.spi.PaymentGatewayProvider 
-        with com.enterprise.billing.provider.StripePaymentGateway;
+    // Runtime deep-reflection access for ORM and JSON libraries
+    opens com.example.billing.entities to org.hibernate.orm.core, com.fasterxml.jackson.databind;
+
+    // ServiceLoader integration
+    uses com.example.billing.spi.PaymentGateway;
+    provides com.example.billing.spi.PaymentGateway
+        with com.example.billing.provider.StripePaymentGateway;
 }
 ```
 
+Every module implicitly requires `java.base` (which contains `java.lang`, `java.util`, `java.io`, and other core packages), so you never need to list it explicitly.
+
 ```mermaid
 flowchart LR
-    subgraph BillingModule ["module com.enterprise.billing"]
+    subgraph Billing ["module com.example.billing"]
         direction TB
-        ExportedAPI["Exported: com.enterprise.billing.api"]
-        Entities["Opened: com.enterprise.billing.entities"]
-        Internal["Encapsulated: com.enterprise.billing.internal"]
+        Api["Exported: com.example.billing.api"]
+        Entities["Opened: com.example.billing.entities"]
+        Internal["Internal: com.example.billing.internal"]
     end
 
-    subgraph ExternalApp ["Client Application"]
-        ClientCode["Client Code"]
-    end
+    Client["Client Module"]
+    Audit["module com.example.auditing"]
+    Hibernate["Hibernate ORM"]
 
-    subgraph Frameworks ["Frameworks"]
-        Hibernate["Hibernate ORM"]
-    end
-
-    ClientCode -->|Compile & Runtime Access| ExportedAPI
-    ClientCode -.->|BLOCKED: IllegalAccessError| Internal
-    Hibernate -->|Deep Reflection via 'opens'| Entities
+    Client -->|"Compile and runtime access"| Api
+    Client -.->|"Blocked (IllegalAccessError)"| Internal
+    Audit -->|"Qualified export"| Internal
+    Hibernate -->|"Deep reflection via opens"| Entities
 ```
 
----
+## Module Directives Explained
 
-### Module Directives Deep Dive
+Each directive in `module-info.java` serves a specific boundary between compile-time accessibility, runtime visibility, and reflective access.
 
-Let's dissect each directive and its underlying architectural guarantees:
+### `requires`, `requires transitive`, and `requires static`
 
-#### requires vs requires transitive
-- `requires <module>`: Declares a compile-time and runtime dependency. The current module can read public types exported by the specified module.
-- `requires transitive <module>`: Establishes **Implied Readability**. Any downstream module that depends on the current module automatically gains readability of the transitively required module. This is essential for API gateway libraries that accept or return objects defined in a common DTO module; clients don't have to manually declare `requires com.enterprise.common.dto` themselves.
+- **`requires <module>`** declares a dependency on another module. Your module can compile against and use public types from packages that `<module>` exports, but downstream consumers of your module do not automatically read `<module>`.
+- **`requires transitive <module>`** establishes **implied readability**. If your exported API method returns or accepts a type from `com.example.common.dto`, mark that dependency `transitive`. Otherwise, every downstream module calling your API would have to add `requires com.example.common.dto` to its own `module-info.java` just to compile.
+- **`requires static <module>`** declares a compile-time-only dependency that is optional at runtime. This fits annotation libraries (such as nullability annotations) or optional integrations that your code guards with runtime checks.
 
-#### exports vs qualified exports
-- `exports <package>`: Exposes all `public` and `protected` classes in that package to any module that requires this one. Packages not listed in an `exports` clause are **strictly encapsulated**—they cannot be accessed by external code, even if their classes are marked `public`!
-- `exports <package> to <module1>, <module2>`: **Qualified Export**. Restricts access to a trusted list of friend modules. Ideal for internal utilities that must be shared between microservices built by the same organization without exposing them publicly.
+### `exports` and Qualified Exports
 
-#### opens vs open module
-Under JPMS, `exports` grants compile-time access and runtime public method invocation, but it **strictly forbids deep reflection** (`field.setAccessible(true)`). 
-- `opens <package> to <framework>`: Grants runtime reflective access to non-public fields and constructors exclusively to specified frameworks (such as Jackson or Hibernate) while keeping the package closed to standard compile-time access.
-- `open module <name>`: Shorthand that opens all packages within the module to runtime reflection across all libraries. Useful during early migration phases.
+- **`exports <package>`** makes `public` types in `<package>` (and their `public` and `protected` members) accessible at compile time and runtime to any module that reads yours. Any package *not* listed in an `exports` clause stays hidden from external modules even if its classes are declared `public`.
+- **`exports <package> to <moduleA>, <moduleB>`** is a **qualified export**. It exposes the package only to the explicitly named modules. This is useful inside a multi-module project when a shared internal helper must be called by a sibling module without becoming part of your supported public API.
 
----
+### `opens`, Qualified `opens`, and `open module`
 
-### Strong Encapsulation and the Death of Illegal Reflection
+Exporting a package does **not** allow deep reflection into its `private` or package-private members. JPMS separates compile-time API visibility (`exports`) from runtime reflective introspection (`opens`):
 
-Prior to Java 9, calling `field.setAccessible(true)` allowed developers to mutate private fields, modify JVM internals, and read private cryptographic keys.
+- **`opens <package>`** allows other modules to use reflection (including `setAccessible(true)`) on all types and members in `<package>` at runtime, without making the package accessible at compile time.
+- **`opens <package> to <moduleA>, <moduleB>`** restricts that reflective access to specific frameworks such as Jackson, Hibernate, or Spring.
+- **`open module <name> { ... }`** opens every package in the module for runtime reflection. Teams often start with `open module` while migrating an existing codebase to JPMS, then narrow it down to targeted `opens` statements later.
 
-JPMS enforced **Strong Encapsulation**. If an external module attempts to reflect into a package that is not explicitly declared as `open` or `opens`:
+### `uses` and `provides ... with ...`
+
+JPMS builds `java.util.ServiceLoader` directly into the module descriptor. A module declares `uses <ServiceInterface>` to look up implementations via `ServiceLoader.load(...)`, and provider modules register implementations with `provides <ServiceInterface> with <ImplClass>`. The module system verifies at startup that provider classes exist and implement the service interface, avoiding stale `META-INF/services` entries.
+
+## Strong Encapsulation vs. Reflection Infiltration
+
+Before Java 9, any library on the classpath could call `field.setAccessible(true)` to read or mutate private fields inside your classes or inside the JDK itself. Under JPMS, that access check crosses module boundaries and is enforced strictly by the JVM.
+
+If external code attempts deep reflection on a package that is not opened to it:
 
 ```java
-// Foreign code trying to inspect un-opened package
-Field privateField = Account.class.getDeclaredField("secretBalance");
-privateField.setAccessible(true); // BOOM!
+// External module attempting to access a private field in a closed package
+Field balanceField = Account.class.getDeclaredField("secretBalance");
+balanceField.setAccessible(true);
 ```
 
-The JVM throws a fatal exception:
+The JVM rejects the call with `java.lang.reflect.InaccessibleObjectException`:
 
-```
-java.lang.reflect.IncompatibleObjectException: Unable to make field private 
-java.math.BigDecimal com.enterprise.billing.Account.secretBalance accessible: 
-module com.enterprise.billing does not "opens com.enterprise.billing" to unnamed module @0x5b37e0d2
+```text
+java.lang.reflect.InaccessibleObjectException: Unable to make field private
+java.math.BigDecimal com.example.billing.Account.secretBalance accessible:
+module com.example.billing does not "opens com.example.billing" to unnamed module @5b37e0d2
 ```
 
-In modern Java versions (Java 17+), the old command-line workaround `--illegal-access=permit` has been completely removed. To grant reflection in production without modifying source code, operators must explicitly pass targeted JVM flags:
+During the Java 9–15 transition window, the JVM defaulted to `--illegal-access=permit`, which allowed reflective access into JDK internals with a warning. Java 16 (JEP 396) changed the default to `deny`, and Java 17 (JEP 403) locked down JDK internals completely so `--illegal-access=permit` no longer works.
+
+When an older third-party library genuinely requires access to a closed package and you cannot update the library or its `module-info.java`, you must grant narrow permission on the command line:
 
 ```bash
-java --add-opens com.enterprise.billing/com.enterprise.billing.entities=com.fasterxml.jackson.databind \
+# Grant deep reflection into one package for classpath (unnamed module) code
+java --add-opens java.base/java.time=ALL-UNNAMED \
+     --add-opens com.example.billing/com.example.billing.entities=com.fasterxml.jackson.databind \
      -jar app.jar
 ```
 
----
+There is a parallel flag, `--add-exports <source-module>/<package>=<target-module>`, for compile-time or public-API access to an unexported package. Both flags make reflective holes explicit and auditable in startup scripts rather than silently permitted everywhere.
 
-### The Split Package Disaster
+## Split Packages and the Unnamed Module
 
-One of the strictest rules in the Java Platform Module System is the **Single Responsibility of Packages**: 
+JPMS enforces a strict rule on package ownership: **a package can belong to at most one named module in a module layer**.
 
-> **A package name can belong to exactly one module in the entire module graph.**
+On the traditional classpath, two different JARs could both put classes inside `com.example.util`, and the class loader merged them implicitly. Under JPMS, if two modules on the module path contain the same package (even with completely different class names), the JVM fails fast at startup:
 
-In legacy Classpath setups, Library A could contain classes in `com.google.common.base`, and Library B could also place classes into `com.google.common.base`. The Classpath merged them into a single chaotic namespace.
-
-In JPMS, if two modules contain the identical package name—even if they contain completely different class files—the JVM aborts bootup:
-
-```
+```text
 Error occurred during initialization of boot layer
-java.lang.LayerInstantiationException: Package com.enterprise.util in both module 
-    com.enterprise.core and module com.enterprise.common
+java.lang.LayerInstantiationException: Package com.example.util in both module
+    com.example.core and module com.example.common
 ```
 
-#### How to Resolve Split Packages:
-1. **Refactor Namespaces:** The clean solution. Rename the package in one of the libraries (e.g., `com.enterprise.core.util` vs `com.enterprise.common.util`).
-2. **Module Merging:** If the libraries are tightly coupled, merge them into a single unified module.
-3. **Patching (Migration Hack):** Use `--patch-module <target-module>=<override-jar>` to inject classes from one JAR into another module at boot time.
+Disallowing split packages lets the JVM map each package directly to its owning module in `O(1)` time without scanning multiple JARs, and preserves Java's assumption that package-private members are only visible within one cohesive module boundary.
 
----
+To resolve a split package during migration:
 
-### The Three Worlds: Unnamed, Automatic, and Explicit Modules
+1. **Rename one of the packages** (the clean long-term fix, such as `com.example.core.util` and `com.example.common.util`).
+2. **Merge the two JARs** into one module if they are tightly coupled parts of the same library.
+3. **Use `--patch-module`** as a temporary escape hatch (commonly used in unit tests when test code shares a package with production code):
+   ```bash
+   java --patch-module com.example.core=extra-classes.jar ...
+   ```
 
-Migrating large enterprise systems to JPMS cannot happen overnight. The JDK accommodates gradual adoption through three module classifications:
+### Explicit, Automatic, and Unnamed Modules
 
-```
-1. Explicit Modules:    Contains module-info.class on the Modulepath.
-2. Automatic Modules:   Legacy JAR on the Modulepath (JVM auto-generates module name from JAR filename).
-3. The Unnamed Module:  All JARs and classes on the legacy Classpath (-cp / -classpath).
-```
+Most real codebases depend on third-party libraries that have not all added a `module-info.java`. JPMS supports incremental migration through three kinds of modules:
 
-| Trait | Explicit Module | Automatic Module | Unnamed Module |
-| :--- | :--- | :--- | :--- |
-| **Location** | Modulepath (`--module-path`) | Modulepath (`--module-path`) | Classpath (`-cp`) |
-| **Descriptor** | `module-info.class` | Synthesized by JVM | None |
-| **Encapsulation** | Strict | Exports all packages, opens all packages | Completely open |
-| **Can read** | Declared in `requires` | All other modules | All other modules |
+| Property | Explicit Module | Automatic Module | Unnamed Module |
+|---|---|---|---|
+| **Where it lives** | `--module-path` | `--module-path` | `-cp` / `-classpath` |
+| **Descriptor** | Compiled `module-info.class` | Synthesized by JVM from JAR | None |
+| **Module name** | Declared in `module-info.java` | `Automatic-Module-Name` manifest entry, or derived from JAR filename | Unnamed |
+| **Exports / Opens** | Only what is declared | Exports and opens all packages | Exports and opens all packages |
+| **What it can read** | Only modules listed in `requires` | All named modules **and** the unnamed module | All named modules **and** itself |
 
-This enables a phased migration: your application can run on `--module-path` as an explicit module while consuming older legacy libraries placed on the classpath through the Unnamed Module bridge.
+A detail that surprises many developers during migration: **an explicit named module cannot `requires` the unnamed module**. That means your modularized code cannot directly depend on jars left on `-classpath` (unless you pass `--add-reads <your-module>=ALL-UNNAMED`).
 
----
+Instead, **automatic modules** serve as the migration bridge:
 
-### Creating 35MB Minimal Runtimes with jlink
+- **Top-down migration:** Move your application JAR and its dependencies onto `--module-path`. Libraries without `module-info.class` become automatic modules. Your explicit `module-info.java` can `requires` those automatic modules, and automatic modules can in turn read any remaining libraries still sitting on the classpath.
+- **Bottom-up migration:** Library authors can start by adding `Automatic-Module-Name: com.example.mylib` to `META-INF/MANIFEST.MF` long before writing a full `module-info.java`. That guarantees a stable module name regardless of how the JAR file is renamed (e.g., `mylib-2.4.1.jar`).
 
-In modern containerized cloud deployments, running a full 350MB+ JDK or 200MB generic JRE inside a Docker image wastes bandwidth, increases cold-start image pull latency in Kubernetes, and expands the container attack surface with unused utilities (like `java.desktop` or `java.compiler`).
+## Creating Minimal Custom Runtimes with `jlink`
 
-Because every module explicitly declares its dependency tree, the JDK includes a linker tool called **`jlink`**. `jlink` traverses your application's module graph, extracts only the exact JVM native binaries and platform modules your application actually uses, and bundles them into a custom, self-contained runtime directory:
+A full JDK distribution weighs roughly 300–400 MB on disk because it bundles every platform module (`java.desktop`, `java.compiler`, `jdk.jshell`, Swing, CORBA-era tools, and native libraries). Most headless backend services only touch a handful of modules like `java.base`, `java.logging`, `java.sql`, `java.net.http`, and `java.management`.
+
+Because the JDK itself is modular, the **`jlink`** tool can inspect a module graph and assemble a self-contained runtime image containing only the JVM binaries and JDK modules your application actually uses.
 
 ```mermaid
 flowchart LR
-    AppModule["Your Application Module<br/>(requires java.base, java.sql)"]
-    FullJDK["Full OpenJDK (350MB)<br/>(java.desktop, java.xml, java.compiler, etc.)"]
-    JlinkTool["jlink Linker Engine"]
-    CustomJRE["Custom Lean Runtime (35MB)<br/>(Only java.base + java.sql + App)"]
-
-    AppModule --> JlinkTool
-    FullJDK --> JlinkTool
-    JlinkTool --> CustomJRE
+    FullJdk["Full JDK (jmods)"] --> Jlink["jlink Linker"]
+    Deps["Required Modules (from jdeps or module-info)"] --> Jlink
+    Jlink --> CustomRuntime["Minimal Custom Runtime Image"]
 ```
 
-#### Production jlink Docker Pipeline
+### Finding Required JDK Modules with `jdeps`
+
+Even if your application is packaged as a non-modular Spring Boot or fat JAR running on the classpath, you can still use `jdeps` and `jlink` to build a slim custom JRE tailored to your app's exact JDK dependencies. (In fact, this is the most common production pattern, because `jlink` cannot directly bundle automatic modules, only explicit modules and JDK platform modules.)
+
+```bash
+# Inspect a fat JAR (or unpacked lib directory) to print the exact comma-separated JDK modules needed
+jdeps --ignore-missing-deps \
+      --multi-release 21 \
+      --print-module-deps \
+      --class-path "target/lib/*" \
+      target/app.jar
+```
+
+That command typically outputs a short list such as:
+
+```text
+java.base,java.logging,java.management,java.naming,java.net.http,java.sql,jdk.unsupported
+```
+
+> [!NOTE]
+> `jdeps` performs static bytecode analysis. If your app dynamically loads crypto providers or locales at runtime (for example, HTTPS connections using TLS), you may need to add `jdk.crypto.ec` or `jdk.localedata` manually to the `--add-modules` list and verify in staging.
+
+### Building the Custom Runtime in a Multi-Stage Dockerfile
 
 ```dockerfile
-# Stage 1: Build & Custom Runtime Assembly
+# Stage 1: Build the app and assemble a minimal Java 21 runtime
 FROM eclipse-temurin:21-jdk-alpine AS builder
 
 WORKDIR /build
 COPY . .
 
-# Step A: Compile application with maven
 RUN ./mvnw clean package -DskipTests
 
-# Step B: Determine exact platform dependencies using jdeps
-RUN jdeps --ignore-missing-deps --multi-release 21 --print-module-deps \
-    --class-path "target/dependency/*" target/app.jar > modules.txt
+# Discover required JDK modules
+RUN jdeps --ignore-missing-deps \
+          --multi-release 21 \
+          --print-module-deps \
+          --class-path "target/dependency/*" \
+          target/app.jar > modules.txt
 
-# Step C: Assemble custom minimal runtime (stripping debug info and man pages)
+# Link a minimal JRE (use --compress=zip-6 on Java 21+; earlier versions used --compress=2)
 RUN $JAVA_HOME/bin/jlink \
-    --add-modules $(cat modules.txt) \
+    --add-modules $(cat modules.txt),jdk.crypto.ec \
     --strip-debug \
     --no-man-pages \
     --no-header-files \
-    --compress=2 \
+    --compress=zip-6 \
     --output /custom-runtime
 
-# Stage 2: Distroless Minimal Deployment Image
-FROM alpine:3.19
+# Stage 2: Copy only the custom runtime and application JAR into a matching Alpine base
+FROM alpine:3.20
 
-# Copy ONLY the custom JVM runtime and compiled application
 COPY --from=builder /custom-runtime /opt/java
 COPY --from=builder /build/target/app.jar /opt/app/app.jar
 
@@ -214,30 +240,32 @@ ENV PATH="/opt/java/bin:$PATH"
 ENTRYPOINT ["java", "-jar", "/opt/app/app.jar"]
 ```
 
-The resulting Docker image shrinks from over **400MB** down to **~45MB**, dramatically accelerating Kubernetes Pod scaling operations during traffic spikes.
+Notice that both stages use Alpine Linux. Because `jlink` copies native shared libraries from the builder's JDK, the builder stage and the runtime stage must share the same C standard library (`musl` on Alpine, or `glibc` on Debian/Ubuntu/Distroless). Mixing an Alpine builder with a Debian runtime (or vice versa) causes the linked `java` binary to fail at container startup.
 
----
+For a typical microservice, a `jlink` runtime image often lands around 40–70 MB instead of 200+ MB for a generic JRE, reducing image pull times and removing unused JDK tooling from the production container.
 
-## Senior Engineer Interview Crucible
+## Summary
 
-### What problem was Project Jigsaw designed to solve, and why did it take nearly a decade to release?
-**Answer:** The primary motivation was dismantling the **Monolithic JDK** and eliminating **Classpath Hell**. Prior to Java 9, even a "Hello World" application loaded `rt.jar` (a massive 65MB monolithic archive containing everything from CORBA to Swing). Because Java lacked module-level access control, internal JDK classes like `sun.misc.Unsafe` became public implementation dependencies for thousands of external libraries. The OpenJDK team could not optimize or remove obsolete subsystems without breaking real-world software. 
+- **Project Jigsaw (`module-info.java`)** replaces the flat classpath's hidden dependencies with an explicit, verified module graph.
+- **`requires` / `requires transitive`** control readability; **`exports` / qualified `exports`** control compile-time API visibility; **`opens`** grants runtime deep-reflection access.
+- **Strong encapsulation** blocks `setAccessible(true)` on closed packages with `InaccessibleObjectException`, requiring `opens` in `module-info.java` or explicit `--add-opens` flags at runtime.
+- **Split packages** are forbidden across named modules; **automatic modules** (especially with `Automatic-Module-Name`) bridge explicit modules and legacy classpath JARs during migration.
+- **`jdeps` + `jlink`** let you build minimal, tailored JRE images even for non-modular classpath applications.
 
-It took nearly a decade because modularizing a 20-year-old runtime required untangling circular dependencies across hundreds of thousands of classes, inventing the concept of strong encapsulation without permanently breaking backward compatibility, and negotiating with major enterprise framework vendors (Spring, Hibernate, Eclipse) who relied extensively on deep reflection into private class internals.
+## Interview Questions
 
-### What is the difference between `requires` and `requires transitive` in a `module-info.java` file?
-**Answer:** `requires M` declares that the current module reads module `M`. The current module can compile and execute against public types exported by `M`, but this dependency is strictly encapsulated. Downstream modules that depend on the current module **do not** gain readability of `M`.
+### What problems was Project Jigsaw built to solve?
 
-`requires transitive M` establishes **Implied Readability**. Any downstream module that requires the current module automatically gains readability of module `M` as well. This is mandatory when the current module exposes classes from `M` in its own public method signatures (e.g., as method return types or parameter types). Without `transitive`, downstream consumers would be unable to compile against or manipulate the return values of those API methods unless they manually added an explicit `requires M` statement in their own `module-info.java`.
+Project Jigsaw addressed two structural problems in pre-Java 9 runtimes: classpath fragility and lack of encapsulation above the package level. On a flat classpath, missing dependencies only fail when a code path executes, and duplicate JARs shadow each other silently. At the same time, marking a class `public` so another package in the same library could use it exposed it to every downstream caller, including internal JDK packages like `sun.misc.*`. JPMS introduced reliable startup dependency verification, module-level encapsulation, and a modularized JDK capable of producing custom slim runtimes via `jlink`.
 
-### Why does JPMS prohibit Split Packages, and how does this invariant improve JVM performance and security?
-**Answer:** A split package occurs when two separate modules declare classes within the identical package namespace (e.g., both Module A and Module B contain classes in `com.company.analytics`). 
+### What is the difference between `requires` and `requires transitive`?
 
-JPMS prohibits split packages to ensure **deterministic class resolution** and **uncompromised access control**. When the JVM loads a class from a module, it resolves the package to an exact module origin via an internal hash map in `O(1)` time, completely bypassing the linear disk searches of legacy classpaths. Furthermore, package-private visibility depends on the assumption that all classes in that package share the identical security domain. If split packages were allowed, an attacker could inject an unauthorized class into a sensitive package from a rogue module and gain access to package-private state.
+`requires M` lets the current module read exported packages from `M`, but keeps that dependency private to the current module. `requires transitive M` propagates readability so any module that requires the current module automatically reads `M` as well. You should use `requires transitive` whenever types from `M` appear in your module's exported public method signatures, fields, or superclasses; otherwise callers cannot compile against those signatures without manually adding `requires M`.
 
-### How does the `opens` directive differ from `exports`, and why is `opens` essential for modern dependency-injection frameworks?
-**Answer:** 
-- `exports com.my.package` permits compile-time and runtime access only to `public` and `protected` members of that package. Crucially, it prohibits **deep reflection**—an external caller cannot call `AccessibleObject.setAccessible(true)` on private fields or constructors.
-- `opens com.my.package` does **not** grant compile-time access to the package, but it grants complete runtime reflective access, including private member inspection and modification via the Reflection API.
+### How does `opens` differ from `exports`, and why do frameworks like Hibernate or Jackson need `opens`?
 
-Modern frameworks like Spring, Hibernate, and Jackson rely on deep reflection to instantiate no-arg constructors, inject `@Autowired` private fields, and map JSON payloads onto private record components without forcing developers to create public setter methods. Using `opens com.my.package to com.fasterxml.jackson.databind` provides surgical, least-privilege access: it satisfies framework introspection needs while keeping the package completely hidden from standard compile-time application code.
+`exports com.example.pkg` makes `public` types in that package accessible at compile time and runtime, but it does **not** permit deep reflection (`setAccessible(true)`) on `private` fields or constructors. `opens com.example.pkg` does the opposite: it does not grant compile-time access, but it allows full runtime reflective access to all members, including private ones. Frameworks like Hibernate, Jackson, and Spring instantiate objects and populate private fields reflectively, so using qualified `opens com.example.entities to org.hibernate.orm.core;` lets them work without exposing the package as a compile-time API or disabling encapsulation globally.
+
+### Why can't an explicit named module read the unnamed module, and how do teams migrate incrementally?
+
+JPMS prevents explicit modules from depending on the unnamed module (`-classpath`) so that modularized libraries cannot accidentally rely on the chaotic, unverified flat classpath. To migrate incrementally, teams use **automatic modules**: placing a legacy JAR (ideally with an `Automatic-Module-Name` entry in `MANIFEST.MF`) onto `--module-path` turns it into a named automatic module. Explicit modules can `requires` automatic modules, and automatic modules are allowed to read both named modules and the unnamed classpath module, acting as the bridge until all dependencies are modularized.
