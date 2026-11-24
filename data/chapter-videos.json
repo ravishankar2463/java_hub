@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T21:40:22.328Z",
-  "totalVideos": 68,
+  "updatedAt": "2026-11-24T21:46:44.736Z",
+  "totalVideos": 72,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -1225,6 +1225,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/optional-api",
       "branchName": "topic/level-4/optional-api",
       "renderedAt": "2026-11-24T21:40:22.328Z"
+    },
+    {
+      "chapterId": "level-4/reactive-programming-basics",
+      "level": "level-4",
+      "slug": "reactive-programming-basics",
+      "chapterTitle": "Reactive Programming Basics",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-observer-to-reactive",
+      "partTitle": "Why Reactive Streams Exist",
+      "format": "shorts",
+      "durationSec": 52.8,
+      "file": "level-4/reactive-programming-basics/part-1-observer-to-reactive.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__reactive-programming-basics__part-1-observer-to-reactive.mp4",
+      "releaseTag": "videos-level-4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/reactive-programming-basics",
+      "branchName": "topic/level-4/reactive-programming-basics",
+      "renderedAt": "2026-11-24T21:43:11.186Z"
+    },
+    {
+      "chapterId": "level-4/reactive-programming-basics",
+      "level": "level-4",
+      "slug": "reactive-programming-basics",
+      "chapterTitle": "Reactive Programming Basics",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-mono-flux-assembly",
+      "partTitle": "Mono, Flux & The Lazy Pipeline",
+      "format": "shorts",
+      "durationSec": 43.3,
+      "file": "level-4/reactive-programming-basics/part-2-mono-flux-assembly.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__reactive-programming-basics__part-2-mono-flux-assembly.mp4",
+      "releaseTag": "videos-level-4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/reactive-programming-basics",
+      "branchName": "topic/level-4/reactive-programming-basics",
+      "renderedAt": "2026-11-24T21:44:22.112Z"
+    },
+    {
+      "chapterId": "level-4/reactive-programming-basics",
+      "level": "level-4",
+      "slug": "reactive-programming-basics",
+      "chapterTitle": "Reactive Programming Basics",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-schedulers-threading",
+      "partTitle": "Mastering Schedulers & Threading",
+      "format": "shorts",
+      "durationSec": 45,
+      "file": "level-4/reactive-programming-basics/part-3-schedulers-threading.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__reactive-programming-basics__part-3-schedulers-threading.mp4",
+      "releaseTag": "videos-level-4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/reactive-programming-basics",
+      "branchName": "topic/level-4/reactive-programming-basics",
+      "renderedAt": "2026-11-24T21:45:36.666Z"
+    },
+    {
+      "chapterId": "level-4/reactive-programming-basics",
+      "level": "level-4",
+      "slug": "reactive-programming-basics",
+      "chapterTitle": "Reactive Programming Basics",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-reactive-vs-virtual-threads",
+      "partTitle": "Reactive vs. Virtual Threads",
+      "format": "shorts",
+      "durationSec": 41.4,
+      "file": "level-4/reactive-programming-basics/part-4-reactive-vs-virtual-threads.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__reactive-programming-basics__part-4-reactive-vs-virtual-threads.mp4",
+      "releaseTag": "videos-level-4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/reactive-programming-basics",
+      "branchName": "topic/level-4/reactive-programming-basics",
+      "renderedAt": "2026-11-24T21:46:44.734Z"
     }
   ]
 }
