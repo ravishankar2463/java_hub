@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T23:34:34.848Z",
-  "totalVideos": 125,
+  "updatedAt": "2026-11-24T23:45:14.282Z",
+  "totalVideos": 129,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -2251,6 +2251,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-7/full-text-search-with-elasticsearch",
       "branchName": "topic/level-7/full-text-search-with-elasticsearch",
       "renderedAt": "2026-11-24T23:34:34.847Z"
+    },
+    {
+      "chapterId": "level-7/jpa-and-hibernate-basics",
+      "level": "level-7",
+      "slug": "jpa-and-hibernate-basics",
+      "chapterTitle": "JPA and Hibernate Basics",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-mapping-and-lifecycle",
+      "partTitle": "Mapping Entities and Lifecycle States",
+      "format": "shorts",
+      "durationSec": 53.4,
+      "file": "level-7/jpa-and-hibernate-basics/part-1-mapping-and-lifecycle.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__jpa-and-hibernate-basics__part-1-mapping-and-lifecycle.mp4",
+      "releaseTag": "videos-level-7",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-7/jpa-and-hibernate-basics",
+      "branchName": "topic/level-7/jpa-and-hibernate-basics",
+      "renderedAt": "2026-11-24T23:41:10.684Z"
+    },
+    {
+      "chapterId": "level-7/jpa-and-hibernate-basics",
+      "level": "level-7",
+      "slug": "jpa-and-hibernate-basics",
+      "chapterTitle": "JPA and Hibernate Basics",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-primary-keys-and-batching",
+      "partTitle": "Identity vs Sequence Performance",
+      "format": "shorts",
+      "durationSec": 53.5,
+      "file": "level-7/jpa-and-hibernate-basics/part-2-primary-keys-and-batching.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__jpa-and-hibernate-basics__part-2-primary-keys-and-batching.mp4",
+      "releaseTag": "videos-level-7",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-7/jpa-and-hibernate-basics",
+      "branchName": "topic/level-7/jpa-and-hibernate-basics",
+      "renderedAt": "2026-11-24T23:42:38.151Z"
+    },
+    {
+      "chapterId": "level-7/jpa-and-hibernate-basics",
+      "level": "level-7",
+      "slug": "jpa-and-hibernate-basics",
+      "chapterTitle": "JPA and Hibernate Basics",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-persistence-context",
+      "partTitle": "Dirty Checking and L1 Cache",
+      "format": "shorts",
+      "durationSec": 47.3,
+      "file": "level-7/jpa-and-hibernate-basics/part-3-persistence-context.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__jpa-and-hibernate-basics__part-3-persistence-context.mp4",
+      "releaseTag": "videos-level-7",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-7/jpa-and-hibernate-basics",
+      "branchName": "topic/level-7/jpa-and-hibernate-basics",
+      "renderedAt": "2026-11-24T23:43:54.272Z"
+    },
+    {
+      "chapterId": "level-7/jpa-and-hibernate-basics",
+      "level": "level-7",
+      "slug": "jpa-and-hibernate-basics",
+      "chapterTitle": "JPA and Hibernate Basics",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-schema-and-production",
+      "partTitle": "Schema Generation and Safety",
+      "format": "shorts",
+      "durationSec": 49.6,
+      "file": "level-7/jpa-and-hibernate-basics/part-4-schema-and-production.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__jpa-and-hibernate-basics__part-4-schema-and-production.mp4",
+      "releaseTag": "videos-level-7",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-7/jpa-and-hibernate-basics",
+      "branchName": "topic/level-7/jpa-and-hibernate-basics",
+      "renderedAt": "2026-11-24T23:45:14.282Z"
     }
   ]
 }
