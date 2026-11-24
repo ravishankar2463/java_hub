@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-24T16:45:18.061Z",
+  "updatedAt": "2026-11-24T17:31:00.153Z",
   "totalVideos": 3,
   "videos": [
     {
@@ -12,11 +12,11 @@
       "partSlug": "part-1-hello-world-anatomy",
       "partTitle": "Why Java Needs 6 Lines for Hello World",
       "format": "shorts",
-      "durationSec": 73.5,
+      "durationSec": 60.3,
       "file": "level-0/anatomy-of-a-java-program/part-1-hello-world-anatomy.mp4",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/anatomy-of-a-java-program",
       "branchName": "topic/level-0/anatomy-of-a-java-program",
-      "renderedAt": "2026-11-24T16:41:15.946Z"
+      "renderedAt": "2026-11-24T17:31:00.153Z"
     },
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -28,11 +28,11 @@
       "partSlug": "part-2-javac-and-bytecode",
       "partTitle": "What Happens When You Run javac & java?",
       "format": "shorts",
-      "durationSec": 81,
+      "durationSec": 65.5,
       "file": "level-0/anatomy-of-a-java-program/part-2-javac-and-bytecode.mp4",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/anatomy-of-a-java-program",
       "branchName": "topic/level-0/anatomy-of-a-java-program",
-      "renderedAt": "2026-11-24T16:43:17.538Z"
+      "renderedAt": "2026-11-24T17:22:12.661Z"
     },
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -44,11 +44,11 @@
       "partSlug": "part-3-pitfalls-and-modern-main",
       "partTitle": "Silent Semicolon Bug, Javadoc & Java 25 Compact Main",
       "format": "shorts",
-      "durationSec": 80.2,
+      "durationSec": 66.2,
       "file": "level-0/anatomy-of-a-java-program/part-3-pitfalls-and-modern-main.mp4",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/anatomy-of-a-java-program",
       "branchName": "topic/level-0/anatomy-of-a-java-program",
-      "renderedAt": "2026-11-24T16:45:18.061Z"
+      "renderedAt": "2026-11-24T17:23:54.887Z"
     }
   ]
 }

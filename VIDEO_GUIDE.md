@@ -54,7 +54,7 @@ Follow this 5-step checklist for every chapter in [`VIDEO_PROGRESS.md`](./VIDEO_
 
 - **Write for the ear, not the page:** Use contractions (*it's*, *don't*, *here's*), direct "you", and punchy sentences. Never copy-paste dry textbook paragraphs.
 - **No static slides:** Every beat should spotlight lines, light up diagram nodes, type terminal commands, or contrast `❌ DON'T` vs `✅ DO`.
-- **Natural voice pacing:** Default voice is Kokoro-82M `am_michael` at `1.1x` speed. You can override with `--voice am_adam` (or `bf_emma`, `af_heart`) or drop in your own recorded audio at:
+- **Natural voice pacing:** Default voice is Kokoro-82M `af_heart` (`fp32` full precision) at `1.24x` speed. You can override with `--voice af_bella` (or `bf_emma`, `am_fenrir`) or drop in your own recorded audio at:
   ```text
   video-studio/public/audio/<level>__<slug>__part-<N>/<beat-id>.human.wav
   ```
