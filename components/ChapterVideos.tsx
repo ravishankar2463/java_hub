@@ -15,6 +15,8 @@ export interface ChapterVideoItem {
   format: string;
   durationSec: number;
   file: string;
+  videoUrl?: string;
+  releaseTag?: string;
   roadmapUrl: string;
   branchName: string;
   renderedAt: string;
@@ -38,8 +40,8 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
   if (videos.length === 0) return null;
 
   const active = videos[selectedIndex] ?? videos[0];
-  const rawUrl = `${RAW_BASE}/${active.file}`;
-  const githubUrl = `${BLOB_BASE}/${active.file}`;
+  const rawUrl = active.videoUrl || `${RAW_BASE}/${active.file}`;
+  const githubUrl = active.videoUrl || `${BLOB_BASE}/${active.file}`;
 
   return (
     <section

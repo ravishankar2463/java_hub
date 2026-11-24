@@ -1,6 +1,6 @@
 # JavaHub Short Summary Videos — Progress Tracker
 
-Tracks progress of converting all **116 JavaHub chapters** into multi-part **9:16 vertical YouTube Shorts** stored in [java_hub_resources/videos](https://github.com/ravishankar2463/java_hub_resources/tree/main/videos) and embedded on each chapter page.
+Tracks progress of converting all **116 JavaHub chapters** into multi-part **9:16 vertical YouTube Shorts** hosted on [java_hub_resources GitHub Releases](https://github.com/ravishankar2463/java_hub_resources/releases) and embedded on each chapter page.
 
 See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and rendering commands.
 
@@ -16,7 +16,7 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 - [ ] **Environment Setup** (level-0/environment-setup)
 - [ ] **Git & Version Control** (level-0/git-version-control)
-- [x] **Anatomy of a Java Program** (level-0/anatomy-of-a-java-program) — 3 Shorts: [Part 1 (60s)](https://github.com/ravishankar2463/java_hub_resources/blob/main/videos/level-0/anatomy-of-a-java-program/part-1-hello-world-anatomy.mp4) · [Part 2 (66s)](https://github.com/ravishankar2463/java_hub_resources/blob/main/videos/level-0/anatomy-of-a-java-program/part-2-javac-and-bytecode.mp4) · [Part 3 (66s)](https://github.com/ravishankar2463/java_hub_resources/blob/main/videos/level-0/anatomy-of-a-java-program/part-3-pitfalls-and-modern-main.mp4)
+- [x] **Anatomy of a Java Program** (level-0/anatomy-of-a-java-program) — 3 Shorts: [Part 1 (60s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__anatomy-of-a-java-program__part-1-hello-world-anatomy.mp4) · [Part 2 (66s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__anatomy-of-a-java-program__part-2-javac-and-bytecode.mp4) · [Part 3 (66s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__anatomy-of-a-java-program__part-3-pitfalls-and-modern-main.mp4)
 - [ ] **Variables and Data Types** (level-0/variables-and-data-types)
 - [ ] **Control Flow** (level-0/control-flow)
 - [ ] **Arrays & 2D Matrices** (level-0/arrays-2d-matrices)
