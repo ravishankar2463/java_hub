@@ -4,6 +4,7 @@ import { RoadmapProgressBanner } from "@/components/RoadmapProgressBanner";
 import {
   CheckCircle,
   ExternalLink,
+  Film,
   GitBranch,
   HardDriveDownload,
   Layers,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 import { slugify } from "@/utils/slugify";
 import Link from "next/link";
+import chapterVideosData from "@/data/chapter-videos.json";
 
 const LEVEL_SHORTCUTS = [
   { level: 0, label: "L0: Basics" },
@@ -80,6 +82,15 @@ export function RoadmapContent() {
             <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             <span><strong className="text-slate-900 dark:text-slate-100">{totalTopics}</strong> Deep-Dive Lessons</span>
           </div>
+          {chapterVideosData.totalVideos > 0 && (
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs sm:text-sm text-emerald-800 dark:text-emerald-300 shadow-xs">
+              <Film className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>
+                <strong className="text-emerald-900 dark:text-emerald-200">{chapterVideosData.totalVideos}</strong> Video{" "}
+                {chapterVideosData.totalVideos === 1 ? "Short" : "Shorts"}
+              </span>
+            </div>
+          )}
           <a
             href="https://github.com/ravishankar2463/java_hub_resources"
             target="_blank"

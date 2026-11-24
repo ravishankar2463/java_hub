@@ -2,10 +2,19 @@
 
 import { motion } from "framer-motion";
 import { RoadmapLevel } from "@/data/roadmap";
-import { CheckCircle2, ArrowRight, BookOpen } from "lucide-react";
+import { CheckCircle2, ArrowRight, BookOpen, Film } from "lucide-react";
 import Link from "next/link";
 import { slugify } from "@/utils/slugify";
 import { useRoadmapProgress } from "@/hooks/useRoadmapProgress";
+import chapterVideosData from "@/data/chapter-videos.json";
+
+const videosByChapter = chapterVideosData.videos.reduce<Record<string, number>>(
+  (acc, video) => {
+    acc[video.chapterId] = (acc[video.chapterId] ?? 0) + 1;
+    return acc;
+  },
+  {}
+);
 
 export const RoadmapLevelCard = ({
   level,
@@ -16,6 +25,12 @@ export const RoadmapLevelCard = ({
 }) => {
   const { progress } = useRoadmapProgress();
   const visitedTopics = progress?.visitedTopics ?? [];
+  const levelSlugPrefix = `level-${level.level}/`;
+  const levelVideoCount = Object.entries(videosByChapter).reduce(
+    (sum, [chapterId, count]) =>
+      chapterId.startsWith(levelSlugPrefix) ? sum + count : sum,
+    0
+  );
 
   return (
     <motion.div
@@ -38,10 +53,18 @@ export const RoadmapLevelCard = ({
           >
             {level.title}
           </span>
-          <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[var(--color-card-subtle)] border border-[var(--color-border)] text-xs font-mono text-slate-600 dark:text-slate-300">
-            <BookOpen className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-            {level.topics.length} Topics
-          </span>
+          <div className="flex items-center gap-2">
+            {levelVideoCount > 0 && (
+              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/35 text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                <Film className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                {levelVideoCount} {levelVideoCount === 1 ? "Short" : "Shorts"}
+              </span>
+            )}
+            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[var(--color-card-subtle)] border border-[var(--color-border)] text-xs font-mono text-slate-600 dark:text-slate-300">
+              <BookOpen className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              {level.topics.length} Topics
+            </span>
+          </div>
         </div>
 
         <div>
@@ -61,6 +84,7 @@ export const RoadmapLevelCard = ({
           const topicSlug = slugify(topic.title);
           const topicId = `${levelSlug}/${topicSlug}`;
           const isVisited = visitedTopics.includes(topicId);
+          const videoCount = videosByChapter[topicId] ?? 0;
 
           return (
             <div
@@ -83,6 +107,14 @@ export const RoadmapLevelCard = ({
                     </h3>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-slate-400 group-hover/topic:text-emerald-600 dark:group-hover/topic:text-emerald-400 group-hover/topic:translate-x-1 transition-all shrink-0">
+                    {videoCount > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/35 px-2 py-0.5 font-semibold text-emerald-800 dark:text-emerald-300">
+                        <Film className="w-3 h-3" />
+                        <span>
+                          {videoCount} {videoCount === 1 ? "Short" : "Shorts"}
+                        </span>
+                      </span>
+                    )}
                     {isVisited && (
                       <span className="rounded-full bg-emerald-500/10 px-2 py-1 font-medium text-emerald-800 dark:text-emerald-300">
                         Visited
