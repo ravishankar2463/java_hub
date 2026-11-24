@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 29 / 116 (25.0%)
-- **Total Shorts Rendered:** 120
+- **Chapters Completed:** 30 / 116 (25.9%)
+- **Total Shorts Rendered:** 125
 - **Last Updated:** 2026-11-24
 
 ---
@@ -82,7 +82,7 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Architectural Patterns** (level-6/architectural-patterns) — 5 Shorts: [Part 1 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-1-hexagonal-core.mp4) · [Part 2 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-2-archunit-enforcement.mp4) · [Part 3 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-3-cqrs-patterns.mp4) · [Part 4 (42s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-4-strangler-fig.mp4) · [Part 5 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-5-modular-monolith.mp4)
 - [x] **Domain-Driven Design Tactical Patterns** (level-6/domain-driven-design-tactical-patterns) — 4 Shorts: [Part 1 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-1-anemic-vs-rich-models.mp4) · [Part 2 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-2-aggregate-roots.mp4) · [Part 3 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-3-domain-events.mp4) · [Part 4 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-4-anti-corruption-layer.mp4)
 
-## Level 7: The Data & Storage Architect (2/11)
+## Level 7: The Data & Storage Architect (3/11)
 
 - [ ] **Relational Database Fundamentals & Advanced SQL** (level-7/relational-database-fundamentals-advanced-sql)
 - [x] **Database Engine Internals: B-Trees and MVCC** (level-7/database-engine-internals-b-trees-and-mvcc) — 5 Shorts: [Part 1 (59s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-engine-internals-b-trees-and-mvcc__part-1-storage-engine-basics.mp4) · [Part 2 (55s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-engine-internals-b-trees-and-mvcc__part-2-postgres-vs-innodb-indexes.mp4) · [Part 3 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-engine-internals-b-trees-and-mvcc__part-3-wal-and-crash-recovery.mp4) · [Part 4 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-engine-internals-b-trees-and-mvcc__part-4-mvcc-and-isolation.mp4) · [Part 5 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-engine-internals-b-trees-and-mvcc__part-5-production-pitfalls.mp4)
@@ -94,7 +94,7 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **Distributed Caching with Redis** (level-7/distributed-caching-with-redis)
 - [ ] **Distributed Locking and Cache Patterns** (level-7/distributed-locking-and-cache-patterns)
 - [ ] **NoSQL Databases** (level-7/nosql-databases)
-- [ ] **Full-Text Search with Elasticsearch** (level-7/full-text-search-with-elasticsearch)
+- [x] **Full-Text Search with Elasticsearch** (level-7/full-text-search-with-elasticsearch) — 5 Shorts: [Part 1 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-1-inverted-index-basics.mp4) · [Part 2 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-2-bm25-and-segments.mp4) · [Part 3 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-3-spring-data-mapping.mp4) · [Part 4 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-4-bulk-indexing.mp4) · [Part 5 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-5-cdc-sync.mp4)
 
 ## Level 8: Enterprise Spring Boot 3 Deep Dive (0/9)
 
