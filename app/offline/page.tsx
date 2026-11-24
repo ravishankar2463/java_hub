@@ -3,9 +3,13 @@ import { ArrowLeft } from "lucide-react";
 import { OfflineRoadmapManager } from "@/components/OfflineRoadmapManager";
 
 export const metadata = {
-  title: "Read the Java Roadmap Offline | JavaHub",
+  title: "Read the Java Roadmap Offline",
   description:
     "Save all 116 Java roadmap topics and their assets for offline reading on this device.",
+  robots: {
+    index: false,
+    follow: true,
+  },
 };
 
 export default function OfflinePage() {

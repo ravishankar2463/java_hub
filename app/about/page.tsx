@@ -2,11 +2,30 @@ import Link from "next/link";
 import { BentoGrid, BentoGridItem } from "@/components/BentoGrid";
 import { Map, FileText, Sparkles, Terminal, Cpu, Database, Server, ArrowRight, GitBranch, ExternalLink } from "lucide-react";
 import { getAllContent } from "@/lib/markdown";
+import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/seo.mjs";
 
-export const metadata = {
-  title: "About JavaHub | Modern Java Developer Platform",
+export const metadata: Metadata = {
+  title: "Java Developer Learning Platform",
   description:
-    "Explore the JavaHub learning platform, featured architecture guides, and companion code labs.",
+    "JavaHub is a practical Java learning platform with a structured developer roadmap, in-depth guides, Spring Boot lessons, and companion code labs.",
+  alternates: {
+    canonical: getSiteUrl("/about"),
+  },
+  openGraph: {
+    type: "website",
+    siteName: "JavaHub",
+    title: "Java Developer Learning Platform",
+    description:
+      "Explore JavaHub's structured developer roadmap, Java and Spring Boot guides, and companion code labs.",
+    url: getSiteUrl("/about"),
+  },
+  twitter: {
+    card: "summary",
+    title: "Java Developer Learning Platform",
+    description:
+      "Explore JavaHub's structured developer roadmap, Java and Spring Boot guides, and companion code labs.",
+  },
 };
 
 export default function Home() {
