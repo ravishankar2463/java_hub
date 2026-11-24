@@ -4,6 +4,8 @@ import { Command } from 'cmdk'
 import { useRouter } from 'next/navigation'
 import { SearchItem } from './Navbar'
 import { FileText, Map, Search, X } from 'lucide-react'
+import { filterOfflineSearchItems } from '@/lib/offline-search.mjs'
+import { useOfflineRoadmap } from '@/components/OfflineRoadmapProvider'
 
 export function CommandPalette({
   open,
@@ -15,6 +17,12 @@ export function CommandPalette({
   searchItems: SearchItem[]
 }) {
   const router = useRouter()
+  const { isOnline, offlineBundle } = useOfflineRoadmap()
+  const visibleItems = filterOfflineSearchItems(
+    searchItems,
+    isOnline,
+    Boolean(offlineBundle)
+  )
 
   if (!open) return null
 
@@ -48,16 +56,18 @@ export function CommandPalette({
 
         <Command.List className="max-h-[50vh] sm:max-h-[320px] overflow-y-auto p-2 scrollbar-thin">
           <Command.Empty className="p-6 text-sm text-slate-500 text-center">
-            No matching topics or articles found.
+            {!isOnline && !offlineBundle
+              ? "No roadmap topics are saved for offline search."
+              : "No matching topics or articles found."}
           </Command.Empty>
           
-          {Array.from(new Set(searchItems.map(i => i.group))).map(groupName => (
+          {Array.from(new Set(visibleItems.map(i => i.group))).map(groupName => (
             <Command.Group 
               key={groupName} 
               heading={groupName} 
               className="[&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-slate-400 dark:[&_[cmdk-group-heading]]:text-slate-500"
             >
-              {searchItems.filter(item => item.group === groupName).map((item) => (
+              {visibleItems.filter(item => item.group === groupName).map((item) => (
                 <Command.Item
                   key={item.id}
                   onSelect={() => {

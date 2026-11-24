@@ -1,15 +1,9 @@
 import type { NextConfig } from "next";
 import { existsSync, watch, utimesSync } from "node:fs";
 import path from "node:path";
+import { getStaticBasePath } from "./lib/site-paths.mjs";
 
-const isGithubActions = process.env.GITHUB_ACTIONS || false;
-let basePath = '';
-
-if (isGithubActions) {
-  // Dynamically extract the repository name from "owner/repo"
-  const repo = process.env.GITHUB_REPOSITORY?.replace(/.*?\//, '') || '';
-  basePath = `/${repo}`;
-}
+const basePath = getStaticBasePath();
 
 // Watch for changes in the content directory in development
 if (process.env.NODE_ENV !== 'production') {

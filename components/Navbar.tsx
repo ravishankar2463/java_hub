@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Search, Menu, X, Compass, Home, Map, BookOpen, Code2, ExternalLink } from 'lucide-react'
+import { Search, Menu, X, Compass, Map, BookOpen, Code2, ExternalLink } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { CommandPalette } from './CommandPalette'
 import { ThemeToggle } from './ThemeToggle'
@@ -69,8 +69,7 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
     return () => document.removeEventListener('keydown', down);
   }, []);
 
-  const isHomeActive = pathname === '/';
-  const isRoadmapActive = pathname.startsWith('/roadmap');
+  const isRoadmapActive = pathname === '/' || pathname.startsWith('/roadmap');
 
   return (
     <>
@@ -82,7 +81,7 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
               <Link
                 href="/"
                 className="flex items-center gap-2 group focus:outline-none"
-                aria-label="JavaHub Home"
+                aria-label="JavaHub Roadmap"
               >
                 <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:scale-105 transition-transform">
                   <Compass className="w-4 h-4" />
@@ -100,16 +99,6 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
             <nav className="hidden md:flex items-center space-x-1 lg:space-x-2">
               <Link
                 href="/"
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                  isHomeActive
-                    ? 'text-emerald-800 dark:text-emerald-300 bg-emerald-500/10 font-semibold border border-emerald-500/25'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-[var(--color-card-subtle)]'
-                }`}
-              >
-                Home
-              </Link>
-              <Link
-                href="/roadmap"
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
                   isRoadmapActive
                     ? 'text-emerald-800 dark:text-emerald-300 bg-emerald-500/10 font-semibold border border-emerald-500/25'
@@ -170,23 +159,6 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
         {mobileMenuOpen && (
           <div className="md:hidden fixed inset-x-0 top-16 bottom-0 z-50 bg-[var(--color-card)]/98 backdrop-blur-xl border-b border-[var(--color-border)] overflow-y-auto px-4 py-6 flex flex-col justify-between animate-in fade-in slide-in-from-top-2 duration-200">
             <div className="flex flex-col gap-6">
-              {/* Mobile Quick Search Button */}
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setOpen(true);
-                }}
-                className="w-full flex items-center justify-between p-3.5 rounded-xl bg-[var(--color-card-subtle)] border border-[var(--color-border)] text-slate-700 dark:text-slate-300 text-sm font-medium"
-              >
-                <div className="flex items-center gap-2.5">
-                  <Search className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Search all 116 topics & articles...</span>
-                </div>
-                <span className="px-2 py-0.5 text-[11px] rounded bg-[var(--color-card)] border border-[var(--color-border)] font-mono text-slate-500">
-                  ⌘K
-                </span>
-              </button>
-
               {/* Main Navigation Links */}
               <div className="flex flex-col gap-1.5">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3">
@@ -196,30 +168,13 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
                   href="/"
                   onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center gap-3 px-3.5 py-3 rounded-xl text-base font-medium transition-colors ${
-                    isHomeActive
-                      ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-500/25'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-[var(--color-card-subtle)]'
-                  }`}
-                >
-                  <Home className="w-5 h-5 text-slate-500" />
-                  Home
-                </Link>
-                <Link
-                  href="/roadmap"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center justify-between px-3.5 py-3 rounded-xl text-base font-medium transition-colors ${
                     isRoadmapActive
                       ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-500/25'
                       : 'text-slate-700 dark:text-slate-300 hover:bg-[var(--color-card-subtle)]'
                   }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <Map className="w-5 h-5 text-slate-500" />
-                    <span>Mastery Roadmap</span>
-                  </div>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 font-medium">
-                    16 Levels
-                  </span>
+                  <Map className="w-5 h-5 text-slate-500" />
+                  Java Mastery Roadmap
                 </Link>
                 <a
                   href="https://github.com/ravishankar2463/java_hub_resources"
@@ -243,7 +198,7 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
                     Quick Jump to Level
                   </span>
                   <Link
-                    href="/roadmap"
+                    href="/"
                     onClick={() => setMobileMenuOpen(false)}
                     className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
                   >
@@ -254,7 +209,7 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
                   {LEVELS.map((lvl) => (
                     <Link
                       key={lvl.level}
-                      href={`/roadmap#level-${lvl.level}`}
+                      href={`/#level-${lvl.level}`}
                       onClick={() => setMobileMenuOpen(false)}
                       className="p-2.5 rounded-lg bg-[var(--color-card-subtle)] border border-[var(--color-border)] hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all text-left group"
                     >
