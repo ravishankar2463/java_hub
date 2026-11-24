@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T17:31:00.153Z",
-  "totalVideos": 3,
+  "updatedAt": "2026-11-24T17:57:17.551Z",
+  "totalVideos": 6,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -55,6 +55,60 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/anatomy-of-a-java-program",
       "branchName": "topic/level-0/anatomy-of-a-java-program",
       "renderedAt": "2026-11-24T17:23:54.887Z"
+    },
+    {
+      "chapterId": "level-0/environment-setup",
+      "level": "level-0",
+      "slug": "environment-setup",
+      "chapterTitle": "Environment Setup",
+      "partNumber": 1,
+      "totalParts": 3,
+      "partSlug": "part-1-jdk-jre-jvm-bytecode",
+      "partTitle": "JDK vs JRE vs JVM & How Bytecode Runs Fast",
+      "format": "shorts",
+      "durationSec": 66.4,
+      "file": "level-0/environment-setup/part-1-jdk-jre-jvm-bytecode.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__environment-setup__part-1-jdk-jre-jvm-bytecode.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/environment-setup",
+      "branchName": "topic/level-0/environment-setup",
+      "renderedAt": "2026-11-24T17:53:27.423Z"
+    },
+    {
+      "chapterId": "level-0/environment-setup",
+      "level": "level-0",
+      "slug": "environment-setup",
+      "chapterTitle": "Environment Setup",
+      "partNumber": 2,
+      "totalParts": 3,
+      "partSlug": "part-2-install-lts-path-java-home",
+      "partTitle": "Installing Java 21 LTS & Fixing PATH / JAVA_HOME",
+      "format": "shorts",
+      "durationSec": 70.8,
+      "file": "level-0/environment-setup/part-2-install-lts-path-java-home.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__environment-setup__part-2-install-lts-path-java-home.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/environment-setup",
+      "branchName": "topic/level-0/environment-setup",
+      "renderedAt": "2026-11-24T17:55:18.046Z"
+    },
+    {
+      "chapterId": "level-0/environment-setup",
+      "level": "level-0",
+      "slug": "environment-setup",
+      "chapterTitle": "Environment Setup",
+      "partNumber": 3,
+      "totalParts": 3,
+      "partSlug": "part-3-cli-workflow-and-ide-setup",
+      "partTitle": "CLI javac/java, Single-File Launch & IntelliJ vs Eclipse",
+      "format": "shorts",
+      "durationSec": 67,
+      "file": "level-0/environment-setup/part-3-cli-workflow-and-ide-setup.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__environment-setup__part-3-cli-workflow-and-ide-setup.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/environment-setup",
+      "branchName": "topic/level-0/environment-setup",
+      "renderedAt": "2026-11-24T17:57:17.551Z"
     }
   ]
 }
