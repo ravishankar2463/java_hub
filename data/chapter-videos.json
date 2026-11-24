@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T22:00:46.849Z",
-  "totalVideos": 80,
+  "updatedAt": "2026-11-24T22:07:04.256Z",
+  "totalVideos": 84,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -1441,6 +1441,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-5/executors-and-thread-pools",
       "branchName": "topic/level-5/executors-and-thread-pools",
       "renderedAt": "2026-11-24T22:00:46.848Z"
+    },
+    {
+      "chapterId": "level-5/project-loom-virtual-threads",
+      "level": "level-5",
+      "slug": "project-loom-virtual-threads",
+      "chapterTitle": "Project Loom (Virtual Threads)",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-virtual-threads-architecture",
+      "partTitle": "Virtual Threads vs Platform Threads",
+      "format": "shorts",
+      "durationSec": 49.4,
+      "file": "level-5/project-loom-virtual-threads/part-1-virtual-threads-architecture.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__project-loom-virtual-threads__part-1-virtual-threads-architecture.mp4",
+      "releaseTag": "videos-level-5",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-5/project-loom-virtual-threads",
+      "branchName": "topic/level-5/project-loom-virtual-threads",
+      "renderedAt": "2026-11-24T22:03:28.695Z"
+    },
+    {
+      "chapterId": "level-5/project-loom-virtual-threads",
+      "level": "level-5",
+      "slug": "project-loom-virtual-threads",
+      "chapterTitle": "Project Loom (Virtual Threads)",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-thread-pinning",
+      "partTitle": "Thread Pinning & Synchronization",
+      "format": "shorts",
+      "durationSec": 46.3,
+      "file": "level-5/project-loom-virtual-threads/part-2-thread-pinning.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__project-loom-virtual-threads__part-2-thread-pinning.mp4",
+      "releaseTag": "videos-level-5",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-5/project-loom-virtual-threads",
+      "branchName": "topic/level-5/project-loom-virtual-threads",
+      "renderedAt": "2026-11-24T22:04:44.921Z"
+    },
+    {
+      "chapterId": "level-5/project-loom-virtual-threads",
+      "level": "level-5",
+      "slug": "project-loom-virtual-threads",
+      "chapterTitle": "Project Loom (Virtual Threads)",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-structured-concurrency",
+      "partTitle": "Structured Concurrency",
+      "format": "shorts",
+      "durationSec": 40.9,
+      "file": "level-5/project-loom-virtual-threads/part-3-structured-concurrency.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__project-loom-virtual-threads__part-3-structured-concurrency.mp4",
+      "releaseTag": "videos-level-5",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-5/project-loom-virtual-threads",
+      "branchName": "topic/level-5/project-loom-virtual-threads",
+      "renderedAt": "2026-11-24T22:05:53.819Z"
+    },
+    {
+      "chapterId": "level-5/project-loom-virtual-threads",
+      "level": "level-5",
+      "slug": "project-loom-virtual-threads",
+      "chapterTitle": "Project Loom (Virtual Threads)",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-scoped-values",
+      "partTitle": "Scoped Values",
+      "format": "shorts",
+      "durationSec": 41.1,
+      "file": "level-5/project-loom-virtual-threads/part-4-scoped-values.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__project-loom-virtual-threads__part-4-scoped-values.mp4",
+      "releaseTag": "videos-level-5",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-5/project-loom-virtual-threads",
+      "branchName": "topic/level-5/project-loom-virtual-threads",
+      "renderedAt": "2026-11-24T22:07:04.255Z"
     }
   ]
 }
