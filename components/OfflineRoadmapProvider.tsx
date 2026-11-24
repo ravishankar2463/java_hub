@@ -18,6 +18,7 @@ import {
   getOfflineCacheName,
 } from "@/lib/offline-roadmap-storage.mjs";
 import type { OfflineRoadmapManifest } from "@/lib/offline-roadmap-storage.mjs";
+import { watchServiceWorkerUpdates } from "@/lib/service-worker-updates";
 
 type OfflineBundle = Pick<
   OfflineRoadmapManifest,
@@ -180,18 +181,13 @@ export function OfflineRoadmapProvider({
 
     let disposed = false;
     let registration: ServiceWorkerRegistration | null = null;
+    let stopWatchingUpdates: (() => void) | null = null;
 
     const handleControllerChange = () => {
       void refreshOfflineBundle();
       if (reloadAfterUpdate.current) {
         reloadAfterUpdate.current = false;
         window.location.reload();
-      }
-    };
-
-    const checkForWaitingWorker = () => {
-      if (registration?.waiting) {
-        setWaitingWorker(registration.waiting);
       }
     };
 
@@ -208,18 +204,16 @@ export function OfflineRoadmapProvider({
         }
 
         setRegistrationError(null);
-        checkForWaitingWorker();
-        registration.addEventListener("updatefound", () => {
-          const installingWorker = registration?.installing;
-          installingWorker?.addEventListener("statechange", () => {
-            if (
-              installingWorker.state === "installed" &&
-              navigator.serviceWorker.controller
-            ) {
-              checkForWaitingWorker();
-            }
-          });
-        });
+        stopWatchingUpdates = watchServiceWorkerUpdates(
+          registration,
+          window,
+          document,
+          () => navigator.onLine,
+          setWaitingWorker,
+          (error) => {
+            console.error("JavaHub could not check for service-worker updates.", error);
+          }
+        );
         navigator.serviceWorker.addEventListener(
           "controllerchange",
           handleControllerChange
@@ -235,6 +229,7 @@ export function OfflineRoadmapProvider({
     void registerServiceWorker();
     return () => {
       disposed = true;
+      stopWatchingUpdates?.();
       navigator.serviceWorker.removeEventListener(
         "controllerchange",
         handleControllerChange

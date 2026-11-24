@@ -155,6 +155,9 @@ self.addEventListener("fetch", (event) => {
 
   event.respondWith((async () => {
     try {
+      if (request.mode === "navigate") {
+        return await fetch(request, { cache: "no-cache" });
+      }
       return await fetch(request);
     } catch (networkError) {
       const metadataCache = await caches.open(METADATA_CACHE);

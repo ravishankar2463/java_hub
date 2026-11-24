@@ -43,7 +43,7 @@ export function CommandPalette({
           <Command.Input 
             autoFocus
             placeholder="Search lessons, topics, patterns..." 
-            className="w-full px-3 py-4 bg-transparent text-slate-900 dark:text-slate-100 outline-none placeholder:text-slate-400 text-sm sm:text-base"
+            className="w-full px-3 py-4 bg-transparent text-base text-slate-900 dark:text-slate-100 outline-none placeholder:text-slate-400"
           />
           <button
             onClick={() => setOpen(false)}
