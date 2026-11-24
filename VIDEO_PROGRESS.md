@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 23 / 116 (19.8%)
-- **Total Shorts Rendered:** 94
+- **Chapters Completed:** 24 / 116 (20.7%)
+- **Total Shorts Rendered:** 99
 - **Last Updated:** 2026-11-24
 
 ---
@@ -73,13 +73,13 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Project Loom (Virtual Threads)** (level-5/project-loom-virtual-threads) — 4 Shorts: [Part 1 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__project-loom-virtual-threads__part-1-virtual-threads-architecture.mp4) · [Part 2 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__project-loom-virtual-threads__part-2-thread-pinning.mp4) · [Part 3 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__project-loom-virtual-threads__part-3-structured-concurrency.mp4) · [Part 4 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-5/level-5__project-loom-virtual-threads__part-4-scoped-values.mp4)
 - [ ] **Structured Concurrency and Scoped Values** (level-5/structured-concurrency-and-scoped-values)
 
-## Level 6: The Architect (0/6)
+## Level 6: The Architect (1/6)
 
 - [ ] **SOLID Principles Basics** (level-6/solid-principles-basics)
 - [ ] **Creational Patterns** (level-6/creational-patterns)
 - [ ] **Structural Patterns** (level-6/structural-patterns)
 - [ ] **Behavioral Patterns** (level-6/behavioral-patterns)
-- [ ] **Architectural Patterns** (level-6/architectural-patterns)
+- [x] **Architectural Patterns** (level-6/architectural-patterns) — 5 Shorts: [Part 1 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-1-hexagonal-core.mp4) · [Part 2 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-2-archunit-enforcement.mp4) · [Part 3 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-3-cqrs-patterns.mp4) · [Part 4 (42s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-4-strangler-fig.mp4) · [Part 5 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-5-modular-monolith.mp4)
 - [ ] **Domain-Driven Design Tactical Patterns** (level-6/domain-driven-design-tactical-patterns)
 
 ## Level 7: The Data & Storage Architect (0/11)
