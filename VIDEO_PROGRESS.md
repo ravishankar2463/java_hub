@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 18 / 116 (15.5%)
-- **Total Shorts Rendered:** 72
+- **Chapters Completed:** 19 / 116 (16.4%)
+- **Total Shorts Rendered:** 76
 - **Last Updated:** 2026-11-24
 
 ---
@@ -55,10 +55,10 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Reflection API & Custom Annotations** (level-3/reflection-api-custom-annotations) — 4 Shorts: [Part 1 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-1-the-class-mirror.mp4) · [Part 2 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-2-dynamic-invocation.mp4) · [Part 3 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-3-custom-annotations.mp4) · [Part 4 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-4-compile-time-vs-runtime.mp4)
 - [ ] **Java Platform Module System (JPMS)** (level-3/java-platform-module-system-jpms)
 
-## Level 4: The Functional Java Dev (2/5)
+## Level 4: The Functional Java Dev (3/5)
 
 - [ ] **Lambdas and Functional Interfaces** (level-4/lambdas-and-functional-interfaces)
-- [ ] **The Streams API** (level-4/the-streams-api)
+- [x] **The Streams API** (level-4/the-streams-api) — 4 Shorts: [Part 1 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__the-streams-api__part-1-pipeline-anatomy.mp4) · [Part 2 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__the-streams-api__part-2-stateful-ops.mp4) · [Part 3 (44s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__the-streams-api__part-3-flatmap-magic.mp4) · [Part 4 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__the-streams-api__part-4-when-to-avoid.mp4)
 - [ ] **Advanced Streams & Collectors** (level-4/advanced-streams-collectors)
 - [x] **Optional API** (level-4/optional-api) — 4 Shorts: [Part 1 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-1-optional-basics.mp4) · [Part 2 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-2-performance-traps.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-3-monadic-chaining.mp4) · [Part 4 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-4-anti-patterns.mp4)
 - [x] **Reactive Programming Basics** (level-4/reactive-programming-basics) — 4 Shorts: [Part 1 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__reactive-programming-basics__part-1-observer-to-reactive.mp4) · [Part 2 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__reactive-programming-basics__part-2-mono-flux-assembly.mp4) · [Part 3 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__reactive-programming-basics__part-3-schedulers-threading.mp4) · [Part 4 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__reactive-programming-basics__part-4-reactive-vs-virtual-threads.mp4)

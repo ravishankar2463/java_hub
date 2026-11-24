@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T21:46:44.736Z",
-  "totalVideos": 72,
+  "updatedAt": "2026-11-24T21:53:18.532Z",
+  "totalVideos": 76,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -1297,6 +1297,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/reactive-programming-basics",
       "branchName": "topic/level-4/reactive-programming-basics",
       "renderedAt": "2026-11-24T21:46:44.734Z"
+    },
+    {
+      "chapterId": "level-4/the-streams-api",
+      "level": "level-4",
+      "slug": "the-streams-api",
+      "chapterTitle": "The Streams API",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-pipeline-anatomy",
+      "partTitle": "Streams are not Collections",
+      "format": "shorts",
+      "durationSec": 50.2,
+      "file": "level-4/the-streams-api/part-1-pipeline-anatomy.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__the-streams-api__part-1-pipeline-anatomy.mp4",
+      "releaseTag": "videos-level-4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/the-streams-api",
+      "branchName": "topic/level-4/the-streams-api",
+      "renderedAt": "2026-11-24T21:49:32.360Z"
+    },
+    {
+      "chapterId": "level-4/the-streams-api",
+      "level": "level-4",
+      "slug": "the-streams-api",
+      "chapterTitle": "The Streams API",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-stateful-ops",
+      "partTitle": "Stateless vs Stateful Barriers",
+      "format": "shorts",
+      "durationSec": 50.1,
+      "file": "level-4/the-streams-api/part-2-stateful-ops.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__the-streams-api__part-2-stateful-ops.mp4",
+      "releaseTag": "videos-level-4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/the-streams-api",
+      "branchName": "topic/level-4/the-streams-api",
+      "renderedAt": "2026-11-24T21:50:52.829Z"
+    },
+    {
+      "chapterId": "level-4/the-streams-api",
+      "level": "level-4",
+      "slug": "the-streams-api",
+      "chapterTitle": "The Streams API",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-flatmap-magic",
+      "partTitle": "Flattening Nested Data",
+      "format": "shorts",
+      "durationSec": 44.2,
+      "file": "level-4/the-streams-api/part-3-flatmap-magic.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__the-streams-api__part-3-flatmap-magic.mp4",
+      "releaseTag": "videos-level-4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/the-streams-api",
+      "branchName": "topic/level-4/the-streams-api",
+      "renderedAt": "2026-11-24T21:52:05.244Z"
+    },
+    {
+      "chapterId": "level-4/the-streams-api",
+      "level": "level-4",
+      "slug": "the-streams-api",
+      "chapterTitle": "The Streams API",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-when-to-avoid",
+      "partTitle": "When Loops Beat Streams",
+      "format": "shorts",
+      "durationSec": 44.5,
+      "file": "level-4/the-streams-api/part-4-when-to-avoid.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__the-streams-api__part-4-when-to-avoid.mp4",
+      "releaseTag": "videos-level-4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/the-streams-api",
+      "branchName": "topic/level-4/the-streams-api",
+      "renderedAt": "2026-11-24T21:53:18.531Z"
     }
   ]
 }
