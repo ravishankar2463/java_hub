@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 15 / 116 (12.9%)
-- **Total Shorts Rendered:** 60
+- **Chapters Completed:** 16 / 116 (13.8%)
+- **Total Shorts Rendered:** 64
 - **Last Updated:** 2026-11-24
 
 ---
@@ -45,14 +45,14 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **Network Socket Programming** (level-2/network-socket-programming)
 - [ ] **Regular Expressions and ReDoS Defense** (level-2/regular-expressions-and-redos-defense)
 
-## Level 3: The Core Master (Part 2) (2/7)
+## Level 3: The Core Master (Part 2) (3/7)
 
 - [x] **Generics** (level-3/generics) — 5 Shorts: [Part 1 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__generics__part-1-erasure-and-invariance.mp4) · [Part 2 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__generics__part-2-wildcards-pecs.mp4) · [Part 3 (42s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__generics__part-3-bounds.mp4) · [Part 4 (42s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__generics__part-4-heap-pollution.mp4) · [Part 5 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__generics__part-5-super-type-tokens.mp4)
 - [ ] **The Collections Framework (Lists & Sets)** (level-3/the-collections-framework-lists-sets)
 - [ ] **The Collections Framework (Maps)** (level-3/the-collections-framework-maps)
 - [ ] **JVM Architecture Internals** (level-3/jvm-architecture-internals)
 - [x] **Garbage Collection Basics** (level-3/garbage-collection-basics) — 5 Shorts: [Part 1 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__garbage-collection-basics__part-1-reachability-and-roots.mp4) · [Part 2 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__garbage-collection-basics__part-2-generational-heap.mp4) · [Part 3 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__garbage-collection-basics__part-3-stw-safepoints.mp4) · [Part 4 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__garbage-collection-basics__part-4-memory-leaks.mp4) · [Part 5 (44s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__garbage-collection-basics__part-5-system-gc-finalizers.mp4)
-- [ ] **Reflection API & Custom Annotations** (level-3/reflection-api-custom-annotations)
+- [x] **Reflection API & Custom Annotations** (level-3/reflection-api-custom-annotations) — 4 Shorts: [Part 1 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-1-the-class-mirror.mp4) · [Part 2 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-2-dynamic-invocation.mp4) · [Part 3 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-3-custom-annotations.mp4) · [Part 4 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-4-compile-time-vs-runtime.mp4)
 - [ ] **Java Platform Module System (JPMS)** (level-3/java-platform-module-system-jpms)
 
 ## Level 4: The Functional Java Dev (0/5)

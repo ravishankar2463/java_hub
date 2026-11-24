@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T21:20:11.422Z",
-  "totalVideos": 60,
+  "updatedAt": "2026-11-24T21:29:13.222Z",
+  "totalVideos": 64,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -1081,6 +1081,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-3/generics",
       "branchName": "topic/level-3/generics",
       "renderedAt": "2026-11-24T21:20:11.421Z"
+    },
+    {
+      "chapterId": "level-3/reflection-api-custom-annotations",
+      "level": "level-3",
+      "slug": "reflection-api-custom-annotations",
+      "chapterTitle": "Reflection API & Custom Annotations",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-the-class-mirror",
+      "partTitle": "Cracking Open the JVM Class Object",
+      "format": "shorts",
+      "durationSec": 53.2,
+      "file": "level-3/reflection-api-custom-annotations/part-1-the-class-mirror.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-1-the-class-mirror.mp4",
+      "releaseTag": "videos-level-3",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-3/reflection-api-custom-annotations",
+      "branchName": "topic/level-3/reflection-api-custom-annotations",
+      "renderedAt": "2026-11-24T21:24:51.018Z"
+    },
+    {
+      "chapterId": "level-3/reflection-api-custom-annotations",
+      "level": "level-3",
+      "slug": "reflection-api-custom-annotations",
+      "chapterTitle": "Reflection API & Custom Annotations",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-dynamic-invocation",
+      "partTitle": "Invoking Methods & Breaking Encapsulation",
+      "format": "shorts",
+      "durationSec": 56.2,
+      "file": "level-3/reflection-api-custom-annotations/part-2-dynamic-invocation.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-2-dynamic-invocation.mp4",
+      "releaseTag": "videos-level-3",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-3/reflection-api-custom-annotations",
+      "branchName": "topic/level-3/reflection-api-custom-annotations",
+      "renderedAt": "2026-11-24T21:26:28.819Z"
+    },
+    {
+      "chapterId": "level-3/reflection-api-custom-annotations",
+      "level": "level-3",
+      "slug": "reflection-api-custom-annotations",
+      "chapterTitle": "Reflection API & Custom Annotations",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-custom-annotations",
+      "partTitle": "Custom Annotations & Retention Traps",
+      "format": "shorts",
+      "durationSec": 49.1,
+      "file": "level-3/reflection-api-custom-annotations/part-3-custom-annotations.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-3-custom-annotations.mp4",
+      "releaseTag": "videos-level-3",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-3/reflection-api-custom-annotations",
+      "branchName": "topic/level-3/reflection-api-custom-annotations",
+      "renderedAt": "2026-11-24T21:27:52.299Z"
+    },
+    {
+      "chapterId": "level-3/reflection-api-custom-annotations",
+      "level": "level-3",
+      "slug": "reflection-api-custom-annotations",
+      "chapterTitle": "Reflection API & Custom Annotations",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-compile-time-vs-runtime",
+      "partTitle": "The Performance Trade-off",
+      "format": "shorts",
+      "durationSec": 50.4,
+      "file": "level-3/reflection-api-custom-annotations/part-4-compile-time-vs-runtime.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-4-compile-time-vs-runtime.mp4",
+      "releaseTag": "videos-level-3",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-3/reflection-api-custom-annotations",
+      "branchName": "topic/level-3/reflection-api-custom-annotations",
+      "renderedAt": "2026-11-24T21:29:13.211Z"
     }
   ]
 }
