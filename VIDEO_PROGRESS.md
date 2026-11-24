@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 10 / 116 (8.6%)
-- **Total Shorts Rendered:** 38
+- **Chapters Completed:** 11 / 116 (9.5%)
+- **Total Shorts Rendered:** 42
 - **Last Updated:** 2026-11-24
 
 ---
@@ -22,13 +22,13 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Arrays & 2D Matrices** (level-0/arrays-2d-matrices) — 4 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-1-heap-memory-and-indexing.mp4) · [Part 2 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-2-copying-and-bounds-pitfalls.mp4) · [Part 3 (60s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-3-2d-matrices-and-cpu-cache.mp4) · [Part 4 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-4-javautil-arrays-and-sorting.mp4)
 - [x] **Intro to OOPS** (level-0/intro-to-oops) — 4 Shorts: [Part 1 (55s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-1-class-vs-object.mp4) · [Part 2 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-2-constructors-and-new-keyword.mp4) · [Part 3 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-3-this-keyword-and-static-methods.mp4) · [Part 4 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-4-references-and-npe.mp4)
 
-## Level 1: The Object-Oriented Thinker (3/10)
+## Level 1: The Object-Oriented Thinker (4/10)
 
 - [x] **Classes and Objects** (level-1/classes-and-objects) — 4 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-1-class-vs-instance-memory.mp4) · [Part 2 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-2-constructors-and-builders.mp4) · [Part 3 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-3-this-keyword-and-escapes.mp4) · [Part 4 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-4-initialization-and-overloading.mp4)
 - [ ] **The Static Keyword** (level-1/the-static-keyword)
 - [ ] **Memory References & Copying** (level-1/memory-references-copying)
 - [ ] **Encapsulation & Access Modifiers** (level-1/encapsulation-access-modifiers)
-- [ ] **Inheritance** (level-1/inheritance)
+- [x] **Inheritance** (level-1/inheritance) — 4 Shorts: [Part 1 (62s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__inheritance__part-1-extends-and-memory-layout.mp4) · [Part 2 (62s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__inheritance__part-2-super-and-constructor-chaining.mp4) · [Part 3 (60s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__inheritance__part-3-overriding-vs-overloading.mp4) · [Part 4 (59s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__inheritance__part-4-cosmic-object-equals-hashcode.mp4)
 - [ ] **Abstraction** (level-1/abstraction)
 - [x] **Composition over Inheritance** (level-1/composition-over-inheritance) — 4 Shorts: [Part 1 (63s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__composition-over-inheritance__part-1-isa-hasa-cando.mp4) · [Part 2 (60s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__composition-over-inheritance__part-2-fragile-base-class-bug.mp4) · [Part 3 (59s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__composition-over-inheritance__part-3-forwarding-class-pattern.mp4) · [Part 4 (67s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__composition-over-inheritance__part-4-memory-self-problem-and-rules.mp4)
 - [ ] **Polymorphism** (level-1/polymorphism)
