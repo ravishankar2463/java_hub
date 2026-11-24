@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T20:02:21.699Z",
-  "totalVideos": 30,
+  "updatedAt": "2026-11-24T20:10:14.842Z",
+  "totalVideos": 34,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -541,6 +541,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/advanced-class-design",
       "branchName": "topic/level-1/advanced-class-design",
       "renderedAt": "2026-11-24T20:02:21.698Z"
+    },
+    {
+      "chapterId": "level-1/classes-and-objects",
+      "level": "level-1",
+      "slug": "classes-and-objects",
+      "chapterTitle": "Classes and Objects",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-class-vs-instance-memory",
+      "partTitle": "How JVM Memory Distinguishes Classes from Objects",
+      "format": "shorts",
+      "durationSec": 57.9,
+      "file": "level-1/classes-and-objects/part-1-class-vs-instance-memory.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-1-class-vs-instance-memory.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/classes-and-objects",
+      "branchName": "topic/level-1/classes-and-objects",
+      "renderedAt": "2026-11-24T20:05:34.955Z"
+    },
+    {
+      "chapterId": "level-1/classes-and-objects",
+      "level": "level-1",
+      "slug": "classes-and-objects",
+      "chapterTitle": "Classes and Objects",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-constructors-and-builders",
+      "partTitle": "Constructors, Default Rules & Builder Pattern",
+      "format": "shorts",
+      "durationSec": 58.2,
+      "file": "level-1/classes-and-objects/part-2-constructors-and-builders.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-2-constructors-and-builders.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/classes-and-objects",
+      "branchName": "topic/level-1/classes-and-objects",
+      "renderedAt": "2026-11-24T20:07:11.539Z"
+    },
+    {
+      "chapterId": "level-1/classes-and-objects",
+      "level": "level-1",
+      "slug": "classes-and-objects",
+      "chapterTitle": "Classes and Objects",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-this-keyword-and-escapes",
+      "partTitle": "The `this` Keyword & The Deadly `this` Escape Bug",
+      "format": "shorts",
+      "durationSec": 53.3,
+      "file": "level-1/classes-and-objects/part-3-this-keyword-and-escapes.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-3-this-keyword-and-escapes.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/classes-and-objects",
+      "branchName": "topic/level-1/classes-and-objects",
+      "renderedAt": "2026-11-24T20:08:41.804Z"
+    },
+    {
+      "chapterId": "level-1/classes-and-objects",
+      "level": "level-1",
+      "slug": "classes-and-objects",
+      "chapterTitle": "Classes and Objects",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-initialization-and-overloading",
+      "partTitle": "Object Initialization Sequence & Overload Resolution",
+      "format": "shorts",
+      "durationSec": 56.5,
+      "file": "level-1/classes-and-objects/part-4-initialization-and-overloading.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-4-initialization-and-overloading.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/classes-and-objects",
+      "branchName": "topic/level-1/classes-and-objects",
+      "renderedAt": "2026-11-24T20:10:14.842Z"
     }
   ]
 }

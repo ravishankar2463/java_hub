@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 8 / 116 (6.9%)
-- **Total Shorts Rendered:** 30
+- **Chapters Completed:** 9 / 116 (7.8%)
+- **Total Shorts Rendered:** 34
 - **Last Updated:** 2026-11-24
 
 ---
@@ -22,9 +22,9 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Arrays & 2D Matrices** (level-0/arrays-2d-matrices) — 4 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-1-heap-memory-and-indexing.mp4) · [Part 2 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-2-copying-and-bounds-pitfalls.mp4) · [Part 3 (60s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-3-2d-matrices-and-cpu-cache.mp4) · [Part 4 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-4-javautil-arrays-and-sorting.mp4)
 - [x] **Intro to OOPS** (level-0/intro-to-oops) — 4 Shorts: [Part 1 (55s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-1-class-vs-object.mp4) · [Part 2 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-2-constructors-and-new-keyword.mp4) · [Part 3 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-3-this-keyword-and-static-methods.mp4) · [Part 4 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-4-references-and-npe.mp4)
 
-## Level 1: The Object-Oriented Thinker (1/10)
+## Level 1: The Object-Oriented Thinker (2/10)
 
-- [ ] **Classes and Objects** (level-1/classes-and-objects)
+- [x] **Classes and Objects** (level-1/classes-and-objects) — 4 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-1-class-vs-instance-memory.mp4) · [Part 2 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-2-constructors-and-builders.mp4) · [Part 3 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-3-this-keyword-and-escapes.mp4) · [Part 4 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-4-initialization-and-overloading.mp4)
 - [ ] **The Static Keyword** (level-1/the-static-keyword)
 - [ ] **Memory References & Copying** (level-1/memory-references-copying)
 - [ ] **Encapsulation & Access Modifiers** (level-1/encapsulation-access-modifiers)
