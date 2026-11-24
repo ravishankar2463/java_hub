@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T20:37:39.032Z",
-  "totalVideos": 46,
+  "updatedAt": "2026-11-24T20:48:00.650Z",
+  "totalVideos": 50,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -829,6 +829,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/memory-references-copying",
       "branchName": "topic/level-1/memory-references-copying",
       "renderedAt": "2026-11-24T20:37:39.031Z"
+    },
+    {
+      "chapterId": "level-1/sealed-classes-and-pattern-matching",
+      "level": "level-1",
+      "slug": "sealed-classes-and-pattern-matching",
+      "chapterTitle": "Sealed Classes and Pattern Matching",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-the-sealed-revolution",
+      "partTitle": "Why Sealed Classes Beat Open Inheritance",
+      "format": "shorts",
+      "durationSec": 60.5,
+      "file": "level-1/sealed-classes-and-pattern-matching/part-1-the-sealed-revolution.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__sealed-classes-and-pattern-matching__part-1-the-sealed-revolution.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/sealed-classes-and-pattern-matching",
+      "branchName": "topic/level-1/sealed-classes-and-pattern-matching",
+      "renderedAt": "2026-11-24T20:43:14.174Z"
+    },
+    {
+      "chapterId": "level-1/sealed-classes-and-pattern-matching",
+      "level": "level-1",
+      "slug": "sealed-classes-and-pattern-matching",
+      "chapterTitle": "Sealed Classes and Pattern Matching",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-exhaustive-pattern-matching",
+      "partTitle": "Exhaustive Switch & Pattern Matching",
+      "format": "shorts",
+      "durationSec": 54.7,
+      "file": "level-1/sealed-classes-and-pattern-matching/part-2-exhaustive-pattern-matching.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__sealed-classes-and-pattern-matching__part-2-exhaustive-pattern-matching.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/sealed-classes-and-pattern-matching",
+      "branchName": "topic/level-1/sealed-classes-and-pattern-matching",
+      "renderedAt": "2026-11-24T20:44:44.647Z"
+    },
+    {
+      "chapterId": "level-1/sealed-classes-and-pattern-matching",
+      "level": "level-1",
+      "slug": "sealed-classes-and-pattern-matching",
+      "chapterTitle": "Sealed Classes and Pattern Matching",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-jvm-internals",
+      "partTitle": "How the JVM Enforces Sealing",
+      "format": "shorts",
+      "durationSec": 60.8,
+      "file": "level-1/sealed-classes-and-pattern-matching/part-3-jvm-internals.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__sealed-classes-and-pattern-matching__part-3-jvm-internals.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/sealed-classes-and-pattern-matching",
+      "branchName": "topic/level-1/sealed-classes-and-pattern-matching",
+      "renderedAt": "2026-11-24T20:46:22.105Z"
+    },
+    {
+      "chapterId": "level-1/sealed-classes-and-pattern-matching",
+      "level": "level-1",
+      "slug": "sealed-classes-and-pattern-matching",
+      "chapterTitle": "Sealed Classes and Pattern Matching",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-visitor-vs-sealed",
+      "partTitle": "Replacing the Visitor Pattern",
+      "format": "shorts",
+      "durationSec": 60.8,
+      "file": "level-1/sealed-classes-and-pattern-matching/part-4-visitor-vs-sealed.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__sealed-classes-and-pattern-matching__part-4-visitor-vs-sealed.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/sealed-classes-and-pattern-matching",
+      "branchName": "topic/level-1/sealed-classes-and-pattern-matching",
+      "renderedAt": "2026-11-24T20:48:00.649Z"
     }
   ]
 }

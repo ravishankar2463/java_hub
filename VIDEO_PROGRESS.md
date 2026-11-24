@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 12 / 116 (10.3%)
-- **Total Shorts Rendered:** 46
+- **Chapters Completed:** 13 / 116 (11.2%)
+- **Total Shorts Rendered:** 50
 - **Last Updated:** 2026-11-24
 
 ---
@@ -22,7 +22,7 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Arrays & 2D Matrices** (level-0/arrays-2d-matrices) — 4 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-1-heap-memory-and-indexing.mp4) · [Part 2 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-2-copying-and-bounds-pitfalls.mp4) · [Part 3 (60s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-3-2d-matrices-and-cpu-cache.mp4) · [Part 4 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-4-javautil-arrays-and-sorting.mp4)
 - [x] **Intro to OOPS** (level-0/intro-to-oops) — 4 Shorts: [Part 1 (55s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-1-class-vs-object.mp4) · [Part 2 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-2-constructors-and-new-keyword.mp4) · [Part 3 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-3-this-keyword-and-static-methods.mp4) · [Part 4 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__intro-to-oops__part-4-references-and-npe.mp4)
 
-## Level 1: The Object-Oriented Thinker (5/10)
+## Level 1: The Object-Oriented Thinker (6/10)
 
 - [x] **Classes and Objects** (level-1/classes-and-objects) — 4 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-1-class-vs-instance-memory.mp4) · [Part 2 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-2-constructors-and-builders.mp4) · [Part 3 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-3-this-keyword-and-escapes.mp4) · [Part 4 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__classes-and-objects__part-4-initialization-and-overloading.mp4)
 - [ ] **The Static Keyword** (level-1/the-static-keyword)
@@ -33,7 +33,7 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Composition over Inheritance** (level-1/composition-over-inheritance) — 4 Shorts: [Part 1 (63s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__composition-over-inheritance__part-1-isa-hasa-cando.mp4) · [Part 2 (60s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__composition-over-inheritance__part-2-fragile-base-class-bug.mp4) · [Part 3 (59s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__composition-over-inheritance__part-3-forwarding-class-pattern.mp4) · [Part 4 (67s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__composition-over-inheritance__part-4-memory-self-problem-and-rules.mp4)
 - [ ] **Polymorphism** (level-1/polymorphism)
 - [x] **Advanced Class Design** (level-1/advanced-class-design) — 4 Shorts: [Part 1 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__advanced-class-design__part-1-static-vs-inner-classes.mp4) · [Part 2 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__advanced-class-design__part-2-local-and-anonymous-classes.mp4) · [Part 3 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__advanced-class-design__part-3-java-16-records-and-defensive-copying.mp4) · [Part 4 (65s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__advanced-class-design__part-4-serialization-and-record-patterns.mp4)
-- [ ] **Sealed Classes and Pattern Matching** (level-1/sealed-classes-and-pattern-matching)
+- [x] **Sealed Classes and Pattern Matching** (level-1/sealed-classes-and-pattern-matching) — 4 Shorts: [Part 1 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__sealed-classes-and-pattern-matching__part-1-the-sealed-revolution.mp4) · [Part 2 (55s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__sealed-classes-and-pattern-matching__part-2-exhaustive-pattern-matching.mp4) · [Part 3 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__sealed-classes-and-pattern-matching__part-3-jvm-internals.mp4) · [Part 4 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__sealed-classes-and-pattern-matching__part-4-visitor-vs-sealed.mp4)
 
 ## Level 2: The Core Master (Part 1) (0/7)
 
