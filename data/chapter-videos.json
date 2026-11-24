@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T20:10:14.842Z",
-  "totalVideos": 34,
+  "updatedAt": "2026-11-24T20:18:54.083Z",
+  "totalVideos": 38,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -613,6 +613,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/classes-and-objects",
       "branchName": "topic/level-1/classes-and-objects",
       "renderedAt": "2026-11-24T20:10:14.842Z"
+    },
+    {
+      "chapterId": "level-1/composition-over-inheritance",
+      "level": "level-1",
+      "slug": "composition-over-inheritance",
+      "chapterTitle": "Composition over Inheritance",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-isa-hasa-cando",
+      "partTitle": "Stop Using extends for Code Reuse",
+      "format": "shorts",
+      "durationSec": 62.9,
+      "file": "level-1/composition-over-inheritance/part-1-isa-hasa-cando.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__composition-over-inheritance__part-1-isa-hasa-cando.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/composition-over-inheritance",
+      "branchName": "topic/level-1/composition-over-inheritance",
+      "renderedAt": "2026-11-24T20:13:47.380Z"
+    },
+    {
+      "chapterId": "level-1/composition-over-inheritance",
+      "level": "level-1",
+      "slug": "composition-over-inheritance",
+      "chapterTitle": "Composition over Inheritance",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-fragile-base-class-bug",
+      "partTitle": "The Silent Double-Counting Bug in HashSet",
+      "format": "shorts",
+      "durationSec": 60.2,
+      "file": "level-1/composition-over-inheritance/part-2-fragile-base-class-bug.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__composition-over-inheritance__part-2-fragile-base-class-bug.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/composition-over-inheritance",
+      "branchName": "topic/level-1/composition-over-inheritance",
+      "renderedAt": "2026-11-24T20:15:26.139Z"
+    },
+    {
+      "chapterId": "level-1/composition-over-inheritance",
+      "level": "level-1",
+      "slug": "composition-over-inheritance",
+      "chapterTitle": "Composition over Inheritance",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-forwarding-class-pattern",
+      "partTitle": "The Forwarding Class Pattern Solution",
+      "format": "shorts",
+      "durationSec": 59.1,
+      "file": "level-1/composition-over-inheritance/part-3-forwarding-class-pattern.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__composition-over-inheritance__part-3-forwarding-class-pattern.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/composition-over-inheritance",
+      "branchName": "topic/level-1/composition-over-inheritance",
+      "renderedAt": "2026-11-24T20:17:05.584Z"
+    },
+    {
+      "chapterId": "level-1/composition-over-inheritance",
+      "level": "level-1",
+      "slug": "composition-over-inheritance",
+      "chapterTitle": "Composition over Inheritance",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-memory-self-problem-and-rules",
+      "partTitle": "Memory Trade-Offs, The SELF Problem & Safe Rules",
+      "format": "shorts",
+      "durationSec": 67.4,
+      "file": "level-1/composition-over-inheritance/part-4-memory-self-problem-and-rules.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__composition-over-inheritance__part-4-memory-self-problem-and-rules.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/composition-over-inheritance",
+      "branchName": "topic/level-1/composition-over-inheritance",
+      "renderedAt": "2026-11-24T20:18:54.083Z"
     }
   ]
 }
