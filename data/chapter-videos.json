@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T20:30:31.300Z",
-  "totalVideos": 42,
+  "updatedAt": "2026-11-24T20:37:39.032Z",
+  "totalVideos": 46,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -757,6 +757,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/inheritance",
       "branchName": "topic/level-1/inheritance",
       "renderedAt": "2026-11-24T20:30:31.299Z"
+    },
+    {
+      "chapterId": "level-1/memory-references-copying",
+      "level": "level-1",
+      "slug": "memory-references-copying",
+      "chapterTitle": "Memory References & Copying",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-pass-by-value",
+      "partTitle": "Java is ALWAYS Pass-by-Value",
+      "format": "shorts",
+      "durationSec": 51.6,
+      "file": "level-1/memory-references-copying/part-1-pass-by-value.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__memory-references-copying__part-1-pass-by-value.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/memory-references-copying",
+      "branchName": "topic/level-1/memory-references-copying",
+      "renderedAt": "2026-11-24T20:33:25.286Z"
+    },
+    {
+      "chapterId": "level-1/memory-references-copying",
+      "level": "level-1",
+      "slug": "memory-references-copying",
+      "chapterTitle": "Memory References & Copying",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-cloning-vs-copying",
+      "partTitle": "Why Object.clone() is a Trap",
+      "format": "shorts",
+      "durationSec": 52.1,
+      "file": "level-1/memory-references-copying/part-2-cloning-vs-copying.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__memory-references-copying__part-2-cloning-vs-copying.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/memory-references-copying",
+      "branchName": "topic/level-1/memory-references-copying",
+      "renderedAt": "2026-11-24T20:34:52.138Z"
+    },
+    {
+      "chapterId": "level-1/memory-references-copying",
+      "level": "level-1",
+      "slug": "memory-references-copying",
+      "chapterTitle": "Memory References & Copying",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-copy-constructors",
+      "partTitle": "The Right Way: Copy Constructors",
+      "format": "shorts",
+      "durationSec": 50.6,
+      "file": "level-1/memory-references-copying/part-3-copy-constructors.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__memory-references-copying__part-3-copy-constructors.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/memory-references-copying",
+      "branchName": "topic/level-1/memory-references-copying",
+      "renderedAt": "2026-11-24T20:36:14.180Z"
+    },
+    {
+      "chapterId": "level-1/memory-references-copying",
+      "level": "level-1",
+      "slug": "memory-references-copying",
+      "chapterTitle": "Memory References & Copying",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-defensive-copying",
+      "partTitle": "Defensive Copying & TOCTOU",
+      "format": "shorts",
+      "durationSec": 51.7,
+      "file": "level-1/memory-references-copying/part-4-defensive-copying.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__memory-references-copying__part-4-defensive-copying.mp4",
+      "releaseTag": "videos-level-1",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/memory-references-copying",
+      "branchName": "topic/level-1/memory-references-copying",
+      "renderedAt": "2026-11-24T20:37:39.031Z"
     }
   ]
 }
