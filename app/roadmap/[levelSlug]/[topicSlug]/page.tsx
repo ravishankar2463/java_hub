@@ -3,7 +3,7 @@ import { slugify } from "@/utils/slugify";
 import { existsSync } from "node:fs";
 import path from "path";
 import { parseMarkdownFile } from "@/lib/markdown";
-import { ArrowLeft, ArrowRight, ChevronRight, Clock, BookOpen, Layers, GitBranch, ExternalLink, Code2, Terminal } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronRight, Clock, BookOpen, Layers, GitBranch, ExternalLink, Code2, Terminal, Film } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CodeBlock } from "@/components/CodeBlock";
@@ -11,6 +11,8 @@ import { MermaidDiagram } from "@/components/MermaidDiagram";
 import { TableOfContents } from "@/components/TableOfContents";
 import { ReadingProgressBar } from "@/components/ReadingProgressBar";
 import { TopicVisitTracker } from "@/components/TopicVisitTracker";
+import { ChapterVideos, type ChapterVideoItem } from "@/components/ChapterVideos";
+import chapterVideosData from "@/data/chapter-videos.json";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
@@ -111,6 +113,11 @@ export default async function TopicPage({
   const currentTopic = allRoadmapTopics[currentIndex];
   const prevTopic = currentIndex > 0 ? allRoadmapTopics[currentIndex - 1] : null;
   const nextTopic = currentIndex < allRoadmapTopics.length - 1 ? allRoadmapTopics[currentIndex + 1] : null;
+
+  const chapterId = `${currentTopic.levelSlug}/${currentTopic.topicSlug}`;
+  const chapterVideos = (chapterVideosData.videos as ChapterVideoItem[])
+    .filter((v) => v.chapterId === chapterId)
+    .sort((a, b) => a.partNumber - b.partNumber);
 
   const filePath = path.join(process.cwd(), "content", "roadmap", levelSlug, `${topicSlug}.md`);
   const doc = existsSync(filePath) ? parseMarkdownFile(filePath) : null;
@@ -253,8 +260,23 @@ export default async function TopicPage({
                 <Code2 className="w-3.5 h-3.5" />
                 <span>All 116 Code Labs</span>
               </a>
+
+              {chapterVideos.length > 0 && (
+                <a
+                  href="#chapter-videos"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-800 dark:text-emerald-300 text-xs font-semibold border border-emerald-500/35 transition-all cursor-pointer"
+                >
+                  <Film className="w-3.5 h-3.5" />
+                  <span>
+                    {chapterVideos.length} Video {chapterVideos.length === 1 ? "Short" : "Shorts"}
+                  </span>
+                </a>
+              )}
             </div>
           </header>
+
+          {/* Short Summary Videos (renders when chapter has rendered Shorts) */}
+          <ChapterVideos videos={chapterVideos} />
 
           {/* Mobile Table of Contents (renders on screens < xl) */}
           <TableOfContents headings={headings} variant="mobile" />
