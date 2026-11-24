@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 27 / 116 (23.3%)
-- **Total Shorts Rendered:** 111
+- **Chapters Completed:** 28 / 116 (24.1%)
+- **Total Shorts Rendered:** 116
 - **Last Updated:** 2026-11-24
 
 ---
@@ -82,10 +82,10 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Architectural Patterns** (level-6/architectural-patterns) — 5 Shorts: [Part 1 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-1-hexagonal-core.mp4) · [Part 2 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-2-archunit-enforcement.mp4) · [Part 3 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-3-cqrs-patterns.mp4) · [Part 4 (42s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-4-strangler-fig.mp4) · [Part 5 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__architectural-patterns__part-5-modular-monolith.mp4)
 - [x] **Domain-Driven Design Tactical Patterns** (level-6/domain-driven-design-tactical-patterns) — 4 Shorts: [Part 1 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-1-anemic-vs-rich-models.mp4) · [Part 2 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-2-aggregate-roots.mp4) · [Part 3 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-3-domain-events.mp4) · [Part 4 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-6/level-6__domain-driven-design-tactical-patterns__part-4-anti-corruption-layer.mp4)
 
-## Level 7: The Data & Storage Architect (0/11)
+## Level 7: The Data & Storage Architect (1/11)
 
 - [ ] **Relational Database Fundamentals & Advanced SQL** (level-7/relational-database-fundamentals-advanced-sql)
-- [ ] **Database Engine Internals: B-Trees and MVCC** (level-7/database-engine-internals-b-trees-and-mvcc)
+- [x] **Database Engine Internals: B-Trees and MVCC** (level-7/database-engine-internals-b-trees-and-mvcc) — 5 Shorts: [Part 1 (59s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-engine-internals-b-trees-and-mvcc__part-1-storage-engine-basics.mp4) · [Part 2 (55s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-engine-internals-b-trees-and-mvcc__part-2-postgres-vs-innodb-indexes.mp4) · [Part 3 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-engine-internals-b-trees-and-mvcc__part-3-wal-and-crash-recovery.mp4) · [Part 4 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-engine-internals-b-trees-and-mvcc__part-4-mvcc-and-isolation.mp4) · [Part 5 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__database-engine-internals-b-trees-and-mvcc__part-5-production-pitfalls.mp4)
 - [ ] **Database Migrations** (level-7/database-migrations)
 - [ ] **JDBC and Connection Pooling** (level-7/jdbc-and-connection-pooling)
 - [ ] **JPA and Hibernate Basics** (level-7/jpa-and-hibernate-basics)
