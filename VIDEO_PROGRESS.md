@@ -6,20 +6,20 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 3 / 116 (2.6%)
-- **Total Shorts Rendered:** 9
+- **Chapters Completed:** 4 / 116 (3.4%)
+- **Total Shorts Rendered:** 13
 - **Last Updated:** 2026-11-24
 
 ---
 
-## Level 0: The Absolute Beginner (3/7)
+## Level 0: The Absolute Beginner (4/7)
 
 - [x] **Environment Setup** (level-0/environment-setup) — 3 Shorts: [Part 1 (66s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__environment-setup__part-1-jdk-jre-jvm-bytecode.mp4) · [Part 2 (71s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__environment-setup__part-2-install-lts-path-java-home.mp4) · [Part 3 (67s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__environment-setup__part-3-cli-workflow-and-ide-setup.mp4)
 - [x] **Git & Version Control** (level-0/git-version-control) — 3 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__git-version-control__part-1-snapshots-and-four-areas.mp4) · [Part 2 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__git-version-control__part-2-daily-workflow-and-habits.mp4) · [Part 3 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__git-version-control__part-3-branching-conflicts-and-reflog.mp4)
 - [x] **Anatomy of a Java Program** (level-0/anatomy-of-a-java-program) — 3 Shorts: [Part 1 (60s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__anatomy-of-a-java-program__part-1-hello-world-anatomy.mp4) · [Part 2 (66s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__anatomy-of-a-java-program__part-2-javac-and-bytecode.mp4) · [Part 3 (66s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__anatomy-of-a-java-program__part-3-pitfalls-and-modern-main.mp4)
 - [ ] **Variables and Data Types** (level-0/variables-and-data-types)
 - [ ] **Control Flow** (level-0/control-flow)
-- [ ] **Arrays & 2D Matrices** (level-0/arrays-2d-matrices)
+- [x] **Arrays & 2D Matrices** (level-0/arrays-2d-matrices) — 4 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-1-heap-memory-and-indexing.mp4) · [Part 2 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-2-copying-and-bounds-pitfalls.mp4) · [Part 3 (60s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-3-2d-matrices-and-cpu-cache.mp4) · [Part 4 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__arrays-2d-matrices__part-4-javautil-arrays-and-sorting.mp4)
 - [ ] **Intro to OOPS** (level-0/intro-to-oops)
 
 ## Level 1: The Object-Oriented Thinker (0/10)
