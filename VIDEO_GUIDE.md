@@ -58,6 +58,7 @@ Follow this 5-step checklist for every chapter in [`VIDEO_PROGRESS.md`](./VIDEO_
   ```text
   video-studio/public/audio/<level>__<slug>__part-<N>/<beat-id>.human.wav
   ```
+- **Watch out for TTS homographs (`live`, `read`, `lead`, `close`, `record`, `invalid`):** Avoid ambiguous verbs like *"live inside a class"* (TTS may say `/laɪv/` like "live TV")—prefer *"sit inside"*, *"belong inside"*, or *"reside in"*. The TTS engine automatically normalizes common spatial `live` phrases and Java tokens (`javac`, `javap`, `O(log n)`), logs homograph warnings during generation, and supports an optional `ttsNarration` field on any beat when spoken wording should differ from on-screen captions.
 - **Respect YouTube Shorts safe zones:** All templates keep primary visuals clear of the bottom title overlay and right-side like/comment/share buttons.
 
 ---
