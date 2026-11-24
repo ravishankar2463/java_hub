@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T19:36:45.173Z",
-  "totalVideos": 22,
+  "updatedAt": "2026-11-24T19:45:01.893Z",
+  "totalVideos": 26,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -397,6 +397,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/intro-to-oops",
       "branchName": "topic/level-0/intro-to-oops",
       "renderedAt": "2026-11-24T19:36:45.172Z"
+    },
+    {
+      "chapterId": "level-0/variables-and-data-types",
+      "level": "level-0",
+      "slug": "variables-and-data-types",
+      "chapterTitle": "Variables and Data Types",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-stack-vs-heap-memory",
+      "partTitle": "Stack vs. Heap: Where Your Data Resides",
+      "format": "shorts",
+      "durationSec": 59.6,
+      "file": "level-0/variables-and-data-types/part-1-stack-vs-heap-memory.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__variables-and-data-types__part-1-stack-vs-heap-memory.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/variables-and-data-types",
+      "branchName": "topic/level-0/variables-and-data-types",
+      "renderedAt": "2026-11-24T19:40:05.121Z"
+    },
+    {
+      "chapterId": "level-0/variables-and-data-types",
+      "level": "level-0",
+      "slug": "variables-and-data-types",
+      "chapterTitle": "Variables and Data Types",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-primitives-and-overflow",
+      "partTitle": "The 8 Primitives, Overflow & Floating-Point Traps",
+      "format": "shorts",
+      "durationSec": 58.2,
+      "file": "level-0/variables-and-data-types/part-2-primitives-and-overflow.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__variables-and-data-types__part-2-primitives-and-overflow.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/variables-and-data-types",
+      "branchName": "topic/level-0/variables-and-data-types",
+      "renderedAt": "2026-11-24T19:41:40.833Z"
+    },
+    {
+      "chapterId": "level-0/variables-and-data-types",
+      "level": "level-0",
+      "slug": "variables-and-data-types",
+      "chapterTitle": "Variables and Data Types",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-autoboxing-and-integer-cache",
+      "partTitle": "Autoboxing Traps & The Integer Cache",
+      "format": "shorts",
+      "durationSec": 58.7,
+      "file": "level-0/variables-and-data-types/part-3-autoboxing-and-integer-cache.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__variables-and-data-types__part-3-autoboxing-and-integer-cache.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/variables-and-data-types",
+      "branchName": "topic/level-0/variables-and-data-types",
+      "renderedAt": "2026-11-24T19:43:20.049Z"
+    },
+    {
+      "chapterId": "level-0/variables-and-data-types",
+      "level": "level-0",
+      "slug": "variables-and-data-types",
+      "chapterTitle": "Variables and Data Types",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-string-pool-casting-and-var",
+      "partTitle": "String Pool, Type Casting & Modern var",
+      "format": "shorts",
+      "durationSec": 60.2,
+      "file": "level-0/variables-and-data-types/part-4-string-pool-casting-and-var.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-0/level-0__variables-and-data-types__part-4-string-pool-casting-and-var.mp4",
+      "releaseTag": "videos-level-0",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/variables-and-data-types",
+      "branchName": "topic/level-0/variables-and-data-types",
+      "renderedAt": "2026-11-24T19:45:01.892Z"
     }
   ]
 }
