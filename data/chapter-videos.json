@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-24T18:04:42.848Z",
+  "updatedAt": "2026-11-24T18:07:56.670Z",
   "totalVideos": 9,
   "videos": [
     {
@@ -72,7 +72,7 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/environment-setup",
       "branchName": "topic/level-0/environment-setup",
-      "renderedAt": "2026-11-24T17:53:27.423Z"
+      "renderedAt": "2026-11-24T18:07:56.669Z"
     },
     {
       "chapterId": "level-0/environment-setup",
