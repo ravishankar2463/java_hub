@@ -10,6 +10,7 @@ import { CodeBlock } from "@/components/CodeBlock";
 import { MermaidDiagram } from "@/components/MermaidDiagram";
 import { TableOfContents } from "@/components/TableOfContents";
 import { ReadingProgressBar } from "@/components/ReadingProgressBar";
+import { TopicVisitTracker } from "@/components/TopicVisitTracker";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
@@ -140,6 +141,8 @@ export default async function TopicPage({
 
   return (
     <div className="flex flex-col gap-8 w-full">
+      <TopicVisitTracker topicId={`${currentTopic.levelSlug}/${currentTopic.topicSlug}`} />
+
       {/* Sticky Scroll Progress Bar */}
       <ReadingProgressBar />
 

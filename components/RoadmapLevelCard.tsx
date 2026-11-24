@@ -5,6 +5,7 @@ import { RoadmapLevel } from "@/data/roadmap";
 import { CheckCircle2, ArrowRight, BookOpen } from "lucide-react";
 import Link from "next/link";
 import { slugify } from "@/utils/slugify";
+import { useRoadmapProgress } from "@/hooks/useRoadmapProgress";
 
 export const RoadmapLevelCard = ({
   level,
@@ -13,6 +14,9 @@ export const RoadmapLevelCard = ({
   level: RoadmapLevel;
   index: number;
 }) => {
+  const { progress } = useRoadmapProgress();
+  const visitedTopics = progress?.visitedTopics ?? [];
+
   return (
     <motion.div
       id={`level-${level.level}`}
@@ -55,9 +59,15 @@ export const RoadmapLevelCard = ({
         {level.topics.map((topic, i) => {
           const levelSlug = `level-${level.level}`;
           const topicSlug = slugify(topic.title);
+          const topicId = `${levelSlug}/${topicSlug}`;
+          const isVisited = visitedTopics.includes(topicId);
 
           return (
-            <div key={i} className="relative group/topic">
+            <div
+              key={i}
+              id={`topic-${levelSlug}-${topicSlug}`}
+              className="relative scroll-mt-24 group/topic"
+            >
               {/* Timeline Dot (visible on sm+) */}
               <div className="hidden sm:block absolute -left-[31px] top-5 w-2.5 h-2.5 rounded-full border-2 border-[var(--color-card)] bg-slate-400 dark:bg-slate-600 group-hover/topic:bg-emerald-500 group-hover/topic:scale-125 transition-all" />
 
@@ -72,7 +82,12 @@ export const RoadmapLevelCard = ({
                       {topic.title}
                     </h3>
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-slate-400 group-hover/topic:text-emerald-600 dark:group-hover/topic:text-emerald-400 group-hover/topic:translate-x-1 transition-all shrink-0">
+                  <div className="flex items-center gap-2 text-xs text-slate-400 group-hover/topic:text-emerald-600 dark:group-hover/topic:text-emerald-400 group-hover/topic:translate-x-1 transition-all shrink-0">
+                    {isVisited && (
+                      <span className="rounded-full bg-emerald-500/10 px-2 py-1 font-medium text-emerald-800 dark:text-emerald-300">
+                        Visited
+                      </span>
+                    )}
                     <span className="hidden sm:inline-block">Read lesson</span>
                     <ArrowRight className="w-4 h-4" />
                   </div>

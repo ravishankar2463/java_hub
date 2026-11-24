@@ -1,6 +1,8 @@
 import { roadmapData } from "@/data/roadmap";
 import { RoadmapLevelCard } from "@/components/RoadmapLevelCard";
+import { RoadmapProgressBanner } from "@/components/RoadmapProgressBanner";
 import { Layers, CheckCircle, Sparkles, GitBranch, ExternalLink } from "lucide-react";
+import { slugify } from "@/utils/slugify";
 
 export const metadata = {
   title: "Java Mastery Roadmap | JavaHub",
@@ -32,9 +34,22 @@ export default function RoadmapPage() {
     (acc, level) => acc + level.topics.length,
     0
   );
+  const topics = roadmapData.flatMap((level) =>
+    level.topics.map((topic) => {
+      const levelSlug = `level-${level.level}`;
+      const topicSlug = slugify(topic.title);
+      return {
+        id: `${levelSlug}/${topicSlug}`,
+        title: topic.title,
+        url: `/roadmap/${levelSlug}/${topicSlug}`,
+      };
+    })
+  );
 
   return (
     <div className="flex flex-col gap-12 w-full pb-16">
+      <RoadmapProgressBanner topics={topics} />
+
       {/* Hero Header */}
       <section className="flex flex-col items-center justify-center text-center gap-6 pt-6 sm:pt-10">
         <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-xs sm:text-sm font-medium text-emerald-800 dark:text-emerald-300">
