@@ -18,7 +18,10 @@ import {
   getOfflineCacheName,
 } from "@/lib/offline-roadmap-storage.mjs";
 import type { OfflineRoadmapManifest } from "@/lib/offline-roadmap-storage.mjs";
-import { watchServiceWorkerUpdates } from "@/lib/service-worker-updates";
+import {
+  shouldShowOfflineUpdate,
+  watchServiceWorkerUpdates,
+} from "@/lib/service-worker-updates";
 
 type OfflineBundle = Pick<
   OfflineRoadmapManifest,
@@ -244,6 +247,10 @@ export function OfflineRoadmapProvider({
     reloadAfterUpdate.current = Boolean(navigator.serviceWorker.controller);
     waitingWorker.postMessage({ type: "ACTIVATE_UPDATE" });
   }, [waitingWorker]);
+  const updateReady = shouldShowOfflineUpdate(
+    offlineBundle !== null,
+    waitingWorker !== null
+  );
 
   const contextValue = useMemo(
     () => ({
@@ -256,7 +263,7 @@ export function OfflineRoadmapProvider({
       registrationError,
       cacheError,
       updateError,
-      updateReady: waitingWorker !== null,
+      updateReady,
       setManifestVersion,
       refreshOfflineBundle,
       activateUpdate,
@@ -272,7 +279,7 @@ export function OfflineRoadmapProvider({
       refreshOfflineBundle,
       registrationError,
       updateError,
-      waitingWorker,
+      updateReady,
       workerSupported,
     ]
   );
@@ -290,7 +297,7 @@ export function OfflineRoadmapProvider({
             : "No offline roadmap copy is saved in this browser yet."}
         </aside>
       )}
-      {waitingWorker && (
+      {updateReady && (
         <aside
           role="status"
           className="flex flex-col items-center justify-center gap-2 border-b border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-center text-sm text-slate-700 dark:text-slate-200 sm:flex-row sm:justify-between sm:text-left"

@@ -9,6 +9,13 @@ type ServiceWorkerUpdateRegistration = Pick<
 
 type EventTargetLike = Pick<EventTarget, "addEventListener" | "removeEventListener">;
 
+export function shouldShowOfflineUpdate(
+  hasOfflineBundle: boolean,
+  hasWaitingWorker: boolean
+) {
+  return hasOfflineBundle && hasWaitingWorker;
+}
+
 export function watchServiceWorkerUpdates(
   registration: ServiceWorkerUpdateRegistration,
   windowTarget: EventTargetLike,
