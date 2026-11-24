@@ -172,6 +172,30 @@ self.addEventListener("fetch", (event) => {
       if (cachedResponse) {
         return cachedResponse;
       }
+
+      const requestUrl = new URL(request.url);
+      const scopePath = new URL(self.registration.scope).pathname;
+      let alternatePath = null;
+      if (requestUrl.pathname === scopePath) {
+        alternatePath = scopePath.slice(0, -1);
+      } else if (requestUrl.pathname === scopePath.slice(0, -1)) {
+        alternatePath = scopePath;
+      } else if (requestUrl.pathname.startsWith(scopePath)) {
+        alternatePath = requestUrl.pathname.endsWith("/")
+          ? requestUrl.pathname.slice(0, -1)
+          : `${requestUrl.pathname}/`;
+      }
+
+      if (alternatePath) {
+        requestUrl.pathname = alternatePath;
+        const alternateResponse = await contentCache.match(requestUrl.href, {
+          ignoreSearch: true,
+        });
+        if (alternateResponse) {
+          return alternateResponse;
+        }
+      }
+
       throw networkError;
     }
   })());

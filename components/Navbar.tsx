@@ -2,7 +2,18 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Search, Menu, X, Compass, Map, BookOpen, Code2, ExternalLink } from 'lucide-react'
+import {
+  Search,
+  Menu,
+  X,
+  Compass,
+  Map,
+  BookOpen,
+  Code2,
+  ExternalLink,
+  HardDriveDownload,
+  ChevronDown,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { CommandPalette } from './CommandPalette'
 import { ThemeToggle } from './ThemeToggle'
@@ -57,6 +68,20 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
     };
   }, [mobileMenuOpen]);
 
+  useEffect(() => {
+    const desktopViewport = window.matchMedia('(min-width: 48rem)');
+    const closeMenuOnDesktop = (event: MediaQueryListEvent) => {
+      if (event.matches) {
+        setMobileMenuOpen(false);
+      }
+    };
+
+    desktopViewport.addEventListener('change', closeMenuOnDesktop);
+    return () => {
+      desktopViewport.removeEventListener('change', closeMenuOnDesktop);
+    };
+  }, []);
+
   // Cmd+K shortcut
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -70,6 +95,7 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
   }, []);
 
   const isRoadmapActive = pathname === '/' || pathname.startsWith('/roadmap');
+  const isOfflineActive = pathname.startsWith('/offline');
 
   return (
     <>
@@ -128,7 +154,10 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
             <div className="flex items-center gap-2 sm:gap-3">
               {/* Search trigger */}
               <button
-                onClick={() => setOpen(true)}
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setOpen(true);
+                }}
                 className="flex items-center gap-2 bg-[var(--color-card)] border border-[var(--color-border)] px-3 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:text-foreground hover:border-slate-400 dark:hover:border-slate-600 transition-all cursor-pointer min-h-[40px] shadow-xs"
                 aria-label="Open search dialog"
               >
@@ -148,6 +177,7 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
                 className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg bg-[var(--color-card)] border border-[var(--color-border)] text-slate-600 dark:text-slate-300 hover:text-foreground transition-colors cursor-pointer shadow-xs"
                 aria-label={mobileMenuOpen ? 'Close Menu' : 'Open Menu'}
                 aria-expanded={mobileMenuOpen}
+                aria-controls="mobile-navigation-panel"
               >
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
@@ -155,87 +185,110 @@ export function Navbar({ searchItems = [] }: { searchItems?: SearchItem[] }) {
           </div>
         </div>
 
-        {/* Mobile Navigation Drawer */}
-        {mobileMenuOpen && (
-          <div className="md:hidden fixed inset-x-0 top-16 bottom-0 z-50 bg-[var(--color-card)]/98 backdrop-blur-xl border-b border-[var(--color-border)] overflow-y-auto px-4 py-6 flex flex-col justify-between animate-in fade-in slide-in-from-top-2 duration-200">
-            <div className="flex flex-col gap-6">
-              {/* Main Navigation Links */}
-              <div className="flex flex-col gap-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3">
-                  Navigation
-                </span>
-                <Link
-                  href="/"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 px-3.5 py-3 rounded-xl text-base font-medium transition-colors ${
-                    isRoadmapActive
-                      ? 'bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 font-semibold border border-emerald-500/25'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-[var(--color-card-subtle)]'
-                  }`}
-                >
-                  <Map className="w-5 h-5 text-slate-500" />
-                  Java Mastery Roadmap
-                </Link>
-                <a
-                  href="https://github.com/ravishankar2463/java_hub_resources"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center justify-between px-3.5 py-3 rounded-xl text-base font-medium transition-colors text-slate-700 dark:text-slate-300 hover:bg-[var(--color-card-subtle)]"
-                >
-                  <div className="flex items-center gap-3">
-                    <Code2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                    <span>Code Labs (116 Branches)</span>
-                  </div>
-                  <ExternalLink className="w-4 h-4 text-slate-400" />
-                </a>
-              </div>
-
-              {/* Jump to Level Section */}
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between px-3">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    Quick Jump to Level
-                  </span>
-                  <Link
-                    href="/"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
-                  >
-                    View All
-                  </Link>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {LEVELS.map((lvl) => (
-                    <Link
-                      key={lvl.level}
-                      href={`/#level-${lvl.level}`}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className="p-2.5 rounded-lg bg-[var(--color-card-subtle)] border border-[var(--color-border)] hover:border-emerald-500/40 hover:bg-emerald-500/5 transition-all text-left group"
-                    >
-                      <div className="text-xs font-semibold text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                        {lvl.short}
-                      </div>
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                        {lvl.title}
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Mobile Menu Footer */}
-            <div className="pt-6 border-t border-[var(--color-border)] flex items-center justify-between text-xs text-slate-500">
-              <div className="flex items-center gap-2">
-                <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span>Senior Java Curriculum</span>
-              </div>
-              <span className="font-mono text-[11px]">Java 21 LTS</span>
-            </div>
-          </div>
-        )}
       </header>
+
+      <div
+        id="mobile-navigation-panel"
+        hidden={!mobileMenuOpen}
+        className="md:hidden fixed inset-x-0 top-16 bottom-0 z-[60] overflow-y-auto overscroll-contain border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-5"
+      >
+        <div className="mx-auto flex min-h-full w-full max-w-7xl flex-col gap-5 pb-5">
+          <nav aria-label="Mobile navigation" className="flex flex-col gap-1">
+            <p className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Navigation
+            </p>
+            <Link
+              href="/"
+              onClick={() => setMobileMenuOpen(false)}
+              aria-current={isRoadmapActive ? 'page' : undefined}
+              className={`flex min-h-12 items-center gap-3 rounded-xl px-3.5 text-base font-medium transition-colors ${
+                isRoadmapActive
+                  ? 'border border-emerald-500/25 bg-emerald-500/10 font-semibold text-emerald-800 dark:text-emerald-300'
+                  : 'text-slate-700 hover:bg-[var(--color-card-subtle)] dark:text-slate-300'
+              }`}
+            >
+              <Map className="h-5 w-5 text-slate-500" aria-hidden="true" />
+              Java Mastery Roadmap
+            </Link>
+            <Link
+              href="/offline"
+              onClick={() => setMobileMenuOpen(false)}
+              aria-current={isOfflineActive ? 'page' : undefined}
+              className={`flex min-h-12 items-center gap-3 rounded-xl px-3.5 text-base font-medium transition-colors ${
+                isOfflineActive
+                  ? 'border border-emerald-500/25 bg-emerald-500/10 font-semibold text-emerald-800 dark:text-emerald-300'
+                  : 'text-slate-700 hover:bg-[var(--color-card-subtle)] dark:text-slate-300'
+              }`}
+            >
+              <HardDriveDownload
+                className="h-5 w-5 text-emerald-600 dark:text-emerald-400"
+                aria-hidden="true"
+              />
+              Read offline
+            </Link>
+            <a
+              href="https://github.com/ravishankar2463/java_hub_resources"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex min-h-12 items-center justify-between rounded-xl px-3.5 text-base font-medium text-slate-700 transition-colors hover:bg-[var(--color-card-subtle)] dark:text-slate-300"
+            >
+              <span className="flex items-center gap-3">
+                <Code2
+                  className="h-5 w-5 text-emerald-600 dark:text-emerald-400"
+                  aria-hidden="true"
+                />
+                Code Labs
+              </span>
+              <ExternalLink
+                className="h-4 w-4 text-slate-400"
+                aria-hidden="true"
+              />
+            </a>
+          </nav>
+
+          <details className="border-t border-[var(--color-border)] pt-3">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between rounded-lg px-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-[var(--color-card-subtle)] dark:text-slate-200">
+              Jump directly to a level
+              <ChevronDown
+                className="h-4 w-4 text-slate-500"
+                aria-hidden="true"
+              />
+            </summary>
+            <nav
+              aria-label="Roadmap levels"
+              className="grid grid-cols-2 gap-2 pt-2"
+            >
+              {LEVELS.map((lvl) => (
+                <Link
+                  key={lvl.level}
+                  href={`/#level-${lvl.level}`}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex min-h-12 flex-col justify-center rounded-lg border border-[var(--color-border)] bg-[var(--color-card-subtle)] px-3 py-2 text-left transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/5"
+                >
+                  <span className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                    {lvl.short}
+                  </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {lvl.title}
+                  </span>
+                </Link>
+              ))}
+            </nav>
+          </details>
+
+          <footer className="mt-auto flex items-center justify-between border-t border-[var(--color-border)] pt-4 text-xs text-slate-500">
+            <span className="flex items-center gap-2">
+              <BookOpen
+                className="h-4 w-4 text-emerald-600 dark:text-emerald-400"
+                aria-hidden="true"
+              />
+              Senior Java Curriculum
+            </span>
+            <span className="font-mono text-[11px]">Java 21 LTS</span>
+          </footer>
+        </div>
+      </div>
 
       <CommandPalette open={open} setOpen={setOpen} searchItems={searchItems} />
     </>
