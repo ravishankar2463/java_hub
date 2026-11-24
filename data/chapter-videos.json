@@ -1,0 +1,54 @@
+{
+  "updatedAt": "2026-11-24T16:45:18.061Z",
+  "totalVideos": 3,
+  "videos": [
+    {
+      "chapterId": "level-0/anatomy-of-a-java-program",
+      "level": "level-0",
+      "slug": "anatomy-of-a-java-program",
+      "chapterTitle": "Anatomy of a Java Program",
+      "partNumber": 1,
+      "totalParts": 3,
+      "partSlug": "part-1-hello-world-anatomy",
+      "partTitle": "Why Java Needs 6 Lines for Hello World",
+      "format": "shorts",
+      "durationSec": 73.5,
+      "file": "level-0/anatomy-of-a-java-program/part-1-hello-world-anatomy.mp4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/anatomy-of-a-java-program",
+      "branchName": "topic/level-0/anatomy-of-a-java-program",
+      "renderedAt": "2026-11-24T16:41:15.946Z"
+    },
+    {
+      "chapterId": "level-0/anatomy-of-a-java-program",
+      "level": "level-0",
+      "slug": "anatomy-of-a-java-program",
+      "chapterTitle": "Anatomy of a Java Program",
+      "partNumber": 2,
+      "totalParts": 3,
+      "partSlug": "part-2-javac-and-bytecode",
+      "partTitle": "What Happens When You Run javac & java?",
+      "format": "shorts",
+      "durationSec": 81,
+      "file": "level-0/anatomy-of-a-java-program/part-2-javac-and-bytecode.mp4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/anatomy-of-a-java-program",
+      "branchName": "topic/level-0/anatomy-of-a-java-program",
+      "renderedAt": "2026-11-24T16:43:17.538Z"
+    },
+    {
+      "chapterId": "level-0/anatomy-of-a-java-program",
+      "level": "level-0",
+      "slug": "anatomy-of-a-java-program",
+      "chapterTitle": "Anatomy of a Java Program",
+      "partNumber": 3,
+      "totalParts": 3,
+      "partSlug": "part-3-pitfalls-and-modern-main",
+      "partTitle": "Silent Semicolon Bug, Javadoc & Java 25 Compact Main",
+      "format": "shorts",
+      "durationSec": 80.2,
+      "file": "level-0/anatomy-of-a-java-program/part-3-pitfalls-and-modern-main.mp4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/anatomy-of-a-java-program",
+      "branchName": "topic/level-0/anatomy-of-a-java-program",
+      "renderedAt": "2026-11-24T16:45:18.061Z"
+    }
+  ]
+}
