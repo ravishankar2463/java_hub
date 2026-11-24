@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 16 / 116 (13.8%)
-- **Total Shorts Rendered:** 64
+- **Chapters Completed:** 17 / 116 (14.7%)
+- **Total Shorts Rendered:** 68
 - **Last Updated:** 2026-11-24
 
 ---
@@ -55,12 +55,12 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Reflection API & Custom Annotations** (level-3/reflection-api-custom-annotations) — 4 Shorts: [Part 1 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-1-the-class-mirror.mp4) · [Part 2 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-2-dynamic-invocation.mp4) · [Part 3 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-3-custom-annotations.mp4) · [Part 4 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-3/level-3__reflection-api-custom-annotations__part-4-compile-time-vs-runtime.mp4)
 - [ ] **Java Platform Module System (JPMS)** (level-3/java-platform-module-system-jpms)
 
-## Level 4: The Functional Java Dev (0/5)
+## Level 4: The Functional Java Dev (1/5)
 
 - [ ] **Lambdas and Functional Interfaces** (level-4/lambdas-and-functional-interfaces)
 - [ ] **The Streams API** (level-4/the-streams-api)
 - [ ] **Advanced Streams & Collectors** (level-4/advanced-streams-collectors)
-- [ ] **Optional API** (level-4/optional-api)
+- [x] **Optional API** (level-4/optional-api) — 4 Shorts: [Part 1 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-1-optional-basics.mp4) · [Part 2 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-2-performance-traps.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-3-monadic-chaining.mp4) · [Part 4 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-4-anti-patterns.mp4)
 - [ ] **Reactive Programming Basics** (level-4/reactive-programming-basics)
 
 ## Level 5: The Concurrency Expert (0/7)

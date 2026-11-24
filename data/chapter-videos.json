@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T21:29:13.222Z",
-  "totalVideos": 64,
+  "updatedAt": "2026-11-24T21:40:22.328Z",
+  "totalVideos": 68,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -1153,6 +1153,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-3/reflection-api-custom-annotations",
       "branchName": "topic/level-3/reflection-api-custom-annotations",
       "renderedAt": "2026-11-24T21:29:13.211Z"
+    },
+    {
+      "chapterId": "level-4/optional-api",
+      "level": "level-4",
+      "slug": "optional-api",
+      "chapterTitle": "Optional API",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-optional-basics",
+      "partTitle": "Why Optional Beats Null",
+      "format": "shorts",
+      "durationSec": 45.8,
+      "file": "level-4/optional-api/part-1-optional-basics.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-1-optional-basics.mp4",
+      "releaseTag": "videos-level-4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/optional-api",
+      "branchName": "topic/level-4/optional-api",
+      "renderedAt": "2026-11-24T21:36:20.934Z"
+    },
+    {
+      "chapterId": "level-4/optional-api",
+      "level": "level-4",
+      "slug": "optional-api",
+      "chapterTitle": "Optional API",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-performance-traps",
+      "partTitle": "orElse vs. orElseGet Performance",
+      "format": "shorts",
+      "durationSec": 51.5,
+      "file": "level-4/optional-api/part-2-performance-traps.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-2-performance-traps.mp4",
+      "releaseTag": "videos-level-4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/optional-api",
+      "branchName": "topic/level-4/optional-api",
+      "renderedAt": "2026-11-24T21:37:41.378Z"
+    },
+    {
+      "chapterId": "level-4/optional-api",
+      "level": "level-4",
+      "slug": "optional-api",
+      "chapterTitle": "Optional API",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-monadic-chaining",
+      "partTitle": "Chaining with map and flatMap",
+      "format": "shorts",
+      "durationSec": 46.5,
+      "file": "level-4/optional-api/part-3-monadic-chaining.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-3-monadic-chaining.mp4",
+      "releaseTag": "videos-level-4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/optional-api",
+      "branchName": "topic/level-4/optional-api",
+      "renderedAt": "2026-11-24T21:39:00.034Z"
+    },
+    {
+      "chapterId": "level-4/optional-api",
+      "level": "level-4",
+      "slug": "optional-api",
+      "chapterTitle": "Optional API",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-anti-patterns",
+      "partTitle": "Optional Anti-Patterns",
+      "format": "shorts",
+      "durationSec": 49.9,
+      "file": "level-4/optional-api/part-4-anti-patterns.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-4/level-4__optional-api__part-4-anti-patterns.mp4",
+      "releaseTag": "videos-level-4",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-4/optional-api",
+      "branchName": "topic/level-4/optional-api",
+      "renderedAt": "2026-11-24T21:40:22.328Z"
     }
   ]
 }
