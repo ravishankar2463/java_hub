@@ -57,11 +57,17 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
     []
   );
 
+  const disableYouTubeCaptions = useCallback(() => {
+    sendYouTubeCommand("unloadModule", ["captions"]);
+    sendYouTubeCommand("unloadModule", ["cc"]);
+  }, [sendYouTubeCommand]);
+
   const registerYouTubeListener = useCallback(() => {
     const win = persistentIframeRef.current?.contentWindow;
     if (!win) return;
     win.postMessage(JSON.stringify({ event: "listening", id: 1 }), "*");
-  }, []);
+    disableYouTubeCaptions();
+  }, [disableYouTubeCaptions]);
 
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {
@@ -157,10 +163,14 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
         event?: string;
         info?: { playerState?: number };
       };
+      if (payload.event === "onReady") {
+        disableYouTubeCaptions();
+      }
       const state = payload.info?.playerState;
       if (state === 1) {
         setIsPlaying(true);
         setHasStartedPlaying(true);
+        disableYouTubeCaptions();
       } else if (state === 2 || state === 0) {
         setIsPlaying(false);
       }
@@ -168,7 +178,7 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [isFullscreen]);
+  }, [isFullscreen, disableYouTubeCaptions]);
 
   // Switch videos on the persistent YouTube iframe via postMessage so unmuted
   // playback continues seamlessly across Parts 2..N without remounting the iframe.
@@ -189,6 +199,7 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
     if (loadedYouTubeIdRef.current !== nextYtId) {
       loadedYouTubeIdRef.current = nextYtId;
       sendYouTubeCommand("loadVideoById", [nextYtId]);
+      disableYouTubeCaptions();
       if (!isMuted) {
         sendYouTubeCommand("unMute");
       }
@@ -200,6 +211,7 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
     initialYouTubeId,
     isMuted,
     sendYouTubeCommand,
+    disableYouTubeCaptions,
   ]);
 
   // Lock background page scroll while fullscreen Shorts player is open
