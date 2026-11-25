@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-25T10:31:01.660Z",
+  "updatedAt": "2026-11-25T11:51:24.306Z",
   "totalVideos": 430,
   "videos": [
     {
@@ -18,7 +18,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/anatomy-of-a-java-program",
       "branchName": "topic/level-0/anatomy-of-a-java-program",
-      "renderedAt": "2026-11-24T17:31:00.153Z"
+      "renderedAt": "2026-11-24T17:31:00.153Z",
+      "youtubeId": "TxRLlg0wGbU",
+      "youtubeUrl": "https://www.youtube.com/shorts/TxRLlg0wGbU",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-27T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -36,7 +40,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/anatomy-of-a-java-program",
       "branchName": "topic/level-0/anatomy-of-a-java-program",
-      "renderedAt": "2026-11-24T17:22:12.661Z"
+      "renderedAt": "2026-11-24T17:22:12.661Z",
+      "youtubeId": "Dpcz_H5lR4Y",
+      "youtubeUrl": "https://www.youtube.com/shorts/Dpcz_H5lR4Y",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-27T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -54,7 +62,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/anatomy-of-a-java-program",
       "branchName": "topic/level-0/anatomy-of-a-java-program",
-      "renderedAt": "2026-11-24T17:23:54.887Z"
+      "renderedAt": "2026-11-24T17:23:54.887Z",
+      "youtubeId": "AzhiZ6NB1ew",
+      "youtubeUrl": "https://www.youtube.com/shorts/AzhiZ6NB1ew",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-27T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/arrays-2d-matrices",
@@ -72,7 +84,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/arrays-2d-matrices",
       "branchName": "topic/level-0/arrays-2d-matrices",
-      "renderedAt": "2026-11-24T19:11:16.896Z"
+      "renderedAt": "2026-11-24T19:11:16.896Z",
+      "youtubeId": "zhJQNw2Y36g",
+      "youtubeUrl": "https://www.youtube.com/shorts/zhJQNw2Y36g",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-30T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/arrays-2d-matrices",
@@ -90,7 +106,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/arrays-2d-matrices",
       "branchName": "topic/level-0/arrays-2d-matrices",
-      "renderedAt": "2026-11-24T19:13:01.374Z"
+      "renderedAt": "2026-11-24T19:13:01.374Z",
+      "youtubeId": "K_LyIfmbKio",
+      "youtubeUrl": "https://www.youtube.com/shorts/K_LyIfmbKio",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-30T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/arrays-2d-matrices",
@@ -108,7 +128,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/arrays-2d-matrices",
       "branchName": "topic/level-0/arrays-2d-matrices",
-      "renderedAt": "2026-11-24T19:14:47.372Z"
+      "renderedAt": "2026-11-24T19:14:47.372Z",
+      "youtubeId": "ISKNUuTUCWk",
+      "youtubeUrl": "https://www.youtube.com/shorts/ISKNUuTUCWk",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-30T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/arrays-2d-matrices",
@@ -126,7 +150,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/arrays-2d-matrices",
       "branchName": "topic/level-0/arrays-2d-matrices",
-      "renderedAt": "2026-11-24T19:16:38.819Z"
+      "renderedAt": "2026-11-24T19:16:38.819Z",
+      "youtubeId": "yF1P6QWbMOc",
+      "youtubeUrl": "https://www.youtube.com/shorts/yF1P6QWbMOc",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-30T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/control-flow",
@@ -144,7 +172,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/control-flow",
       "branchName": "topic/level-0/control-flow",
-      "renderedAt": "2026-11-24T19:23:02.018Z"
+      "renderedAt": "2026-11-24T19:23:02.018Z",
+      "youtubeId": "4ZR8EIm1oLY",
+      "youtubeUrl": "https://www.youtube.com/shorts/4ZR8EIm1oLY",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-29T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/control-flow",
@@ -162,7 +194,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/control-flow",
       "branchName": "topic/level-0/control-flow",
-      "renderedAt": "2026-11-24T19:24:42.298Z"
+      "renderedAt": "2026-11-24T19:24:42.298Z",
+      "youtubeId": "Hu3y4l4TmY4",
+      "youtubeUrl": "https://www.youtube.com/shorts/Hu3y4l4TmY4",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-29T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/control-flow",
@@ -180,7 +216,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/control-flow",
       "branchName": "topic/level-0/control-flow",
-      "renderedAt": "2026-11-24T19:26:11.674Z"
+      "renderedAt": "2026-11-24T19:26:11.674Z",
+      "youtubeId": "1rUipZEqExo",
+      "youtubeUrl": "https://www.youtube.com/shorts/1rUipZEqExo",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-29T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/control-flow",
@@ -198,7 +238,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/control-flow",
       "branchName": "topic/level-0/control-flow",
-      "renderedAt": "2026-11-24T19:27:34.853Z"
+      "renderedAt": "2026-11-24T19:27:34.853Z",
+      "youtubeId": "fKWLOIhYmnM",
+      "youtubeUrl": "https://www.youtube.com/shorts/fKWLOIhYmnM",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-29T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/control-flow",
@@ -216,7 +260,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/control-flow",
       "branchName": "topic/level-0/control-flow",
-      "renderedAt": "2026-11-24T19:29:12.398Z"
+      "renderedAt": "2026-11-24T19:29:12.398Z",
+      "youtubeId": "bMtdNbzrglU",
+      "youtubeUrl": "https://www.youtube.com/shorts/bMtdNbzrglU",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-29T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/environment-setup",
@@ -234,7 +282,12 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/environment-setup",
       "branchName": "topic/level-0/environment-setup",
-      "renderedAt": "2026-11-24T18:07:56.669Z"
+      "renderedAt": "2026-11-24T18:07:56.669Z",
+      "youtubeId": "rns2TnKTD4U",
+      "youtubeUrl": "https://www.youtube.com/shorts/rns2TnKTD4U",
+      "youtubeStatus": "public",
+      "scheduledPublishAt": "2026-11-25T11:00:00.000Z",
+      "publishedAt": "2026-11-25T11:51:21.301Z"
     },
     {
       "chapterId": "level-0/environment-setup",
@@ -252,7 +305,12 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/environment-setup",
       "branchName": "topic/level-0/environment-setup",
-      "renderedAt": "2026-11-24T17:55:18.046Z"
+      "renderedAt": "2026-11-24T17:55:18.046Z",
+      "youtubeId": "5Ig7jG8uGgM",
+      "youtubeUrl": "https://www.youtube.com/shorts/5Ig7jG8uGgM",
+      "youtubeStatus": "public",
+      "scheduledPublishAt": "2026-11-25T11:00:00.000Z",
+      "publishedAt": "2026-11-25T11:51:22.670Z"
     },
     {
       "chapterId": "level-0/environment-setup",
@@ -270,7 +328,12 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/environment-setup",
       "branchName": "topic/level-0/environment-setup",
-      "renderedAt": "2026-11-24T17:57:17.551Z"
+      "renderedAt": "2026-11-24T17:57:17.551Z",
+      "youtubeId": "cmjwUFXA0m8",
+      "youtubeUrl": "https://www.youtube.com/shorts/cmjwUFXA0m8",
+      "youtubeStatus": "public",
+      "scheduledPublishAt": "2026-11-25T11:00:00.000Z",
+      "publishedAt": "2026-11-25T11:51:24.306Z"
     },
     {
       "chapterId": "level-0/git-version-control",
@@ -288,7 +351,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/git-version-control",
       "branchName": "topic/level-0/git-version-control",
-      "renderedAt": "2026-11-24T18:01:06.734Z"
+      "renderedAt": "2026-11-24T18:01:06.734Z",
+      "youtubeId": "wQ5PsX5VIgc",
+      "youtubeUrl": "https://www.youtube.com/shorts/wQ5PsX5VIgc",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-26T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/git-version-control",
@@ -306,7 +373,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/git-version-control",
       "branchName": "topic/level-0/git-version-control",
-      "renderedAt": "2026-11-24T18:02:51.896Z"
+      "renderedAt": "2026-11-24T18:02:51.896Z",
+      "youtubeId": "xvcKA1R01e4",
+      "youtubeUrl": "https://www.youtube.com/shorts/xvcKA1R01e4",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-26T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/git-version-control",
@@ -324,7 +395,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/git-version-control",
       "branchName": "topic/level-0/git-version-control",
-      "renderedAt": "2026-11-24T18:04:42.847Z"
+      "renderedAt": "2026-11-24T18:04:42.847Z",
+      "youtubeId": "amntV017eNQ",
+      "youtubeUrl": "https://www.youtube.com/shorts/amntV017eNQ",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-26T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/intro-to-oops",
@@ -342,7 +417,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/intro-to-oops",
       "branchName": "topic/level-0/intro-to-oops",
-      "renderedAt": "2026-11-24T19:32:26.754Z"
+      "renderedAt": "2026-11-24T19:32:26.754Z",
+      "youtubeId": "tSHihpNUnKo",
+      "youtubeUrl": "https://www.youtube.com/shorts/tSHihpNUnKo",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-01T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/intro-to-oops",
@@ -360,7 +439,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/intro-to-oops",
       "branchName": "topic/level-0/intro-to-oops",
-      "renderedAt": "2026-11-24T19:33:51.590Z"
+      "renderedAt": "2026-11-24T19:33:51.590Z",
+      "youtubeId": "fE__WU-KkEI",
+      "youtubeUrl": "https://www.youtube.com/shorts/fE__WU-KkEI",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-01T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/intro-to-oops",
@@ -378,7 +461,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/intro-to-oops",
       "branchName": "topic/level-0/intro-to-oops",
-      "renderedAt": "2026-11-24T19:35:17.156Z"
+      "renderedAt": "2026-11-24T19:35:17.156Z",
+      "youtubeId": "HHXfGhjy9R0",
+      "youtubeUrl": "https://www.youtube.com/shorts/HHXfGhjy9R0",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-01T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/intro-to-oops",
@@ -396,7 +483,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/intro-to-oops",
       "branchName": "topic/level-0/intro-to-oops",
-      "renderedAt": "2026-11-24T19:36:45.172Z"
+      "renderedAt": "2026-11-24T19:36:45.172Z",
+      "youtubeId": "FfAfSTqesGc",
+      "youtubeUrl": "https://www.youtube.com/shorts/FfAfSTqesGc",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-01T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/variables-and-data-types",
@@ -414,7 +505,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/variables-and-data-types",
       "branchName": "topic/level-0/variables-and-data-types",
-      "renderedAt": "2026-11-24T19:40:05.121Z"
+      "renderedAt": "2026-11-24T19:40:05.121Z",
+      "youtubeId": "c6eirpSYnQc",
+      "youtubeUrl": "https://www.youtube.com/shorts/c6eirpSYnQc",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-28T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/variables-and-data-types",
@@ -432,7 +527,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/variables-and-data-types",
       "branchName": "topic/level-0/variables-and-data-types",
-      "renderedAt": "2026-11-24T19:41:40.833Z"
+      "renderedAt": "2026-11-24T19:41:40.833Z",
+      "youtubeId": "Q4QJdolYlIs",
+      "youtubeUrl": "https://www.youtube.com/shorts/Q4QJdolYlIs",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-28T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/variables-and-data-types",
@@ -450,7 +549,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/variables-and-data-types",
       "branchName": "topic/level-0/variables-and-data-types",
-      "renderedAt": "2026-11-24T19:43:20.049Z"
+      "renderedAt": "2026-11-24T19:43:20.049Z",
+      "youtubeId": "cakalALxe6I",
+      "youtubeUrl": "https://www.youtube.com/shorts/cakalALxe6I",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-28T11:00:00.000Z"
     },
     {
       "chapterId": "level-0/variables-and-data-types",
@@ -468,7 +571,11 @@
       "releaseTag": "videos-level-0",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-0/variables-and-data-types",
       "branchName": "topic/level-0/variables-and-data-types",
-      "renderedAt": "2026-11-24T19:45:01.892Z"
+      "renderedAt": "2026-11-24T19:45:01.892Z",
+      "youtubeId": "mGNGRRMvTJE",
+      "youtubeUrl": "https://www.youtube.com/shorts/mGNGRRMvTJE",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-11-28T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/abstraction",
@@ -486,7 +593,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/abstraction",
       "branchName": "topic/level-1/abstraction",
-      "renderedAt": "2026-11-25T04:15:37.940Z"
+      "renderedAt": "2026-11-25T04:15:37.940Z",
+      "youtubeId": "hwVzt_LOxOQ",
+      "youtubeUrl": "https://www.youtube.com/shorts/hwVzt_LOxOQ",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-07T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/abstraction",
@@ -504,7 +615,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/abstraction",
       "branchName": "topic/level-1/abstraction",
-      "renderedAt": "2026-11-25T04:17:13.486Z"
+      "renderedAt": "2026-11-25T04:17:13.486Z",
+      "youtubeId": "HZwF2KMPgAw",
+      "youtubeUrl": "https://www.youtube.com/shorts/HZwF2KMPgAw",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-07T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/abstraction",
@@ -522,7 +637,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/abstraction",
       "branchName": "topic/level-1/abstraction",
-      "renderedAt": "2026-11-25T04:18:54.580Z"
+      "renderedAt": "2026-11-25T04:18:54.580Z",
+      "youtubeId": "eTcmCp5LNaE",
+      "youtubeUrl": "https://www.youtube.com/shorts/eTcmCp5LNaE",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-07T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/abstraction",
@@ -540,7 +659,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/abstraction",
       "branchName": "topic/level-1/abstraction",
-      "renderedAt": "2026-11-25T04:20:38.219Z"
+      "renderedAt": "2026-11-25T04:20:38.219Z",
+      "youtubeId": "IlzQGgnU9ew",
+      "youtubeUrl": "https://www.youtube.com/shorts/IlzQGgnU9ew",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-07T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/advanced-class-design",
@@ -558,7 +681,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/advanced-class-design",
       "branchName": "topic/level-1/advanced-class-design",
-      "renderedAt": "2026-11-24T19:57:21.885Z"
+      "renderedAt": "2026-11-24T19:57:21.885Z",
+      "youtubeId": "PTZUSC_N-y0",
+      "youtubeUrl": "https://www.youtube.com/shorts/PTZUSC_N-y0",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-10T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/advanced-class-design",
@@ -576,7 +703,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/advanced-class-design",
       "branchName": "topic/level-1/advanced-class-design",
-      "renderedAt": "2026-11-24T19:58:57.701Z"
+      "renderedAt": "2026-11-24T19:58:57.701Z",
+      "youtubeId": "Dx48yO-17gE",
+      "youtubeUrl": "https://www.youtube.com/shorts/Dx48yO-17gE",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-10T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/advanced-class-design",
@@ -594,7 +725,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/advanced-class-design",
       "branchName": "topic/level-1/advanced-class-design",
-      "renderedAt": "2026-11-24T20:00:33.477Z"
+      "renderedAt": "2026-11-24T20:00:33.477Z",
+      "youtubeId": "7usHyqMvuo0",
+      "youtubeUrl": "https://www.youtube.com/shorts/7usHyqMvuo0",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-10T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/advanced-class-design",
@@ -612,7 +747,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/advanced-class-design",
       "branchName": "topic/level-1/advanced-class-design",
-      "renderedAt": "2026-11-24T20:02:21.698Z"
+      "renderedAt": "2026-11-24T20:02:21.698Z",
+      "youtubeId": "9RjigWVRjCM",
+      "youtubeUrl": "https://www.youtube.com/shorts/9RjigWVRjCM",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-10T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/classes-and-objects",
@@ -630,7 +769,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/classes-and-objects",
       "branchName": "topic/level-1/classes-and-objects",
-      "renderedAt": "2026-11-24T20:05:34.955Z"
+      "renderedAt": "2026-11-24T20:05:34.955Z",
+      "youtubeId": "8IW8Vd36kmM",
+      "youtubeUrl": "https://www.youtube.com/shorts/8IW8Vd36kmM",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-02T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/classes-and-objects",
@@ -648,7 +791,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/classes-and-objects",
       "branchName": "topic/level-1/classes-and-objects",
-      "renderedAt": "2026-11-24T20:07:11.539Z"
+      "renderedAt": "2026-11-24T20:07:11.539Z",
+      "youtubeId": "6Qv_ryYOM54",
+      "youtubeUrl": "https://www.youtube.com/shorts/6Qv_ryYOM54",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-02T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/classes-and-objects",
@@ -666,7 +813,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/classes-and-objects",
       "branchName": "topic/level-1/classes-and-objects",
-      "renderedAt": "2026-11-24T20:08:41.804Z"
+      "renderedAt": "2026-11-24T20:08:41.804Z",
+      "youtubeId": "ASUwPckNrVk",
+      "youtubeUrl": "https://www.youtube.com/shorts/ASUwPckNrVk",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-02T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/classes-and-objects",
@@ -684,7 +835,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/classes-and-objects",
       "branchName": "topic/level-1/classes-and-objects",
-      "renderedAt": "2026-11-24T20:10:14.842Z"
+      "renderedAt": "2026-11-24T20:10:14.842Z",
+      "youtubeId": "LBLWWtGZQKM",
+      "youtubeUrl": "https://www.youtube.com/shorts/LBLWWtGZQKM",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-02T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/composition-over-inheritance",
@@ -702,7 +857,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/composition-over-inheritance",
       "branchName": "topic/level-1/composition-over-inheritance",
-      "renderedAt": "2026-11-24T20:13:47.380Z"
+      "renderedAt": "2026-11-24T20:13:47.380Z",
+      "youtubeId": "2PN4VwIN2Uk",
+      "youtubeUrl": "https://www.youtube.com/shorts/2PN4VwIN2Uk",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-08T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/composition-over-inheritance",
@@ -720,7 +879,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/composition-over-inheritance",
       "branchName": "topic/level-1/composition-over-inheritance",
-      "renderedAt": "2026-11-24T20:15:26.139Z"
+      "renderedAt": "2026-11-24T20:15:26.139Z",
+      "youtubeId": "4axFXJDYAqY",
+      "youtubeUrl": "https://www.youtube.com/shorts/4axFXJDYAqY",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-08T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/composition-over-inheritance",
@@ -738,7 +901,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/composition-over-inheritance",
       "branchName": "topic/level-1/composition-over-inheritance",
-      "renderedAt": "2026-11-24T20:17:05.584Z"
+      "renderedAt": "2026-11-24T20:17:05.584Z",
+      "youtubeId": "SI6fXND7BTE",
+      "youtubeUrl": "https://www.youtube.com/shorts/SI6fXND7BTE",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-08T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/composition-over-inheritance",
@@ -756,7 +923,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/composition-over-inheritance",
       "branchName": "topic/level-1/composition-over-inheritance",
-      "renderedAt": "2026-11-24T20:18:54.083Z"
+      "renderedAt": "2026-11-24T20:18:54.083Z",
+      "youtubeId": "BMpQFE19T_Y",
+      "youtubeUrl": "https://www.youtube.com/shorts/BMpQFE19T_Y",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-08T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/encapsulation-access-modifiers",
@@ -774,7 +945,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/encapsulation-access-modifiers",
       "branchName": "topic/level-1/encapsulation-access-modifiers",
-      "renderedAt": "2026-11-25T04:23:29.465Z"
+      "renderedAt": "2026-11-25T04:23:29.465Z",
+      "youtubeId": "8nvZPjz9l60",
+      "youtubeUrl": "https://www.youtube.com/shorts/8nvZPjz9l60",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-05T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/encapsulation-access-modifiers",
@@ -792,7 +967,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/encapsulation-access-modifiers",
       "branchName": "topic/level-1/encapsulation-access-modifiers",
-      "renderedAt": "2026-11-25T04:24:56.615Z"
+      "renderedAt": "2026-11-25T04:24:56.615Z",
+      "youtubeId": "ZCw1Zb6KbfM",
+      "youtubeUrl": "https://www.youtube.com/shorts/ZCw1Zb6KbfM",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-05T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/encapsulation-access-modifiers",
@@ -810,7 +989,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/encapsulation-access-modifiers",
       "branchName": "topic/level-1/encapsulation-access-modifiers",
-      "renderedAt": "2026-11-25T04:26:19.612Z"
+      "renderedAt": "2026-11-25T04:26:19.612Z",
+      "youtubeId": "QGWk4dKL5gY",
+      "youtubeUrl": "https://www.youtube.com/shorts/QGWk4dKL5gY",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-05T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/encapsulation-access-modifiers",
@@ -828,7 +1011,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/encapsulation-access-modifiers",
       "branchName": "topic/level-1/encapsulation-access-modifiers",
-      "renderedAt": "2026-11-25T04:27:31.883Z"
+      "renderedAt": "2026-11-25T04:27:31.883Z",
+      "youtubeId": "4UqYUC3ALI4",
+      "youtubeUrl": "https://www.youtube.com/shorts/4UqYUC3ALI4",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-05T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/inheritance",
@@ -846,7 +1033,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/inheritance",
       "branchName": "topic/level-1/inheritance",
-      "renderedAt": "2026-11-24T20:25:29.297Z"
+      "renderedAt": "2026-11-24T20:25:29.297Z",
+      "youtubeId": "fySsyc3Jvms",
+      "youtubeUrl": "https://www.youtube.com/shorts/fySsyc3Jvms",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-06T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/inheritance",
@@ -864,7 +1055,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/inheritance",
       "branchName": "topic/level-1/inheritance",
-      "renderedAt": "2026-11-24T20:27:14.698Z"
+      "renderedAt": "2026-11-24T20:27:14.698Z",
+      "youtubeId": "u95oqWSFdNg",
+      "youtubeUrl": "https://www.youtube.com/shorts/u95oqWSFdNg",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-06T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/inheritance",
@@ -882,7 +1077,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/inheritance",
       "branchName": "topic/level-1/inheritance",
-      "renderedAt": "2026-11-24T20:28:54.093Z"
+      "renderedAt": "2026-11-24T20:28:54.093Z",
+      "youtubeId": "_7IllVrcegY",
+      "youtubeUrl": "https://www.youtube.com/shorts/_7IllVrcegY",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-06T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/inheritance",
@@ -900,7 +1099,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/inheritance",
       "branchName": "topic/level-1/inheritance",
-      "renderedAt": "2026-11-24T20:30:31.299Z"
+      "renderedAt": "2026-11-24T20:30:31.299Z",
+      "youtubeId": "pvqP-B4PyL8",
+      "youtubeUrl": "https://www.youtube.com/shorts/pvqP-B4PyL8",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-06T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/memory-references-copying",
@@ -918,7 +1121,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/memory-references-copying",
       "branchName": "topic/level-1/memory-references-copying",
-      "renderedAt": "2026-11-24T20:33:25.286Z"
+      "renderedAt": "2026-11-24T20:33:25.286Z",
+      "youtubeId": "Z-5AfG8cca8",
+      "youtubeUrl": "https://www.youtube.com/shorts/Z-5AfG8cca8",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-04T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/memory-references-copying",
@@ -936,7 +1143,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/memory-references-copying",
       "branchName": "topic/level-1/memory-references-copying",
-      "renderedAt": "2026-11-24T20:34:52.138Z"
+      "renderedAt": "2026-11-24T20:34:52.138Z",
+      "youtubeId": "ltmz-ofjq2I",
+      "youtubeUrl": "https://www.youtube.com/shorts/ltmz-ofjq2I",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-04T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/memory-references-copying",
@@ -954,7 +1165,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/memory-references-copying",
       "branchName": "topic/level-1/memory-references-copying",
-      "renderedAt": "2026-11-24T20:36:14.180Z"
+      "renderedAt": "2026-11-24T20:36:14.180Z",
+      "youtubeId": "dEeLYt6YPRA",
+      "youtubeUrl": "https://www.youtube.com/shorts/dEeLYt6YPRA",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-04T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/memory-references-copying",
@@ -972,7 +1187,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/memory-references-copying",
       "branchName": "topic/level-1/memory-references-copying",
-      "renderedAt": "2026-11-24T20:37:39.031Z"
+      "renderedAt": "2026-11-24T20:37:39.031Z",
+      "youtubeId": "hq6BQGKH4Jo",
+      "youtubeUrl": "https://www.youtube.com/shorts/hq6BQGKH4Jo",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-04T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/polymorphism",
@@ -990,7 +1209,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/polymorphism",
       "branchName": "topic/level-1/polymorphism",
-      "renderedAt": "2026-11-25T08:35:57.050Z"
+      "renderedAt": "2026-11-25T08:35:57.050Z",
+      "youtubeId": "3VimPZFN5H0",
+      "youtubeUrl": "https://www.youtube.com/shorts/3VimPZFN5H0",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-09T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/polymorphism",
@@ -1008,7 +1231,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/polymorphism",
       "branchName": "topic/level-1/polymorphism",
-      "renderedAt": "2026-11-25T08:37:35.480Z"
+      "renderedAt": "2026-11-25T08:37:35.480Z",
+      "youtubeId": "7gZtwX-WwQU",
+      "youtubeUrl": "https://www.youtube.com/shorts/7gZtwX-WwQU",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-09T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/polymorphism",
@@ -1026,7 +1253,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/polymorphism",
       "branchName": "topic/level-1/polymorphism",
-      "renderedAt": "2026-11-25T08:39:14.333Z"
+      "renderedAt": "2026-11-25T08:39:14.333Z",
+      "youtubeId": "W29tTPpwAfA",
+      "youtubeUrl": "https://www.youtube.com/shorts/W29tTPpwAfA",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-09T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/polymorphism",
@@ -1044,7 +1275,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/polymorphism",
       "branchName": "topic/level-1/polymorphism",
-      "renderedAt": "2026-11-25T08:40:51.878Z"
+      "renderedAt": "2026-11-25T08:40:51.878Z",
+      "youtubeId": "Y0XKtuRsAeA",
+      "youtubeUrl": "https://www.youtube.com/shorts/Y0XKtuRsAeA",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-09T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/sealed-classes-and-pattern-matching",
@@ -1062,7 +1297,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/sealed-classes-and-pattern-matching",
       "branchName": "topic/level-1/sealed-classes-and-pattern-matching",
-      "renderedAt": "2026-11-24T20:43:14.174Z"
+      "renderedAt": "2026-11-24T20:43:14.174Z",
+      "youtubeId": "SOV4zGHFyxM",
+      "youtubeUrl": "https://www.youtube.com/shorts/SOV4zGHFyxM",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-11T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/sealed-classes-and-pattern-matching",
@@ -1080,7 +1319,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/sealed-classes-and-pattern-matching",
       "branchName": "topic/level-1/sealed-classes-and-pattern-matching",
-      "renderedAt": "2026-11-24T20:44:44.647Z"
+      "renderedAt": "2026-11-24T20:44:44.647Z",
+      "youtubeId": "FZ06WU3Zyvw",
+      "youtubeUrl": "https://www.youtube.com/shorts/FZ06WU3Zyvw",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-11T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/sealed-classes-and-pattern-matching",
@@ -1098,7 +1341,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/sealed-classes-and-pattern-matching",
       "branchName": "topic/level-1/sealed-classes-and-pattern-matching",
-      "renderedAt": "2026-11-24T20:46:22.105Z"
+      "renderedAt": "2026-11-24T20:46:22.105Z",
+      "youtubeId": "cU0HaZ15L3A",
+      "youtubeUrl": "https://www.youtube.com/shorts/cU0HaZ15L3A",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-11T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/sealed-classes-and-pattern-matching",
@@ -1116,7 +1363,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/sealed-classes-and-pattern-matching",
       "branchName": "topic/level-1/sealed-classes-and-pattern-matching",
-      "renderedAt": "2026-11-24T20:48:00.649Z"
+      "renderedAt": "2026-11-24T20:48:00.649Z",
+      "youtubeId": "gYzuxwxF5Fc",
+      "youtubeUrl": "https://www.youtube.com/shorts/gYzuxwxF5Fc",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-11T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/the-static-keyword",
@@ -1134,7 +1385,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/the-static-keyword",
       "branchName": "topic/level-1/the-static-keyword",
-      "renderedAt": "2026-11-25T04:31:08.728Z"
+      "renderedAt": "2026-11-25T04:31:08.728Z",
+      "youtubeId": "0REBukJ9GXU",
+      "youtubeUrl": "https://www.youtube.com/shorts/0REBukJ9GXU",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-03T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/the-static-keyword",
@@ -1152,7 +1407,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/the-static-keyword",
       "branchName": "topic/level-1/the-static-keyword",
-      "renderedAt": "2026-11-25T04:32:22.526Z"
+      "renderedAt": "2026-11-25T04:32:22.526Z",
+      "youtubeId": "elB977UL2Pw",
+      "youtubeUrl": "https://www.youtube.com/shorts/elB977UL2Pw",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-03T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/the-static-keyword",
@@ -1170,7 +1429,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/the-static-keyword",
       "branchName": "topic/level-1/the-static-keyword",
-      "renderedAt": "2026-11-25T04:33:35.680Z"
+      "renderedAt": "2026-11-25T04:33:35.680Z",
+      "youtubeId": "t8wJYWPxEMo",
+      "youtubeUrl": "https://www.youtube.com/shorts/t8wJYWPxEMo",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-03T11:00:00.000Z"
     },
     {
       "chapterId": "level-1/the-static-keyword",
@@ -1188,7 +1451,11 @@
       "releaseTag": "videos-level-1",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-1/the-static-keyword",
       "branchName": "topic/level-1/the-static-keyword",
-      "renderedAt": "2026-11-25T04:34:44.176Z"
+      "renderedAt": "2026-11-25T04:34:44.176Z",
+      "youtubeId": "OF6OXqFueEY",
+      "youtubeUrl": "https://www.youtube.com/shorts/OF6OXqFueEY",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-03T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/enums",
@@ -1206,7 +1473,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/enums",
       "branchName": "topic/level-2/enums",
-      "renderedAt": "2026-11-25T04:37:49.674Z"
+      "renderedAt": "2026-11-25T04:37:49.674Z",
+      "youtubeId": "TpiOoMD3YCA",
+      "youtubeUrl": "https://www.youtube.com/shorts/TpiOoMD3YCA",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-13T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/enums",
@@ -1224,7 +1495,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/enums",
       "branchName": "topic/level-2/enums",
-      "renderedAt": "2026-11-25T04:39:06.495Z"
+      "renderedAt": "2026-11-25T04:39:06.495Z",
+      "youtubeId": "ILeVTo-sx8E",
+      "youtubeUrl": "https://www.youtube.com/shorts/ILeVTo-sx8E",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-13T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/enums",
@@ -1242,7 +1517,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/enums",
       "branchName": "topic/level-2/enums",
-      "renderedAt": "2026-11-25T04:40:22.937Z"
+      "renderedAt": "2026-11-25T04:40:22.937Z",
+      "youtubeId": "Z7brifk4a6I",
+      "youtubeUrl": "https://www.youtube.com/shorts/Z7brifk4a6I",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-13T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/enums",
@@ -1260,7 +1539,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/enums",
       "branchName": "topic/level-2/enums",
-      "renderedAt": "2026-11-25T04:41:36.017Z"
+      "renderedAt": "2026-11-25T04:41:36.017Z",
+      "youtubeId": "_wRZQNMukA0",
+      "youtubeUrl": "https://www.youtube.com/shorts/_wRZQNMukA0",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-13T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/enums",
@@ -1278,7 +1561,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/enums",
       "branchName": "topic/level-2/enums",
-      "renderedAt": "2026-11-25T04:42:55.566Z"
+      "renderedAt": "2026-11-25T04:42:55.566Z",
+      "youtubeId": "8cYiwvgZxPI",
+      "youtubeUrl": "https://www.youtube.com/shorts/8cYiwvgZxPI",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-13T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/exception-handling",
@@ -1296,7 +1583,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/exception-handling",
       "branchName": "topic/level-2/exception-handling",
-      "renderedAt": "2026-11-25T04:45:30.516Z"
+      "renderedAt": "2026-11-25T04:45:30.516Z",
+      "youtubeId": "3t6E8ctzF8Q",
+      "youtubeUrl": "https://www.youtube.com/shorts/3t6E8ctzF8Q",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-12T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/exception-handling",
@@ -1314,7 +1605,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/exception-handling",
       "branchName": "topic/level-2/exception-handling",
-      "renderedAt": "2026-11-25T04:46:40.624Z"
+      "renderedAt": "2026-11-25T04:46:40.624Z",
+      "youtubeId": "-t6nZMhtOtY",
+      "youtubeUrl": "https://www.youtube.com/shorts/-t6nZMhtOtY",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-12T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/exception-handling",
@@ -1332,7 +1627,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/exception-handling",
       "branchName": "topic/level-2/exception-handling",
-      "renderedAt": "2026-11-25T04:47:53.735Z"
+      "renderedAt": "2026-11-25T04:47:53.735Z",
+      "youtubeId": "7VBmdhcJaeI",
+      "youtubeUrl": "https://www.youtube.com/shorts/7VBmdhcJaeI",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-12T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/exception-handling",
@@ -1350,7 +1649,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/exception-handling",
       "branchName": "topic/level-2/exception-handling",
-      "renderedAt": "2026-11-25T04:49:03.104Z"
+      "renderedAt": "2026-11-25T04:49:03.104Z",
+      "youtubeId": "PI2MhzzYhaY",
+      "youtubeUrl": "https://www.youtube.com/shorts/PI2MhzzYhaY",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-12T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/io-and-nio2",
@@ -1368,7 +1671,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/io-and-nio2",
       "branchName": "topic/level-2/io-and-nio2",
-      "renderedAt": "2026-11-25T04:52:45.452Z"
+      "renderedAt": "2026-11-25T04:52:45.452Z",
+      "youtubeId": "7SOPZfYUrK0",
+      "youtubeUrl": "https://www.youtube.com/shorts/7SOPZfYUrK0",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-16T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/io-and-nio2",
@@ -1386,7 +1693,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/io-and-nio2",
       "branchName": "topic/level-2/io-and-nio2",
-      "renderedAt": "2026-11-25T04:54:22.402Z"
+      "renderedAt": "2026-11-25T04:54:22.402Z",
+      "youtubeId": "rUXcCbOXD_o",
+      "youtubeUrl": "https://www.youtube.com/shorts/rUXcCbOXD_o",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-16T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/io-and-nio2",
@@ -1404,7 +1715,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/io-and-nio2",
       "branchName": "topic/level-2/io-and-nio2",
-      "renderedAt": "2026-11-25T04:55:54.133Z"
+      "renderedAt": "2026-11-25T04:55:54.133Z",
+      "youtubeId": "GY_vK9LB6GE",
+      "youtubeUrl": "https://www.youtube.com/shorts/GY_vK9LB6GE",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-16T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/io-and-nio2",
@@ -1422,7 +1737,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/io-and-nio2",
       "branchName": "topic/level-2/io-and-nio2",
-      "renderedAt": "2026-11-25T04:57:24.863Z"
+      "renderedAt": "2026-11-25T04:57:24.863Z",
+      "youtubeId": "0G5BM7D2mqc",
+      "youtubeUrl": "https://www.youtube.com/shorts/0G5BM7D2mqc",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-16T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/io-and-nio2",
@@ -1440,7 +1759,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/io-and-nio2",
       "branchName": "topic/level-2/io-and-nio2",
-      "renderedAt": "2026-11-25T04:58:53.263Z"
+      "renderedAt": "2026-11-25T04:58:53.263Z",
+      "youtubeId": "sSJt8ugEfmU",
+      "youtubeUrl": "https://www.youtube.com/shorts/sSJt8ugEfmU",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-16T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/modern-core-apis",
@@ -1458,7 +1781,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/modern-core-apis",
       "branchName": "topic/level-2/modern-core-apis",
-      "renderedAt": "2026-11-25T05:01:42.622Z"
+      "renderedAt": "2026-11-25T05:01:42.622Z",
+      "youtubeId": "Ep5PK6TILRk",
+      "youtubeUrl": "https://www.youtube.com/shorts/Ep5PK6TILRk",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-15T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/modern-core-apis",
@@ -1476,7 +1803,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/modern-core-apis",
       "branchName": "topic/level-2/modern-core-apis",
-      "renderedAt": "2026-11-25T05:02:53.874Z"
+      "renderedAt": "2026-11-25T05:02:53.874Z",
+      "youtubeId": "L7RGf_O7Uqk",
+      "youtubeUrl": "https://www.youtube.com/shorts/L7RGf_O7Uqk",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-15T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/modern-core-apis",
@@ -1494,7 +1825,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/modern-core-apis",
       "branchName": "topic/level-2/modern-core-apis",
-      "renderedAt": "2026-11-25T05:04:03.669Z"
+      "renderedAt": "2026-11-25T05:04:03.669Z",
+      "youtubeId": "9teFIdQ-NBg",
+      "youtubeUrl": "https://www.youtube.com/shorts/9teFIdQ-NBg",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-15T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/modern-core-apis",
@@ -1512,7 +1847,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/modern-core-apis",
       "branchName": "topic/level-2/modern-core-apis",
-      "renderedAt": "2026-11-25T05:05:15.919Z"
+      "renderedAt": "2026-11-25T05:05:15.919Z",
+      "youtubeId": "loD-Xn2jSzQ",
+      "youtubeUrl": "https://www.youtube.com/shorts/loD-Xn2jSzQ",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-15T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/network-socket-programming",
@@ -1530,7 +1869,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/network-socket-programming",
       "branchName": "topic/level-2/network-socket-programming",
-      "renderedAt": "2026-11-25T05:07:47.780Z"
+      "renderedAt": "2026-11-25T05:07:47.780Z",
+      "youtubeId": "ewrAx4e3Iw4",
+      "youtubeUrl": "https://www.youtube.com/shorts/ewrAx4e3Iw4",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-17T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/network-socket-programming",
@@ -1548,7 +1891,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/network-socket-programming",
       "branchName": "topic/level-2/network-socket-programming",
-      "renderedAt": "2026-11-25T05:08:56.528Z"
+      "renderedAt": "2026-11-25T05:08:56.528Z",
+      "youtubeId": "fGvO9fP69Sc",
+      "youtubeUrl": "https://www.youtube.com/shorts/fGvO9fP69Sc",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-17T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/network-socket-programming",
@@ -1566,7 +1913,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/network-socket-programming",
       "branchName": "topic/level-2/network-socket-programming",
-      "renderedAt": "2026-11-25T05:10:07.582Z"
+      "renderedAt": "2026-11-25T05:10:07.582Z",
+      "youtubeId": "8xz0oVlxV0A",
+      "youtubeUrl": "https://www.youtube.com/shorts/8xz0oVlxV0A",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-17T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/network-socket-programming",
@@ -1584,7 +1935,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/network-socket-programming",
       "branchName": "topic/level-2/network-socket-programming",
-      "renderedAt": "2026-11-25T05:11:19.121Z"
+      "renderedAt": "2026-11-25T05:11:19.121Z",
+      "youtubeId": "KCwYWGHTRuk",
+      "youtubeUrl": "https://www.youtube.com/shorts/KCwYWGHTRuk",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-17T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/regular-expressions-and-redos-defense",
@@ -1602,7 +1957,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/regular-expressions-and-redos-defense",
       "branchName": "topic/level-2/regular-expressions-and-redos-defense",
-      "renderedAt": "2026-11-25T05:14:17.133Z"
+      "renderedAt": "2026-11-25T05:14:17.133Z",
+      "youtubeId": "uG4PqrEVuqo",
+      "youtubeUrl": "https://www.youtube.com/shorts/uG4PqrEVuqo",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-18T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/regular-expressions-and-redos-defense",
@@ -1620,7 +1979,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/regular-expressions-and-redos-defense",
       "branchName": "topic/level-2/regular-expressions-and-redos-defense",
-      "renderedAt": "2026-11-25T05:15:30.938Z"
+      "renderedAt": "2026-11-25T05:15:30.938Z",
+      "youtubeId": "m8UzaQzeXgQ",
+      "youtubeUrl": "https://www.youtube.com/shorts/m8UzaQzeXgQ",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-18T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/regular-expressions-and-redos-defense",
@@ -1638,7 +2001,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/regular-expressions-and-redos-defense",
       "branchName": "topic/level-2/regular-expressions-and-redos-defense",
-      "renderedAt": "2026-11-25T05:16:42.379Z"
+      "renderedAt": "2026-11-25T05:16:42.379Z",
+      "youtubeId": "FxzC6QoVAWg",
+      "youtubeUrl": "https://www.youtube.com/shorts/FxzC6QoVAWg",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-18T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/regular-expressions-and-redos-defense",
@@ -1656,7 +2023,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/regular-expressions-and-redos-defense",
       "branchName": "topic/level-2/regular-expressions-and-redos-defense",
-      "renderedAt": "2026-11-25T05:17:58.023Z"
+      "renderedAt": "2026-11-25T05:17:58.023Z",
+      "youtubeId": "XC2CK7xuCDQ",
+      "youtubeUrl": "https://www.youtube.com/shorts/XC2CK7xuCDQ",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-18T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/regular-expressions-and-redos-defense",
@@ -1674,7 +2045,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/regular-expressions-and-redos-defense",
       "branchName": "topic/level-2/regular-expressions-and-redos-defense",
-      "renderedAt": "2026-11-25T05:19:09.162Z"
+      "renderedAt": "2026-11-25T05:19:09.162Z",
+      "youtubeId": "nEyLq9rHBSg",
+      "youtubeUrl": "https://www.youtube.com/shorts/nEyLq9rHBSg",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-18T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/the-string-constant-pool-stringbuilders",
@@ -1692,7 +2067,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/the-string-constant-pool-stringbuilders",
       "branchName": "topic/level-2/the-string-constant-pool-stringbuilders",
-      "renderedAt": "2026-11-25T08:44:08.865Z"
+      "renderedAt": "2026-11-25T08:44:08.865Z",
+      "youtubeId": "o8Aj2yjOfSs",
+      "youtubeUrl": "https://www.youtube.com/shorts/o8Aj2yjOfSs",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-14T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/the-string-constant-pool-stringbuilders",
@@ -1710,7 +2089,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/the-string-constant-pool-stringbuilders",
       "branchName": "topic/level-2/the-string-constant-pool-stringbuilders",
-      "renderedAt": "2026-11-25T08:45:43.816Z"
+      "renderedAt": "2026-11-25T08:45:43.816Z",
+      "youtubeId": "C7kSMzJ4bYw",
+      "youtubeUrl": "https://www.youtube.com/shorts/C7kSMzJ4bYw",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-14T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/the-string-constant-pool-stringbuilders",
@@ -1728,7 +2111,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/the-string-constant-pool-stringbuilders",
       "branchName": "topic/level-2/the-string-constant-pool-stringbuilders",
-      "renderedAt": "2026-11-25T08:47:17.586Z"
+      "renderedAt": "2026-11-25T08:47:17.586Z",
+      "youtubeId": "S2I_PXy6d6k",
+      "youtubeUrl": "https://www.youtube.com/shorts/S2I_PXy6d6k",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-14T11:00:00.000Z"
     },
     {
       "chapterId": "level-2/the-string-constant-pool-stringbuilders",
@@ -1746,7 +2133,11 @@
       "releaseTag": "videos-level-2",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-2/the-string-constant-pool-stringbuilders",
       "branchName": "topic/level-2/the-string-constant-pool-stringbuilders",
-      "renderedAt": "2026-11-25T08:48:53.172Z"
+      "renderedAt": "2026-11-25T08:48:53.172Z",
+      "youtubeId": "ovLLvICnzbk",
+      "youtubeUrl": "https://www.youtube.com/shorts/ovLLvICnzbk",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-14T11:00:00.000Z"
     },
     {
       "chapterId": "level-3/garbage-collection-basics",
@@ -1854,7 +2245,11 @@
       "releaseTag": "videos-level-3",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-3/generics",
       "branchName": "topic/level-3/generics",
-      "renderedAt": "2026-11-24T21:15:35.235Z"
+      "renderedAt": "2026-11-24T21:15:35.235Z",
+      "youtubeId": "Mqd5WSfgDFA",
+      "youtubeUrl": "https://www.youtube.com/shorts/Mqd5WSfgDFA",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-19T11:00:00.000Z"
     },
     {
       "chapterId": "level-3/generics",
@@ -1872,7 +2267,11 @@
       "releaseTag": "videos-level-3",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-3/generics",
       "branchName": "topic/level-3/generics",
-      "renderedAt": "2026-11-24T21:16:46.125Z"
+      "renderedAt": "2026-11-24T21:16:46.125Z",
+      "youtubeId": "mpchy0dr4e4",
+      "youtubeUrl": "https://www.youtube.com/shorts/mpchy0dr4e4",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-19T11:00:00.000Z"
     },
     {
       "chapterId": "level-3/generics",
@@ -1890,7 +2289,11 @@
       "releaseTag": "videos-level-3",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-3/generics",
       "branchName": "topic/level-3/generics",
-      "renderedAt": "2026-11-24T21:17:54.505Z"
+      "renderedAt": "2026-11-24T21:17:54.505Z",
+      "youtubeId": "XT9fsmhr9p4",
+      "youtubeUrl": "https://www.youtube.com/shorts/XT9fsmhr9p4",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-19T11:00:00.000Z"
     },
     {
       "chapterId": "level-3/generics",
@@ -1908,7 +2311,11 @@
       "releaseTag": "videos-level-3",
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-3/generics",
       "branchName": "topic/level-3/generics",
-      "renderedAt": "2026-11-24T21:19:04.432Z"
+      "renderedAt": "2026-11-24T21:19:04.432Z",
+      "youtubeId": "oK-ZyuEx4wM",
+      "youtubeUrl": "https://www.youtube.com/shorts/oK-ZyuEx4wM",
+      "youtubeStatus": "unlisted",
+      "scheduledPublishAt": "2026-12-19T11:00:00.000Z"
     },
     {
       "chapterId": "level-3/generics",

@@ -1,31 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { PlayCircle, ExternalLink, Film, Clock } from "lucide-react";
+import { PlayCircle, ExternalLink, Film, Clock, AlertCircle } from "lucide-react";
+import {
+  resolveChapterVideoSource,
+  type ChapterVideoItem,
+} from "@/lib/chapter-videos";
 
-export interface ChapterVideoItem {
-  chapterId: string;
-  level: string;
-  slug: string;
-  chapterTitle: string;
-  partNumber: number;
-  totalParts: number;
-  partSlug: string;
-  partTitle: string;
-  format: string;
-  durationSec: number;
-  file: string;
-  videoUrl?: string;
-  releaseTag?: string;
-  roadmapUrl: string;
-  branchName: string;
-  renderedAt: string;
-}
-
-const RAW_BASE =
-  "https://raw.githubusercontent.com/ravishankar2463/java_hub_resources/main/videos";
-const BLOB_BASE =
-  "https://github.com/ravishankar2463/java_hub_resources/blob/main/videos";
+export type { ChapterVideoItem };
 
 function formatDuration(sec: number): string {
   const rounded = Math.round(sec);
@@ -36,12 +18,13 @@ function formatDuration(sec: number): string {
 
 export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
   if (videos.length === 0) return null;
 
   const active = videos[selectedIndex] ?? videos[0];
-  const rawUrl = active.videoUrl || `${RAW_BASE}/${active.file}`;
-  const githubUrl = active.videoUrl || `${BLOB_BASE}/${active.file}`;
+  const source = resolveChapterVideoSource(active);
+  const hasPlaybackError = source.kind === "mp4" && failedSrc === source.mp4Url;
 
   return (
     <section
@@ -55,7 +38,8 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 leading-tight">
-              Short Summary Videos ({videos.length} {videos.length === 1 ? "Part" : "Parts"})
+              Short Summary Videos ({videos.length}{" "}
+              {videos.length === 1 ? "Part" : "Parts"})
             </h2>
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
               Watch bite-sized 9:16 visual breakdowns before diving into the full guide.
@@ -64,30 +48,63 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
         </div>
 
         <a
-          href={githubUrl}
+          href={source.externalUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--color-card)] hover:bg-emerald-500/10 text-slate-700 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-300 text-xs font-medium border border-[var(--color-border)] transition-colors"
         >
-          <span>Open MP4 on GitHub</span>
+          <span>{source.externalLabel}</span>
           <ExternalLink className="w-3.5 h-3.5" />
         </a>
       </div>
 
       <div className="flex flex-col md:flex-row gap-6 items-center md:items-start">
         {/* Vertical 9:16 Video Player */}
-        <div className="w-full max-w-[270px] shrink-0 rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-md aspect-[9/16]">
-          <video
-            key={rawUrl}
-            src={rawUrl}
-            controls
-            playsInline
-            preload="metadata"
-            className="w-full h-full object-cover"
-          >
-            Your browser does not support embedded MP4 playback.{" "}
-            <a href={rawUrl}>Download the video</a>.
-          </video>
+        <div className="w-full max-w-[270px] shrink-0 rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-md aspect-[9/16] relative">
+          {source.kind === "youtube" && source.embedUrl ? (
+            <iframe
+              key={source.embedUrl}
+              src={source.embedUrl}
+              title={`${active.chapterTitle} — Part ${active.partNumber}: ${active.partTitle}`}
+              className="w-full h-full border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+              loading="lazy"
+            />
+          ) : hasPlaybackError ? (
+            <div className="w-full h-full flex flex-col items-center justify-center p-5 text-center gap-3 bg-slate-950 text-slate-200">
+              <AlertCircle className="w-8 h-8 text-amber-400" />
+              <div className="text-xs font-semibold text-slate-100">
+                Inline playback unavailable on this browser
+              </div>
+              <p className="text-[11px] leading-relaxed text-slate-400">
+                This video is queued for YouTube Shorts. On iOS Safari, open the MP4 directly to watch it now.
+              </p>
+              <a
+                href={source.externalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
+              >
+                <span>Open MP4</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          ) : (
+            <video
+              key={source.mp4Url}
+              controls
+              playsInline
+              preload="metadata"
+              onError={() => setFailedSrc(source.mp4Url)}
+              className="w-full h-full object-cover"
+            >
+              <source src={source.mp4Url} type="video/mp4" />
+              Your browser does not support embedded MP4 playback.{" "}
+              <a href={source.mp4Url}>Download the video</a>.
+            </video>
+          )}
         </div>
 
         {/* Part Selector List */}
@@ -98,7 +115,10 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
               <button
                 key={vid.partSlug}
                 type="button"
-                onClick={() => setSelectedIndex(idx)}
+                onClick={() => {
+                  setSelectedIndex(idx);
+                  setFailedSrc(null);
+                }}
                 className={`w-full text-left p-3.5 rounded-xl border transition-all cursor-pointer flex items-start justify-between gap-3 ${
                   isSelected
                     ? "bg-emerald-500/15 border-emerald-500/50 shadow-xs"
