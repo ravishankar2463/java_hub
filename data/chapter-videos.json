@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T01:09:06.124Z",
-  "totalVideos": 170,
+  "updatedAt": "2026-11-25T01:16:58.873Z",
+  "totalVideos": 174,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -3061,6 +3061,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/real-time-messaging-websockets-sse",
       "branchName": "topic/level-9/real-time-messaging-websockets-sse",
       "renderedAt": "2026-11-25T01:09:06.122Z"
+    },
+    {
+      "chapterId": "level-9/stateless-authentication-jwt",
+      "level": "level-9",
+      "slug": "stateless-authentication-jwt",
+      "chapterTitle": "Stateless Authentication (JWT)",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-jwt-anatomy-and-traps",
+      "partTitle": "JWT Anatomy and Critical Security Traps",
+      "format": "shorts",
+      "durationSec": 56.8,
+      "file": "level-9/stateless-authentication-jwt/part-1-jwt-anatomy-and-traps.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__stateless-authentication-jwt__part-1-jwt-anatomy-and-traps.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/stateless-authentication-jwt",
+      "branchName": "topic/level-9/stateless-authentication-jwt",
+      "renderedAt": "2026-11-25T01:12:38.644Z"
+    },
+    {
+      "chapterId": "level-9/stateless-authentication-jwt",
+      "level": "level-9",
+      "slug": "stateless-authentication-jwt",
+      "chapterTitle": "Stateless Authentication (JWT)",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-spring-security-filter",
+      "partTitle": "Building the Authentication Filter",
+      "format": "shorts",
+      "durationSec": 55.5,
+      "file": "level-9/stateless-authentication-jwt/part-2-spring-security-filter.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__stateless-authentication-jwt__part-2-spring-security-filter.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/stateless-authentication-jwt",
+      "branchName": "topic/level-9/stateless-authentication-jwt",
+      "renderedAt": "2026-11-25T01:14:11.361Z"
+    },
+    {
+      "chapterId": "level-9/stateless-authentication-jwt",
+      "level": "level-9",
+      "slug": "stateless-authentication-jwt",
+      "chapterTitle": "Stateless Authentication (JWT)",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-refresh-token-rotation",
+      "partTitle": "Refresh Token Rotation & Reuse Detection",
+      "format": "shorts",
+      "durationSec": 53.6,
+      "file": "level-9/stateless-authentication-jwt/part-3-refresh-token-rotation.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__stateless-authentication-jwt__part-3-refresh-token-rotation.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/stateless-authentication-jwt",
+      "branchName": "topic/level-9/stateless-authentication-jwt",
+      "renderedAt": "2026-11-25T01:15:35.633Z"
+    },
+    {
+      "chapterId": "level-9/stateless-authentication-jwt",
+      "level": "level-9",
+      "slug": "stateless-authentication-jwt",
+      "chapterTitle": "Stateless Authentication (JWT)",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-pitfalls-and-interview",
+      "partTitle": "Production Pitfalls & Interview Prep",
+      "format": "shorts",
+      "durationSec": 51.7,
+      "file": "level-9/stateless-authentication-jwt/part-4-pitfalls-and-interview.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__stateless-authentication-jwt__part-4-pitfalls-and-interview.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/stateless-authentication-jwt",
+      "branchName": "topic/level-9/stateless-authentication-jwt",
+      "renderedAt": "2026-11-25T01:16:58.872Z"
     }
   ]
 }

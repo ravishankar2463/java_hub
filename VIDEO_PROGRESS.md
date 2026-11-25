@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 41 / 116 (35.3%)
-- **Total Shorts Rendered:** 170
+- **Chapters Completed:** 42 / 116 (36.2%)
+- **Total Shorts Rendered:** 174
 - **Last Updated:** 2026-11-25
 
 ---
@@ -108,10 +108,10 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Spring Events, Caching, & Scheduling** (level-8/spring-events-caching-scheduling) — 4 Shorts: [Part 1 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-1-spring-events.mp4) · [Part 2 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-2-transactional-events.mp4) · [Part 3 (42s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-3-caching.mp4) · [Part 4 (39s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-4-scheduling.mp4)
 - [x] **Automated Testing** (level-8/automated-testing) — 4 Shorts: [Part 1 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-1-testing-trophy.mp4) · [Part 2 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-2-mocking-and-slices.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-3-testcontainers.mp4) · [Part 4 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-4-transactional-traps.mp4)
 
-## Level 9: Enterprise Security & Advanced API Protocols (4/7)
+## Level 9: Enterprise Security & Advanced API Protocols (5/7)
 
 - [ ] **Spring Security Architecture** (level-9/spring-security-architecture)
-- [ ] **Stateless Authentication (JWT)** (level-9/stateless-authentication-jwt)
+- [x] **Stateless Authentication (JWT)** (level-9/stateless-authentication-jwt) — 4 Shorts: [Part 1 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__stateless-authentication-jwt__part-1-jwt-anatomy-and-traps.mp4) · [Part 2 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__stateless-authentication-jwt__part-2-spring-security-filter.mp4) · [Part 3 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__stateless-authentication-jwt__part-3-refresh-token-rotation.mp4) · [Part 4 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__stateless-authentication-jwt__part-4-pitfalls-and-interview.mp4)
 - [x] **OAuth2 and OIDC Resource Servers** (level-9/oauth2-and-oidc-resource-servers) — 4 Shorts: [Part 1 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__oauth2-and-oidc-resource-servers__part-1-resource-server-fundamentals.mp4) · [Part 2 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__oauth2-and-oidc-resource-servers__part-2-jwt-validation-jwks.mp4) · [Part 3 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__oauth2-and-oidc-resource-servers__part-3-opaque-tokens.mp4) · [Part 4 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__oauth2-and-oidc-resource-servers__part-4-claims-and-multitenancy.mp4)
 - [ ] **Centralized Identity with Keycloak** (level-9/centralized-identity-with-keycloak)
 - [x] **GraphQL with Netflix DGS** (level-9/graphql-with-netflix-dgs) — 4 Shorts: [Part 1 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__graphql-with-netflix-dgs__part-1-schema-first.mp4) · [Part 2 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__graphql-with-netflix-dgs__part-2-resolvers.mp4) · [Part 3 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__graphql-with-netflix-dgs__part-3-dataloader.mp4) · [Part 4 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__graphql-with-netflix-dgs__part-4-federation-security.mp4)
