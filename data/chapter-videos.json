@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T01:59:12.233Z",
-  "totalVideos": 186,
+  "updatedAt": "2026-11-25T02:06:37.516Z",
+  "totalVideos": 190,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -3349,6 +3349,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/transactional-outbox-and-inbox-patterns",
       "branchName": "topic/level-10/transactional-outbox-and-inbox-patterns",
       "renderedAt": "2026-11-25T01:59:12.232Z"
+    },
+    {
+      "chapterId": "level-11/api-gateways-and-service-discovery",
+      "level": "level-11",
+      "slug": "api-gateways-and-service-discovery",
+      "chapterTitle": "API Gateways and Service Discovery",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-gateway-anatomy",
+      "partTitle": "API Gateway: The Edge Protector",
+      "format": "shorts",
+      "durationSec": 56.3,
+      "file": "level-11/api-gateways-and-service-discovery/part-1-gateway-anatomy.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__api-gateways-and-service-discovery__part-1-gateway-anatomy.mp4",
+      "releaseTag": "videos-level-11",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-11/api-gateways-and-service-discovery",
+      "branchName": "topic/level-11/api-gateways-and-service-discovery",
+      "renderedAt": "2026-11-25T02:02:21.127Z"
+    },
+    {
+      "chapterId": "level-11/api-gateways-and-service-discovery",
+      "level": "level-11",
+      "slug": "api-gateways-and-service-discovery",
+      "chapterTitle": "API Gateways and Service Discovery",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-rate-limiting",
+      "partTitle": "Distributed Rate Limiting",
+      "format": "shorts",
+      "durationSec": 52.7,
+      "file": "level-11/api-gateways-and-service-discovery/part-2-rate-limiting.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__api-gateways-and-service-discovery__part-2-rate-limiting.mp4",
+      "releaseTag": "videos-level-11",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-11/api-gateways-and-service-discovery",
+      "branchName": "topic/level-11/api-gateways-and-service-discovery",
+      "renderedAt": "2026-11-25T02:03:47.204Z"
+    },
+    {
+      "chapterId": "level-11/api-gateways-and-service-discovery",
+      "level": "level-11",
+      "slug": "api-gateways-and-service-discovery",
+      "chapterTitle": "API Gateways and Service Discovery",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-discovery-models",
+      "partTitle": "Client vs. Server Discovery",
+      "format": "shorts",
+      "durationSec": 57.3,
+      "file": "level-11/api-gateways-and-service-discovery/part-3-discovery-models.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__api-gateways-and-service-discovery__part-3-discovery-models.mp4",
+      "releaseTag": "videos-level-11",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-11/api-gateways-and-service-discovery",
+      "branchName": "topic/level-11/api-gateways-and-service-discovery",
+      "renderedAt": "2026-11-25T02:05:18.012Z"
+    },
+    {
+      "chapterId": "level-11/api-gateways-and-service-discovery",
+      "level": "level-11",
+      "slug": "api-gateways-and-service-discovery",
+      "chapterTitle": "API Gateways and Service Discovery",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-tracing-and-pitfalls",
+      "partTitle": "Tracing and Production Pitfalls",
+      "format": "shorts",
+      "durationSec": 49,
+      "file": "level-11/api-gateways-and-service-discovery/part-4-tracing-and-pitfalls.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__api-gateways-and-service-discovery__part-4-tracing-and-pitfalls.mp4",
+      "releaseTag": "videos-level-11",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-11/api-gateways-and-service-discovery",
+      "branchName": "topic/level-11/api-gateways-and-service-discovery",
+      "renderedAt": "2026-11-25T02:06:37.514Z"
     }
   ]
 }
