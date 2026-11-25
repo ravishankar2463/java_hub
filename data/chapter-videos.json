@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T08:06:39.579Z",
-  "totalVideos": 368,
+  "updatedAt": "2026-11-25T08:13:01.765Z",
+  "totalVideos": 372,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -6625,6 +6625,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
       "branchName": "topic/level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
       "renderedAt": "2026-11-25T04:03:12.739Z"
+    },
+    {
+      "chapterId": "level-15/zero-allocation-java-and-garbage-free-patterns",
+      "level": "level-15",
+      "slug": "zero-allocation-java-and-garbage-free-patterns",
+      "chapterTitle": "Zero-Allocation Java and Garbage-Free Patterns",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-the-cost-of-allocation",
+      "partTitle": "Why Heap Allocations Kill p99 Latency",
+      "format": "shorts",
+      "durationSec": 50.3,
+      "file": "level-15/zero-allocation-java-and-garbage-free-patterns/part-1-the-cost-of-allocation.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__zero-allocation-java-and-garbage-free-patterns__part-1-the-cost-of-allocation.mp4",
+      "releaseTag": "videos-level-15",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/zero-allocation-java-and-garbage-free-patterns",
+      "branchName": "topic/level-15/zero-allocation-java-and-garbage-free-patterns",
+      "renderedAt": "2026-11-25T08:09:23.524Z"
+    },
+    {
+      "chapterId": "level-15/zero-allocation-java-and-garbage-free-patterns",
+      "level": "level-15",
+      "slug": "zero-allocation-java-and-garbage-free-patterns",
+      "chapterTitle": "Zero-Allocation Java and Garbage-Free Patterns",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-flyweights-and-primitives",
+      "partTitle": "Flyweights and Primitive Collections",
+      "format": "shorts",
+      "durationSec": 45.5,
+      "file": "level-15/zero-allocation-java-and-garbage-free-patterns/part-2-flyweights-and-primitives.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__zero-allocation-java-and-garbage-free-patterns__part-2-flyweights-and-primitives.mp4",
+      "releaseTag": "videos-level-15",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/zero-allocation-java-and-garbage-free-patterns",
+      "branchName": "topic/level-15/zero-allocation-java-and-garbage-free-patterns",
+      "renderedAt": "2026-11-25T08:10:39.481Z"
+    },
+    {
+      "chapterId": "level-15/zero-allocation-java-and-garbage-free-patterns",
+      "level": "level-15",
+      "slug": "zero-allocation-java-and-garbage-free-patterns",
+      "chapterTitle": "Zero-Allocation Java and Garbage-Free Patterns",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-cpu-affinity",
+      "partTitle": "CPU Affinity and Kernel Isolation",
+      "format": "shorts",
+      "durationSec": 41.4,
+      "file": "level-15/zero-allocation-java-and-garbage-free-patterns/part-3-cpu-affinity.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__zero-allocation-java-and-garbage-free-patterns__part-3-cpu-affinity.mp4",
+      "releaseTag": "videos-level-15",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/zero-allocation-java-and-garbage-free-patterns",
+      "branchName": "topic/level-15/zero-allocation-java-and-garbage-free-patterns",
+      "renderedAt": "2026-11-25T08:11:49.338Z"
+    },
+    {
+      "chapterId": "level-15/zero-allocation-java-and-garbage-free-patterns",
+      "level": "level-15",
+      "slug": "zero-allocation-java-and-garbage-free-patterns",
+      "chapterTitle": "Zero-Allocation Java and Garbage-Free Patterns",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-garbage-free-logging",
+      "partTitle": "Garbage-Free Logging",
+      "format": "shorts",
+      "durationSec": 44.4,
+      "file": "level-15/zero-allocation-java-and-garbage-free-patterns/part-4-garbage-free-logging.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__zero-allocation-java-and-garbage-free-patterns__part-4-garbage-free-logging.mp4",
+      "releaseTag": "videos-level-15",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/zero-allocation-java-and-garbage-free-patterns",
+      "branchName": "topic/level-15/zero-allocation-java-and-garbage-free-patterns",
+      "renderedAt": "2026-11-25T08:13:01.762Z"
     }
   ]
 }
