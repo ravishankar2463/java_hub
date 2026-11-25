@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 49 / 116 (42.2%)
-- **Total Shorts Rendered:** 203
+- **Chapters Completed:** 50 / 116 (43.1%)
+- **Total Shorts Rendered:** 207
 - **Last Updated:** 2026-11-25
 
 ---
@@ -141,10 +141,10 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **Distributed Rate Limiting and Throttling** (level-11/distributed-rate-limiting-and-throttling)
 - [x] **Contract Testing with Pact** (level-11/contract-testing-with-pact) — 4 Shorts: [Part 1 (55s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-1-the-contract-gap.mp4) · [Part 2 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-2-provider-verification.mp4) · [Part 3 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-3-async-contracts.mp4) · [Part 4 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-4-ci-cd-gating.mp4)
 
-## Level 12: Cloud-Native, Kubernetes & DevOps (1/6)
+## Level 12: Cloud-Native, Kubernetes & DevOps (2/6)
 
 - [ ] **Docker and Containerization** (level-12/docker-and-containerization)
-- [ ] **Google Jib: Daemonless Containers** (level-12/google-jib-daemonless-containers)
+- [x] **Google Jib: Daemonless Containers** (level-12/google-jib-daemonless-containers) — 4 Shorts: [Part 1 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__google-jib-daemonless-containers__part-1-the-dind-problem.mp4) · [Part 2 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__google-jib-daemonless-containers__part-2-layer-caching.mp4) · [Part 3 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__google-jib-daemonless-containers__part-3-multi-arch.mp4) · [Part 4 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__google-jib-daemonless-containers__part-4-jib-vs-alternatives.mp4)
 - [ ] **Kubernetes (K8s) for Java Devs** (level-12/kubernetes-k8s-for-java-devs)
 - [ ] **Helm Package Management in K8s** (level-12/helm-package-management-in-k8s)
 - [x] **Cloud Native & Serverless Java** (level-12/cloud-native-serverless-java) — 4 Shorts: [Part 1 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-1-aot-vs-jit.mp4) · [Part 2 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-2-framework-strategies.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-3-serverless-cold-starts.mp4) · [Part 4 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-4-container-optimization.mp4)
