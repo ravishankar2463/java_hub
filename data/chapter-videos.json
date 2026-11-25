@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T00:15:53.575Z",
-  "totalVideos": 146,
+  "updatedAt": "2026-11-25T00:22:45.199Z",
+  "totalVideos": 150,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -2629,6 +2629,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/building-restful-apis",
       "branchName": "topic/level-8/building-restful-apis",
       "renderedAt": "2026-11-25T00:15:53.574Z"
+    },
+    {
+      "chapterId": "level-8/custom-spring-boot-starters-auto-configurations",
+      "level": "level-8",
+      "slug": "custom-spring-boot-starters-auto-configurations",
+      "chapterTitle": "Custom Spring Boot Starters & Auto-Configurations",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-starter-anatomy",
+      "partTitle": "The 2-Module Starter Architecture",
+      "format": "shorts",
+      "durationSec": 52.6,
+      "file": "level-8/custom-spring-boot-starters-auto-configurations/part-1-starter-anatomy.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__custom-spring-boot-starters-auto-configurations__part-1-starter-anatomy.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/custom-spring-boot-starters-auto-configurations",
+      "branchName": "topic/level-8/custom-spring-boot-starters-auto-configurations",
+      "renderedAt": "2026-11-25T00:18:46.803Z"
+    },
+    {
+      "chapterId": "level-8/custom-spring-boot-starters-auto-configurations",
+      "level": "level-8",
+      "slug": "custom-spring-boot-starters-auto-configurations",
+      "chapterTitle": "Custom Spring Boot Starters & Auto-Configurations",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-conditional-logic",
+      "partTitle": "Bulletproof Starters with @Conditional",
+      "format": "shorts",
+      "durationSec": 49,
+      "file": "level-8/custom-spring-boot-starters-auto-configurations/part-2-conditional-logic.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__custom-spring-boot-starters-auto-configurations__part-2-conditional-logic.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/custom-spring-boot-starters-auto-configurations",
+      "branchName": "topic/level-8/custom-spring-boot-starters-auto-configurations",
+      "renderedAt": "2026-11-25T00:20:08.488Z"
+    },
+    {
+      "chapterId": "level-8/custom-spring-boot-starters-auto-configurations",
+      "level": "level-8",
+      "slug": "custom-spring-boot-starters-auto-configurations",
+      "chapterTitle": "Custom Spring Boot Starters & Auto-Configurations",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-type-safe-config",
+      "partTitle": "Validated Configuration with Records",
+      "format": "shorts",
+      "durationSec": 47.4,
+      "file": "level-8/custom-spring-boot-starters-auto-configurations/part-3-type-safe-config.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__custom-spring-boot-starters-auto-configurations__part-3-type-safe-config.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/custom-spring-boot-starters-auto-configurations",
+      "branchName": "topic/level-8/custom-spring-boot-starters-auto-configurations",
+      "renderedAt": "2026-11-25T00:21:27.173Z"
+    },
+    {
+      "chapterId": "level-8/custom-spring-boot-starters-auto-configurations",
+      "level": "level-8",
+      "slug": "custom-spring-boot-starters-auto-configurations",
+      "chapterTitle": "Custom Spring Boot Starters & Auto-Configurations",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-testing-starters",
+      "partTitle": "Testing Starters with ContextRunner",
+      "format": "shorts",
+      "durationSec": 47,
+      "file": "level-8/custom-spring-boot-starters-auto-configurations/part-4-testing-starters.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__custom-spring-boot-starters-auto-configurations__part-4-testing-starters.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/custom-spring-boot-starters-auto-configurations",
+      "branchName": "topic/level-8/custom-spring-boot-starters-auto-configurations",
+      "renderedAt": "2026-11-25T00:22:45.198Z"
     }
   ]
 }
