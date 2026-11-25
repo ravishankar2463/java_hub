@@ -87,6 +87,9 @@ export function getYouTubeEmbedUrl(
   options?: { autoplay?: boolean; mute?: boolean; enableJsApi?: boolean; loop?: boolean }
 ): string {
   const params = new URLSearchParams({
+    controls: "0",
+    fs: "0",
+    disablekb: "1",
     rel: "0",
     modestbranding: "1",
     playsinline: "1",
