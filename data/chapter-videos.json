@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T02:58:28.769Z",
-  "totalVideos": 211,
+  "updatedAt": "2026-11-25T03:08:51.095Z",
+  "totalVideos": 215,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -3799,6 +3799,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-12/kubernetes-k8s-for-java-devs",
       "branchName": "topic/level-12/kubernetes-k8s-for-java-devs",
       "renderedAt": "2026-11-25T02:58:28.767Z"
+    },
+    {
+      "chapterId": "level-13/jvm-profiling-with-jfr-and-async-profiler",
+      "level": "level-13",
+      "slug": "jvm-profiling-with-jfr-and-async-profiler",
+      "chapterTitle": "JVM Profiling with JFR and Async-Profiler",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-safepoint-bias",
+      "partTitle": "Why Legacy Profilers Lie",
+      "format": "shorts",
+      "durationSec": 57.7,
+      "file": "level-13/jvm-profiling-with-jfr-and-async-profiler/part-1-safepoint-bias.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__jvm-profiling-with-jfr-and-async-profiler__part-1-safepoint-bias.mp4",
+      "releaseTag": "videos-level-13",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-13/jvm-profiling-with-jfr-and-async-profiler",
+      "branchName": "topic/level-13/jvm-profiling-with-jfr-and-async-profiler",
+      "renderedAt": "2026-11-25T03:04:15.087Z"
+    },
+    {
+      "chapterId": "level-13/jvm-profiling-with-jfr-and-async-profiler",
+      "level": "level-13",
+      "slug": "jvm-profiling-with-jfr-and-async-profiler",
+      "chapterTitle": "JVM Profiling with JFR and Async-Profiler",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-wall-clock-and-alloc",
+      "partTitle": "Beyond CPU: Memory & Latency",
+      "format": "shorts",
+      "durationSec": 57.9,
+      "file": "level-13/jvm-profiling-with-jfr-and-async-profiler/part-2-wall-clock-and-alloc.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__jvm-profiling-with-jfr-and-async-profiler__part-2-wall-clock-and-alloc.mp4",
+      "releaseTag": "videos-level-13",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-13/jvm-profiling-with-jfr-and-async-profiler",
+      "branchName": "topic/level-13/jvm-profiling-with-jfr-and-async-profiler",
+      "renderedAt": "2026-11-25T03:05:48.910Z"
+    },
+    {
+      "chapterId": "level-13/jvm-profiling-with-jfr-and-async-profiler",
+      "level": "level-13",
+      "slug": "jvm-profiling-with-jfr-and-async-profiler",
+      "chapterTitle": "JVM Profiling with JFR and Async-Profiler",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-jfr-and-jmc",
+      "partTitle": "JFR: The JVM Flight Data Recorder",
+      "format": "shorts",
+      "durationSec": 56.6,
+      "file": "level-13/jvm-profiling-with-jfr-and-async-profiler/part-3-jfr-and-jmc.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__jvm-profiling-with-jfr-and-async-profiler__part-3-jfr-and-jmc.mp4",
+      "releaseTag": "videos-level-13",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-13/jvm-profiling-with-jfr-and-async-profiler",
+      "branchName": "topic/level-13/jvm-profiling-with-jfr-and-async-profiler",
+      "renderedAt": "2026-11-25T03:07:22.446Z"
+    },
+    {
+      "chapterId": "level-13/jvm-profiling-with-jfr-and-async-profiler",
+      "level": "level-13",
+      "slug": "jvm-profiling-with-jfr-and-async-profiler",
+      "chapterTitle": "JVM Profiling with JFR and Async-Profiler",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-continuous-profiling",
+      "partTitle": "Continuous Profiling Strategy",
+      "format": "shorts",
+      "durationSec": 54.4,
+      "file": "level-13/jvm-profiling-with-jfr-and-async-profiler/part-4-continuous-profiling.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__jvm-profiling-with-jfr-and-async-profiler__part-4-continuous-profiling.mp4",
+      "releaseTag": "videos-level-13",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-13/jvm-profiling-with-jfr-and-async-profiler",
+      "branchName": "topic/level-13/jvm-profiling-with-jfr-and-async-profiler",
+      "renderedAt": "2026-11-25T03:08:51.093Z"
     }
   ]
 }

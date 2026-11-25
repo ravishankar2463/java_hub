@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 51 / 116 (44.0%)
-- **Total Shorts Rendered:** 211
+- **Chapters Completed:** 52 / 116 (44.8%)
+- **Total Shorts Rendered:** 215
 - **Last Updated:** 2026-11-25
 
 ---
@@ -150,10 +150,10 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Cloud Native & Serverless Java** (level-12/cloud-native-serverless-java) — 4 Shorts: [Part 1 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-1-aot-vs-jit.mp4) · [Part 2 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-2-framework-strategies.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-3-serverless-cold-starts.mp4) · [Part 4 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-4-container-optimization.mp4)
 - [ ] **CI/CD and Infrastructure as Code** (level-12/cicd-and-infrastructure-as-code)
 
-## Level 13: High-Scale System Design, Profiling & SRE Observability (0/6)
+## Level 13: High-Scale System Design, Profiling & SRE Observability (1/6)
 
 - [ ] **System Design: Scalability Patterns** (level-13/system-design-scalability-patterns)
-- [ ] **JVM Profiling with JFR and Async-Profiler** (level-13/jvm-profiling-with-jfr-and-async-profiler)
+- [x] **JVM Profiling with JFR and Async-Profiler** (level-13/jvm-profiling-with-jfr-and-async-profiler) — 4 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__jvm-profiling-with-jfr-and-async-profiler__part-1-safepoint-bias.mp4) · [Part 2 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__jvm-profiling-with-jfr-and-async-profiler__part-2-wall-clock-and-alloc.mp4) · [Part 3 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__jvm-profiling-with-jfr-and-async-profiler__part-3-jfr-and-jmc.mp4) · [Part 4 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__jvm-profiling-with-jfr-and-async-profiler__part-4-continuous-profiling.mp4)
 - [ ] **Advanced JVM Tuning & Profiling** (level-13/advanced-jvm-tuning-profiling)
 - [ ] **System Design: Observability** (level-13/system-design-observability)
 - [ ] **Production Metrics with Micrometer and Prometheus** (level-13/production-metrics-with-micrometer-and-prometheus)
