@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T02:25:00.523Z",
-  "totalVideos": 199,
+  "updatedAt": "2026-11-25T02:43:58.319Z",
+  "totalVideos": 203,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -3583,6 +3583,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-11/distributed-transactions",
       "branchName": "topic/level-11/distributed-transactions",
       "renderedAt": "2026-11-25T02:25:00.522Z"
+    },
+    {
+      "chapterId": "level-12/cloud-native-serverless-java",
+      "level": "level-12",
+      "slug": "cloud-native-serverless-java",
+      "chapterTitle": "Cloud Native & Serverless Java",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-aot-vs-jit",
+      "partTitle": "GraalVM AOT vs HotSpot JIT",
+      "format": "shorts",
+      "durationSec": 50.3,
+      "file": "level-12/cloud-native-serverless-java/part-1-aot-vs-jit.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-1-aot-vs-jit.mp4",
+      "releaseTag": "videos-level-12",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-12/cloud-native-serverless-java",
+      "branchName": "topic/level-12/cloud-native-serverless-java",
+      "renderedAt": "2026-11-25T02:40:13.871Z"
+    },
+    {
+      "chapterId": "level-12/cloud-native-serverless-java",
+      "level": "level-12",
+      "slug": "cloud-native-serverless-java",
+      "chapterTitle": "Cloud Native & Serverless Java",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-framework-strategies",
+      "partTitle": "Spring Boot 3, Quarkus, and Micronaut",
+      "format": "shorts",
+      "durationSec": 45.8,
+      "file": "level-12/cloud-native-serverless-java/part-2-framework-strategies.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-2-framework-strategies.mp4",
+      "releaseTag": "videos-level-12",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-12/cloud-native-serverless-java",
+      "branchName": "topic/level-12/cloud-native-serverless-java",
+      "renderedAt": "2026-11-25T02:41:28.563Z"
+    },
+    {
+      "chapterId": "level-12/cloud-native-serverless-java",
+      "level": "level-12",
+      "slug": "cloud-native-serverless-java",
+      "chapterTitle": "Cloud Native & Serverless Java",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-serverless-cold-starts",
+      "partTitle": "SnapStart and CRaC",
+      "format": "shorts",
+      "durationSec": 46.7,
+      "file": "level-12/cloud-native-serverless-java/part-3-serverless-cold-starts.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-3-serverless-cold-starts.mp4",
+      "releaseTag": "videos-level-12",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-12/cloud-native-serverless-java",
+      "branchName": "topic/level-12/cloud-native-serverless-java",
+      "renderedAt": "2026-11-25T02:42:43.709Z"
+    },
+    {
+      "chapterId": "level-12/cloud-native-serverless-java",
+      "level": "level-12",
+      "slug": "cloud-native-serverless-java",
+      "chapterTitle": "Cloud Native & Serverless Java",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-container-optimization",
+      "partTitle": "Jib, Buildpacks, and jlink",
+      "format": "shorts",
+      "durationSec": 45.4,
+      "file": "level-12/cloud-native-serverless-java/part-4-container-optimization.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-4-container-optimization.mp4",
+      "releaseTag": "videos-level-12",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-12/cloud-native-serverless-java",
+      "branchName": "topic/level-12/cloud-native-serverless-java",
+      "renderedAt": "2026-11-25T02:43:58.318Z"
     }
   ]
 }

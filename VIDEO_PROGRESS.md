@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 48 / 116 (41.4%)
-- **Total Shorts Rendered:** 199
+- **Chapters Completed:** 49 / 116 (42.2%)
+- **Total Shorts Rendered:** 203
 - **Last Updated:** 2026-11-25
 
 ---
@@ -141,13 +141,13 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **Distributed Rate Limiting and Throttling** (level-11/distributed-rate-limiting-and-throttling)
 - [x] **Contract Testing with Pact** (level-11/contract-testing-with-pact) — 4 Shorts: [Part 1 (55s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-1-the-contract-gap.mp4) · [Part 2 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-2-provider-verification.mp4) · [Part 3 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-3-async-contracts.mp4) · [Part 4 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-4-ci-cd-gating.mp4)
 
-## Level 12: Cloud-Native, Kubernetes & DevOps (0/6)
+## Level 12: Cloud-Native, Kubernetes & DevOps (1/6)
 
 - [ ] **Docker and Containerization** (level-12/docker-and-containerization)
 - [ ] **Google Jib: Daemonless Containers** (level-12/google-jib-daemonless-containers)
 - [ ] **Kubernetes (K8s) for Java Devs** (level-12/kubernetes-k8s-for-java-devs)
 - [ ] **Helm Package Management in K8s** (level-12/helm-package-management-in-k8s)
-- [ ] **Cloud Native & Serverless Java** (level-12/cloud-native-serverless-java)
+- [x] **Cloud Native & Serverless Java** (level-12/cloud-native-serverless-java) — 4 Shorts: [Part 1 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-1-aot-vs-jit.mp4) · [Part 2 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-2-framework-strategies.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-3-serverless-cold-starts.mp4) · [Part 4 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-4-container-optimization.mp4)
 - [ ] **CI/CD and Infrastructure as Code** (level-12/cicd-and-infrastructure-as-code)
 
 ## Level 13: High-Scale System Design, Profiling & SRE Observability (0/6)
