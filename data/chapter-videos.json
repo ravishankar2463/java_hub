@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T01:01:58.293Z",
-  "totalVideos": 166,
+  "updatedAt": "2026-11-25T01:09:06.124Z",
+  "totalVideos": 170,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -2989,6 +2989,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/oauth2-and-oidc-resource-servers",
       "branchName": "topic/level-9/oauth2-and-oidc-resource-servers",
       "renderedAt": "2026-11-25T01:01:58.292Z"
+    },
+    {
+      "chapterId": "level-9/real-time-messaging-websockets-sse",
+      "level": "level-9",
+      "slug": "real-time-messaging-websockets-sse",
+      "chapterTitle": "Real-Time Messaging: WebSockets & SSE",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-websockets-vs-sse",
+      "partTitle": "Choosing Your Real-Time Protocol",
+      "format": "shorts",
+      "durationSec": 58,
+      "file": "level-9/real-time-messaging-websockets-sse/part-1-websockets-vs-sse.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__real-time-messaging-websockets-sse__part-1-websockets-vs-sse.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/real-time-messaging-websockets-sse",
+      "branchName": "topic/level-9/real-time-messaging-websockets-sse",
+      "renderedAt": "2026-11-25T01:05:04.543Z"
+    },
+    {
+      "chapterId": "level-9/real-time-messaging-websockets-sse",
+      "level": "level-9",
+      "slug": "real-time-messaging-websockets-sse",
+      "chapterTitle": "Real-Time Messaging: WebSockets & SSE",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-stomp-and-scaling",
+      "partTitle": "Scaling WebSockets with STOMP",
+      "format": "shorts",
+      "durationSec": 49.5,
+      "file": "level-9/real-time-messaging-websockets-sse/part-2-stomp-and-scaling.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__real-time-messaging-websockets-sse__part-2-stomp-and-scaling.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/real-time-messaging-websockets-sse",
+      "branchName": "topic/level-9/real-time-messaging-websockets-sse",
+      "renderedAt": "2026-11-25T01:06:23.992Z"
+    },
+    {
+      "chapterId": "level-9/real-time-messaging-websockets-sse",
+      "level": "level-9",
+      "slug": "real-time-messaging-websockets-sse",
+      "chapterTitle": "Real-Time Messaging: WebSockets & SSE",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-security-and-auth",
+      "partTitle": "Securing WebSocket Connections",
+      "format": "shorts",
+      "durationSec": 51,
+      "file": "level-9/real-time-messaging-websockets-sse/part-3-security-and-auth.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__real-time-messaging-websockets-sse__part-3-security-and-auth.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/real-time-messaging-websockets-sse",
+      "branchName": "topic/level-9/real-time-messaging-websockets-sse",
+      "renderedAt": "2026-11-25T01:07:47.786Z"
+    },
+    {
+      "chapterId": "level-9/real-time-messaging-websockets-sse",
+      "level": "level-9",
+      "slug": "real-time-messaging-websockets-sse",
+      "chapterTitle": "Real-Time Messaging: WebSockets & SSE",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-production-pitfalls",
+      "partTitle": "Production Pitfalls & Cleanup",
+      "format": "shorts",
+      "durationSec": 47.2,
+      "file": "level-9/real-time-messaging-websockets-sse/part-4-production-pitfalls.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__real-time-messaging-websockets-sse__part-4-production-pitfalls.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/real-time-messaging-websockets-sse",
+      "branchName": "topic/level-9/real-time-messaging-websockets-sse",
+      "renderedAt": "2026-11-25T01:09:06.122Z"
     }
   ]
 }

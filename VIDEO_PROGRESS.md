@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 40 / 116 (34.5%)
-- **Total Shorts Rendered:** 166
+- **Chapters Completed:** 41 / 116 (35.3%)
+- **Total Shorts Rendered:** 170
 - **Last Updated:** 2026-11-25
 
 ---
@@ -108,7 +108,7 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Spring Events, Caching, & Scheduling** (level-8/spring-events-caching-scheduling) — 4 Shorts: [Part 1 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-1-spring-events.mp4) · [Part 2 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-2-transactional-events.mp4) · [Part 3 (42s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-3-caching.mp4) · [Part 4 (39s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-4-scheduling.mp4)
 - [x] **Automated Testing** (level-8/automated-testing) — 4 Shorts: [Part 1 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-1-testing-trophy.mp4) · [Part 2 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-2-mocking-and-slices.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-3-testcontainers.mp4) · [Part 4 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-4-transactional-traps.mp4)
 
-## Level 9: Enterprise Security & Advanced API Protocols (3/7)
+## Level 9: Enterprise Security & Advanced API Protocols (4/7)
 
 - [ ] **Spring Security Architecture** (level-9/spring-security-architecture)
 - [ ] **Stateless Authentication (JWT)** (level-9/stateless-authentication-jwt)
@@ -116,7 +116,7 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **Centralized Identity with Keycloak** (level-9/centralized-identity-with-keycloak)
 - [x] **GraphQL with Netflix DGS** (level-9/graphql-with-netflix-dgs) — 4 Shorts: [Part 1 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__graphql-with-netflix-dgs__part-1-schema-first.mp4) · [Part 2 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__graphql-with-netflix-dgs__part-2-resolvers.mp4) · [Part 3 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__graphql-with-netflix-dgs__part-3-dataloader.mp4) · [Part 4 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__graphql-with-netflix-dgs__part-4-federation-security.mp4)
 - [x] **High-Performance gRPC in Java** (level-9/high-performance-grpc-in-java) — 4 Shorts: [Part 1 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__high-performance-grpc-in-java__part-1-protobuf-efficiency.mp4) · [Part 2 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__high-performance-grpc-in-java__part-2-http2-multiplexing.mp4) · [Part 3 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__high-performance-grpc-in-java__part-3-streaming-modes.mp4) · [Part 4 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__high-performance-grpc-in-java__part-4-interceptors-deadlines.mp4)
-- [ ] **Real-Time Messaging: WebSockets & SSE** (level-9/real-time-messaging-websockets-sse)
+- [x] **Real-Time Messaging: WebSockets & SSE** (level-9/real-time-messaging-websockets-sse) — 4 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__real-time-messaging-websockets-sse__part-1-websockets-vs-sse.mp4) · [Part 2 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__real-time-messaging-websockets-sse__part-2-stomp-and-scaling.mp4) · [Part 3 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__real-time-messaging-websockets-sse__part-3-security-and-auth.mp4) · [Part 4 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__real-time-messaging-websockets-sse__part-4-production-pitfalls.mp4)
 
 ## Level 10: Event-Driven Architecture & Message Streaming (0/9)
 
