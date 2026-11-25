@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 84 / 116 (72.4%)
-- **Total Shorts Rendered:** 352
+- **Chapters Completed:** 85 / 116 (73.3%)
+- **Total Shorts Rendered:** 356
 - **Last Updated:** 2026-11-25
 
 ---
@@ -150,13 +150,13 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Cloud Native & Serverless Java** (level-12/cloud-native-serverless-java) — 4 Shorts: [Part 1 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-1-aot-vs-jit.mp4) · [Part 2 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-2-framework-strategies.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-3-serverless-cold-starts.mp4) · [Part 4 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__cloud-native-serverless-java__part-4-container-optimization.mp4)
 - [ ] **CI/CD and Infrastructure as Code** (level-12/cicd-and-infrastructure-as-code)
 
-## Level 13: High-Scale System Design, Profiling & SRE Observability (3/6)
+## Level 13: High-Scale System Design, Profiling & SRE Observability (4/6)
 
 - [ ] **System Design: Scalability Patterns** (level-13/system-design-scalability-patterns)
 - [x] **JVM Profiling with JFR and Async-Profiler** (level-13/jvm-profiling-with-jfr-and-async-profiler) — 4 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__jvm-profiling-with-jfr-and-async-profiler__part-1-safepoint-bias.mp4) · [Part 2 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__jvm-profiling-with-jfr-and-async-profiler__part-2-wall-clock-and-alloc.mp4) · [Part 3 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__jvm-profiling-with-jfr-and-async-profiler__part-3-jfr-and-jmc.mp4) · [Part 4 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__jvm-profiling-with-jfr-and-async-profiler__part-4-continuous-profiling.mp4)
 - [x] **Advanced JVM Tuning & Profiling** (level-13/advanced-jvm-tuning-profiling) — 4 Shorts: [Part 1 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__advanced-jvm-tuning-profiling__part-1-gc-logs-and-signals.mp4) · [Part 2 (59s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__advanced-jvm-tuning-profiling__part-2-choosing-collectors.mp4) · [Part 3 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__advanced-jvm-tuning-profiling__part-3-memory-leaks.mp4) · [Part 4 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__advanced-jvm-tuning-profiling__part-4-profiling-workflow.mp4)
 - [x] **System Design: Observability** (level-13/system-design-observability) — 4 Shorts: [Part 1 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__system-design-observability__part-1-observability-vs-monitoring.mp4) · [Part 2 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__system-design-observability__part-2-distributed-tracing.mp4) · [Part 3 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__system-design-observability__part-3-sampling-strategies.mp4) · [Part 4 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__system-design-observability__part-4-structured-logging.mp4)
-- [ ] **Production Metrics with Micrometer and Prometheus** (level-13/production-metrics-with-micrometer-and-prometheus)
+- [x] **Production Metrics with Micrometer and Prometheus** (level-13/production-metrics-with-micrometer-and-prometheus) — 4 Shorts: [Part 1 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__production-metrics-with-micrometer-and-prometheus__part-1-micrometer-primitives.mp4) · [Part 2 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__production-metrics-with-micrometer-and-prometheus__part-2-percentiles-and-aggregation.mp4) · [Part 3 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__production-metrics-with-micrometer-and-prometheus__part-3-cardinality-guardrails.mp4) · [Part 4 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__production-metrics-with-micrometer-and-prometheus__part-4-slo-and-error-budgets.mp4)
 - [ ] **Zero-Downtime Deployments: Blue-Green and Canary** (level-13/zero-downtime-deployments-blue-green-and-canary)
 
 ## Level 14: Enterprise Java & AI Orchestration (1/6)
