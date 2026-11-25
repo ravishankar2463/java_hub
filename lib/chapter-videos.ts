@@ -90,6 +90,8 @@ export function getYouTubeEmbedUrl(
     rel: "0",
     modestbranding: "1",
     playsinline: "1",
+    cc_load_policy: "0",
+    iv_load_policy: "3",
   });
   if (options?.autoplay) {
     params.set("autoplay", "1");
