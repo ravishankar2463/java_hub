@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 54 / 116 (46.6%)
-- **Total Shorts Rendered:** 223
+- **Chapters Completed:** 55 / 116 (47.4%)
+- **Total Shorts Rendered:** 228
 - **Last Updated:** 2026-11-25
 
 ---
@@ -168,9 +168,9 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **LLM Tool Calling and Function Execution** (level-14/llm-tool-calling-and-function-execution)
 - [ ] **Multi-Agent Orchestration and Autonomous Systems** (level-14/multi-agent-orchestration-and-autonomous-systems)
 
-## Level 15: Ultra-Low Latency & Mechanical Sympathy (0/5)
+## Level 15: Ultra-Low Latency & Mechanical Sympathy (1/5)
 
-- [ ] **Mechanical Sympathy and CPU Architecture** (level-15/mechanical-sympathy-and-cpu-architecture)
+- [x] **Mechanical Sympathy and CPU Architecture** (level-15/mechanical-sympathy-and-cpu-architecture) — 5 Shorts: [Part 1 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__mechanical-sympathy-and-cpu-architecture__part-1-cache-locality.mp4) · [Part 2 (42s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__mechanical-sympathy-and-cpu-architecture__part-2-false-sharing.mp4) · [Part 3 (40s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__mechanical-sympathy-and-cpu-architecture__part-3-branch-prediction.mp4) · [Part 4 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__mechanical-sympathy-and-cpu-architecture__part-4-memory-barriers.mp4) · [Part 5 (37s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__mechanical-sympathy-and-cpu-architecture__part-5-recap.mp4)
 - [ ] **Project Panama: Foreign Function & Memory API** (level-15/project-panama-foreign-function-memory-api)
 - [ ] **The LMAX Disruptor and Lock-Free Ring Buffers** (level-15/the-lmax-disruptor-and-lock-free-ring-buffers)
 - [ ] **Zero-Allocation Java and Garbage-Free Patterns** (level-15/zero-allocation-java-and-garbage-free-patterns)
