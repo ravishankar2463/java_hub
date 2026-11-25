@@ -79,10 +79,12 @@ export function extractYouTubeId(input?: string | null): string | null {
 
 /**
  * Privacy-enhanced YouTube embed URL with playsinline=1 for smooth iOS Safari playback.
+ * Note: iOS Safari blocks unmuted autoplay in cross-origin iframes, so pass mute: true
+ * alongside autoplay: true for instant playback, then unmute via YouTube IFrame postMessage.
  */
 export function getYouTubeEmbedUrl(
   youtubeId: string,
-  options?: { autoplay?: boolean }
+  options?: { autoplay?: boolean; mute?: boolean; enableJsApi?: boolean; loop?: boolean }
 ): string {
   const params = new URLSearchParams({
     rel: "0",
@@ -91,6 +93,16 @@ export function getYouTubeEmbedUrl(
   });
   if (options?.autoplay) {
     params.set("autoplay", "1");
+  }
+  if (options?.mute) {
+    params.set("mute", "1");
+  }
+  if (options?.enableJsApi) {
+    params.set("enablejsapi", "1");
+  }
+  if (options?.loop) {
+    params.set("loop", "1");
+    params.set("playlist", youtubeId);
   }
   return `https://www.youtube-nocookie.com/embed/${youtubeId}?${params.toString()}`;
 }
