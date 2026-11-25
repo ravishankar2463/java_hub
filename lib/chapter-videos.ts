@@ -80,8 +80,26 @@ export function extractYouTubeId(input?: string | null): string | null {
 /**
  * Privacy-enhanced YouTube embed URL with playsinline=1 for smooth iOS Safari playback.
  */
-export function getYouTubeEmbedUrl(youtubeId: string): string {
-  return `https://www.youtube-nocookie.com/embed/${youtubeId}?rel=0&modestbranding=1&playsinline=1`;
+export function getYouTubeEmbedUrl(
+  youtubeId: string,
+  options?: { autoplay?: boolean }
+): string {
+  const params = new URLSearchParams({
+    rel: "0",
+    modestbranding: "1",
+    playsinline: "1",
+  });
+  if (options?.autoplay) {
+    params.set("autoplay", "1");
+  }
+  return `https://www.youtube-nocookie.com/embed/${youtubeId}?${params.toString()}`;
+}
+
+/**
+ * High-quality YouTube thumbnail URL for the 9:16 preview card.
+ */
+export function getYouTubeThumbnailUrl(youtubeId: string): string {
+  return `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`;
 }
 
 /**
