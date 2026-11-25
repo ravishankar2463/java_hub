@@ -83,8 +83,7 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
 
   const scrollToSlide = useCallback(
     (targetIndex: number) => {
-      if (targetIndex < 0) return;
-      if (targetIndex >= videos.length) {
+      if (targetIndex < 0 || targetIndex >= videos.length) {
         closeFullscreen();
         return;
       }
@@ -93,8 +92,9 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
       setFailedSrc(null);
       const container = feedRef.current;
       if (container) {
+        // +1 offset accounts for the top swipe-down-to-close sentinel slide
         container.scrollTo({
-          top: targetIndex * container.clientHeight,
+          top: (targetIndex + 1) * container.clientHeight,
           behavior: "smooth",
         });
       }
@@ -115,7 +115,7 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
     const container = feedRef.current;
     if (container) {
       container.scrollTo({
-        top: initialIndexRef.current * container.clientHeight,
+        top: (initialIndexRef.current + 1) * container.clientHeight,
         behavior: "instant" as ScrollBehavior,
       });
     }
@@ -148,20 +148,24 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isFullscreen, selectedIndex, closeFullscreen, scrollToSlide, toggleMute]);
 
-  // Detect scroll-snap slide changes (including swiping up past the last part -> close)
+  // Detect scroll-snap slide changes:
+  // scroll index 0 = top sentinel (swipe down on Part 1 -> close)
+  // scroll index 1..videos.length = Part 1..N
+  // scroll index videos.length + 1 = bottom sentinel (swipe up on last part -> close)
   const handleFeedScroll = useCallback(() => {
     const container = feedRef.current;
     if (!container || !isFullscreen) return;
     const slideHeight = container.clientHeight;
     if (slideHeight <= 0) return;
 
-    const rawIndex = Math.round(container.scrollTop / slideHeight);
-    if (rawIndex >= videos.length) {
+    const scrollSlot = Math.round(container.scrollTop / slideHeight);
+    if (scrollSlot <= 0 || scrollSlot >= videos.length + 1) {
       closeFullscreen();
       return;
     }
-    if (rawIndex >= 0 && rawIndex < videos.length && rawIndex !== selectedIndex) {
-      setSelectedIndex(rawIndex);
+    const videoIndex = scrollSlot - 1;
+    if (videoIndex !== selectedIndex) {
+      setSelectedIndex(videoIndex);
       setIsMuted(true);
       setFailedSrc(null);
     }
@@ -394,9 +398,12 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
               <button
                 type="button"
                 onClick={() => scrollToSlide(selectedIndex - 1)}
-                disabled={selectedIndex === 0}
-                aria-label="Previous part"
-                className="w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 border border-white/15 disabled:opacity-25 disabled:cursor-not-allowed text-white flex items-center justify-center backdrop-blur-sm cursor-pointer transition-all"
+                aria-label={
+                  selectedIndex === 0
+                    ? "Close and return to guide"
+                    : "Previous part"
+                }
+                className="w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 border border-white/15 text-white flex items-center justify-center backdrop-blur-sm cursor-pointer transition-all"
               >
                 <ChevronUp className="w-5 h-5" />
               </button>
@@ -434,6 +441,18 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
               onScroll={handleFeedScroll}
               className="w-full h-full overflow-y-auto snap-y snap-mandatory overscroll-contain scroll-smooth"
             >
+              {/* Top Sentinel Slide — Swiping down on Part 1 closes back to the guide */}
+              <div className="w-full h-full snap-start snap-always flex flex-col items-center justify-center gap-3 bg-black text-white px-6 text-center">
+                <p className="text-xs text-slate-400">Returning to your guide…</p>
+                <button
+                  type="button"
+                  onClick={closeFullscreen}
+                  className="px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
+                >
+                  Back to Guide
+                </button>
+              </div>
+
               {videos.map((vid, idx) => {
                 const isActive = idx === selectedIndex;
                 const src = resolveChapterVideoSource(vid);
