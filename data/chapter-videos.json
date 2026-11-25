@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T00:08:08.426Z",
-  "totalVideos": 142,
+  "updatedAt": "2026-11-25T00:15:53.575Z",
+  "totalVideos": 146,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -2557,6 +2557,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/build-tools",
       "branchName": "topic/level-8/build-tools",
       "renderedAt": "2026-11-25T00:08:08.425Z"
+    },
+    {
+      "chapterId": "level-8/building-restful-apis",
+      "level": "level-8",
+      "slug": "building-restful-apis",
+      "chapterTitle": "Building RESTful APIs",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-rest-maturity",
+      "partTitle": "Stop Treating HTTP as a Dumb Pipe",
+      "format": "shorts",
+      "durationSec": 58.3,
+      "file": "level-8/building-restful-apis/part-1-rest-maturity.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__building-restful-apis__part-1-rest-maturity.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/building-restful-apis",
+      "branchName": "topic/level-8/building-restful-apis",
+      "renderedAt": "2026-11-25T00:11:22.278Z"
+    },
+    {
+      "chapterId": "level-8/building-restful-apis",
+      "level": "level-8",
+      "slug": "building-restful-apis",
+      "chapterTitle": "Building RESTful APIs",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-spring-pipeline",
+      "partTitle": "Inside the Spring Web MVC Pipeline",
+      "format": "shorts",
+      "durationSec": 51.3,
+      "file": "level-8/building-restful-apis/part-2-spring-pipeline.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__building-restful-apis__part-2-spring-pipeline.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/building-restful-apis",
+      "branchName": "topic/level-8/building-restful-apis",
+      "renderedAt": "2026-11-25T00:12:49.088Z"
+    },
+    {
+      "chapterId": "level-8/building-restful-apis",
+      "level": "level-8",
+      "slug": "building-restful-apis",
+      "chapterTitle": "Building RESTful APIs",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-dtos-and-validation",
+      "partTitle": "Stop Exposing JPA Entities",
+      "format": "shorts",
+      "durationSec": 58.1,
+      "file": "level-8/building-restful-apis/part-3-dtos-and-validation.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__building-restful-apis__part-3-dtos-and-validation.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/building-restful-apis",
+      "branchName": "topic/level-8/building-restful-apis",
+      "renderedAt": "2026-11-25T00:14:22.148Z"
+    },
+    {
+      "chapterId": "level-8/building-restful-apis",
+      "level": "level-8",
+      "slug": "building-restful-apis",
+      "chapterTitle": "Building RESTful APIs",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-global-exceptions",
+      "partTitle": "Standardizing Errors with ProblemDetail",
+      "format": "shorts",
+      "durationSec": 56.1,
+      "file": "level-8/building-restful-apis/part-4-global-exceptions.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__building-restful-apis__part-4-global-exceptions.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/building-restful-apis",
+      "branchName": "topic/level-8/building-restful-apis",
+      "renderedAt": "2026-11-25T00:15:53.574Z"
     }
   ]
 }

@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 34 / 116 (29.3%)
-- **Total Shorts Rendered:** 142
+- **Chapters Completed:** 35 / 116 (30.2%)
+- **Total Shorts Rendered:** 146
 - **Last Updated:** 2026-11-25
 
 ---
@@ -96,12 +96,12 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **NoSQL Databases** (level-7/nosql-databases)
 - [x] **Full-Text Search with Elasticsearch** (level-7/full-text-search-with-elasticsearch) — 5 Shorts: [Part 1 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-1-inverted-index-basics.mp4) · [Part 2 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-2-bm25-and-segments.mp4) · [Part 3 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-3-spring-data-mapping.mp4) · [Part 4 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-4-bulk-indexing.mp4) · [Part 5 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-5-cdc-sync.mp4)
 
-## Level 8: Enterprise Spring Boot 3 Deep Dive (2/9)
+## Level 8: Enterprise Spring Boot 3 Deep Dive (3/9)
 
 - [x] **Build Tools** (level-8/build-tools) — 4 Shorts: [Part 1 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__build-tools__part-1-maven-gradle-paradigms.mp4) · [Part 2 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__build-tools__part-2-dependency-resolution.mp4) · [Part 3 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__build-tools__part-3-gradle-optimization.mp4) · [Part 4 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__build-tools__part-4-final-checklist.mp4)
 - [ ] **Spring Core Internals** (level-8/spring-core-internals)
 - [ ] **Aspect-Oriented Programming (AOP)** (level-8/aspect-oriented-programming-aop)
-- [ ] **Building RESTful APIs** (level-8/building-restful-apis)
+- [x] **Building RESTful APIs** (level-8/building-restful-apis) — 4 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__building-restful-apis__part-1-rest-maturity.mp4) · [Part 2 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__building-restful-apis__part-2-spring-pipeline.mp4) · [Part 3 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__building-restful-apis__part-3-dtos-and-validation.mp4) · [Part 4 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__building-restful-apis__part-4-global-exceptions.mp4)
 - [ ] **Spring Data JPA** (level-8/spring-data-jpa)
 - [ ] **Custom Spring Boot Starters & Auto-Configurations** (level-8/custom-spring-boot-starters-auto-configurations)
 - [ ] **Spring Batch: Chunk Processing** (level-8/spring-batch-chunk-processing)
