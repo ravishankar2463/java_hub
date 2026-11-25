@@ -114,6 +114,41 @@ export function getYouTubeThumbnailUrl(youtubeId: string): string {
   return `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`;
 }
 
+export type SwipeAction =
+  | { type: "next"; index: number }
+  | { type: "prev"; index: number }
+  | { type: "close" }
+  | { type: "none" };
+
+/**
+ * Resolves a vertical swipe gesture (deltaY = startY - endY; positive = swipe up, negative = swipe down).
+ * Swiping down on Part 1 (index 0) or swiping up on the last part closes back to the guide.
+ */
+export function resolveVerticalSwipeAction(
+  currentIndex: number,
+  totalVideos: number,
+  deltaY: number,
+  thresholdPx = 45
+): SwipeAction {
+  if (totalVideos <= 0 || Math.abs(deltaY) < thresholdPx) {
+    return { type: "none" };
+  }
+
+  if (deltaY > 0) {
+    // Swiped up -> next part, or close after last part
+    if (currentIndex >= totalVideos - 1) {
+      return { type: "close" };
+    }
+    return { type: "next", index: currentIndex + 1 };
+  }
+
+  // Swiped down -> previous part, or close on Part 1
+  if (currentIndex <= 0) {
+    return { type: "close" };
+  }
+  return { type: "prev", index: currentIndex - 1 };
+}
+
 /**
  * Canonical YouTube Shorts watch URL.
  */
