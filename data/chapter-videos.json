@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T03:56:48.156Z",
-  "totalVideos": 232,
+  "updatedAt": "2026-11-25T04:03:12.741Z",
+  "totalVideos": 236,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -4177,6 +4177,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
       "branchName": "topic/level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
       "renderedAt": "2026-11-25T03:56:48.155Z"
+    },
+    {
+      "chapterId": "level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "level": "level-15",
+      "slug": "ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "chapterTitle": "Ultra-Low-Latency Messaging: Aeron and Chronicle Queue",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-the-latency-trap",
+      "partTitle": "Why TCP and HTTP Kill Your Trading Engine",
+      "format": "shorts",
+      "durationSec": 51,
+      "file": "level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue/part-1-the-latency-trap.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__ultra-low-latency-messaging-aeron-and-chronicle-queue__part-1-the-latency-trap.mp4",
+      "releaseTag": "videos-level-15",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "branchName": "topic/level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "renderedAt": "2026-11-25T03:59:35.911Z"
+    },
+    {
+      "chapterId": "level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "level": "level-15",
+      "slug": "ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "chapterTitle": "Ultra-Low-Latency Messaging: Aeron and Chronicle Queue",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-chronicle-queue",
+      "partTitle": "Chronicle Queue: Memory-Mapped IPC",
+      "format": "shorts",
+      "durationSec": 48.4,
+      "file": "level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue/part-2-chronicle-queue.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__ultra-low-latency-messaging-aeron-and-chronicle-queue__part-2-chronicle-queue.mp4",
+      "releaseTag": "videos-level-15",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "branchName": "topic/level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "renderedAt": "2026-11-25T04:00:55.336Z"
+    },
+    {
+      "chapterId": "level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "level": "level-15",
+      "slug": "ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "chapterTitle": "Ultra-Low-Latency Messaging: Aeron and Chronicle Queue",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-kernel-bypass",
+      "partTitle": "Kernel Bypass: Solarflare & DPDK",
+      "format": "shorts",
+      "durationSec": 43.4,
+      "file": "level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue/part-3-kernel-bypass.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__ultra-low-latency-messaging-aeron-and-chronicle-queue__part-3-kernel-bypass.mp4",
+      "releaseTag": "videos-level-15",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "branchName": "topic/level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "renderedAt": "2026-11-25T04:02:05.230Z"
+    },
+    {
+      "chapterId": "level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "level": "level-15",
+      "slug": "ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "chapterTitle": "Ultra-Low-Latency Messaging: Aeron and Chronicle Queue",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-event-sourcing",
+      "partTitle": "Deterministic Event Sourcing",
+      "format": "shorts",
+      "durationSec": 41,
+      "file": "level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue/part-4-event-sourcing.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__ultra-low-latency-messaging-aeron-and-chronicle-queue__part-4-event-sourcing.mp4",
+      "releaseTag": "videos-level-15",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "branchName": "topic/level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue",
+      "renderedAt": "2026-11-25T04:03:12.739Z"
     }
   ]
 }

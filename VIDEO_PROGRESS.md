@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 56 / 116 (48.3%)
-- **Total Shorts Rendered:** 232
+- **Chapters Completed:** 57 / 116 (49.1%)
+- **Total Shorts Rendered:** 236
 - **Last Updated:** 2026-11-25
 
 ---
@@ -168,10 +168,10 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **LLM Tool Calling and Function Execution** (level-14/llm-tool-calling-and-function-execution)
 - [ ] **Multi-Agent Orchestration and Autonomous Systems** (level-14/multi-agent-orchestration-and-autonomous-systems)
 
-## Level 15: Ultra-Low Latency & Mechanical Sympathy (2/5)
+## Level 15: Ultra-Low Latency & Mechanical Sympathy (3/5)
 
 - [x] **Mechanical Sympathy and CPU Architecture** (level-15/mechanical-sympathy-and-cpu-architecture) — 5 Shorts: [Part 1 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__mechanical-sympathy-and-cpu-architecture__part-1-cache-locality.mp4) · [Part 2 (42s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__mechanical-sympathy-and-cpu-architecture__part-2-false-sharing.mp4) · [Part 3 (40s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__mechanical-sympathy-and-cpu-architecture__part-3-branch-prediction.mp4) · [Part 4 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__mechanical-sympathy-and-cpu-architecture__part-4-memory-barriers.mp4) · [Part 5 (37s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__mechanical-sympathy-and-cpu-architecture__part-5-recap.mp4)
 - [ ] **Project Panama: Foreign Function & Memory API** (level-15/project-panama-foreign-function-memory-api)
 - [x] **The LMAX Disruptor and Lock-Free Ring Buffers** (level-15/the-lmax-disruptor-and-lock-free-ring-buffers) — 4 Shorts: [Part 1 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__the-lmax-disruptor-and-lock-free-ring-buffers__part-1-why-standard-queues-fail.mp4) · [Part 2 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__the-lmax-disruptor-and-lock-free-ring-buffers__part-2-sequencer-logic.mp4) · [Part 3 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__the-lmax-disruptor-and-lock-free-ring-buffers__part-3-wait-strategies.mp4) · [Part 4 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__the-lmax-disruptor-and-lock-free-ring-buffers__part-4-diamond-topology.mp4)
 - [ ] **Zero-Allocation Java and Garbage-Free Patterns** (level-15/zero-allocation-java-and-garbage-free-patterns)
-- [ ] **Ultra-Low-Latency Messaging: Aeron and Chronicle Queue** (level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue)
+- [x] **Ultra-Low-Latency Messaging: Aeron and Chronicle Queue** (level-15/ultra-low-latency-messaging-aeron-and-chronicle-queue) — 4 Shorts: [Part 1 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__ultra-low-latency-messaging-aeron-and-chronicle-queue__part-1-the-latency-trap.mp4) · [Part 2 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__ultra-low-latency-messaging-aeron-and-chronicle-queue__part-2-chronicle-queue.mp4) · [Part 3 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__ultra-low-latency-messaging-aeron-and-chronicle-queue__part-3-kernel-bypass.mp4) · [Part 4 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__ultra-low-latency-messaging-aeron-and-chronicle-queue__part-4-event-sourcing.mp4)
