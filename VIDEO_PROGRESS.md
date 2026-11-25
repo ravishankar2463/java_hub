@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 82 / 116 (70.7%)
-- **Total Shorts Rendered:** 344
+- **Chapters Completed:** 83 / 116 (71.6%)
+- **Total Shorts Rendered:** 348
 - **Last Updated:** 2026-11-25
 
 ---
@@ -130,9 +130,9 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **Resilient Event Processing and Dead Letter Queues** (level-10/resilient-event-processing-and-dead-letter-queues)
 - [ ] **Stateful Stream Processing with Kafka Streams** (level-10/stateful-stream-processing-with-kafka-streams)
 
-## Level 11: Distributed Systems & Microservices Patterns (5/8)
+## Level 11: Distributed Systems & Microservices Patterns (6/8)
 
-- [ ] **Microservice Principles** (level-11/microservice-principles)
+- [x] **Microservice Principles** (level-11/microservice-principles) — 4 Shorts: [Part 1 (63s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__microservice-principles__part-1-the-distributed-monolith-trap.mp4) · [Part 2 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__microservice-principles__part-2-bounded-contexts.mp4) · [Part 3 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__microservice-principles__part-3-data-joins.mp4) · [Part 4 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__microservice-principles__part-4-fallacies-and-conclusion.mp4)
 - [x] **API Gateways and Service Discovery** (level-11/api-gateways-and-service-discovery) — 4 Shorts: [Part 1 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__api-gateways-and-service-discovery__part-1-gateway-anatomy.mp4) · [Part 2 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__api-gateways-and-service-discovery__part-2-rate-limiting.mp4) · [Part 3 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__api-gateways-and-service-discovery__part-3-discovery-models.mp4) · [Part 4 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__api-gateways-and-service-discovery__part-4-tracing-and-pitfalls.mp4)
 - [ ] **Inter-Service Communication** (level-11/inter-service-communication)
 - [ ] **Resiliency Patterns** (level-11/resiliency-patterns)
