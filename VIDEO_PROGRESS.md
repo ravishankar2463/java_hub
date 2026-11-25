@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 42 / 116 (36.2%)
-- **Total Shorts Rendered:** 174
+- **Chapters Completed:** 43 / 116 (37.1%)
+- **Total Shorts Rendered:** 178
 - **Last Updated:** 2026-11-25
 
 ---
@@ -118,10 +118,10 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **High-Performance gRPC in Java** (level-9/high-performance-grpc-in-java) — 4 Shorts: [Part 1 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__high-performance-grpc-in-java__part-1-protobuf-efficiency.mp4) · [Part 2 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__high-performance-grpc-in-java__part-2-http2-multiplexing.mp4) · [Part 3 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__high-performance-grpc-in-java__part-3-streaming-modes.mp4) · [Part 4 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__high-performance-grpc-in-java__part-4-interceptors-deadlines.mp4)
 - [x] **Real-Time Messaging: WebSockets & SSE** (level-9/real-time-messaging-websockets-sse) — 4 Shorts: [Part 1 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__real-time-messaging-websockets-sse__part-1-websockets-vs-sse.mp4) · [Part 2 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__real-time-messaging-websockets-sse__part-2-stomp-and-scaling.mp4) · [Part 3 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__real-time-messaging-websockets-sse__part-3-security-and-auth.mp4) · [Part 4 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__real-time-messaging-websockets-sse__part-4-production-pitfalls.mp4)
 
-## Level 10: Event-Driven Architecture & Message Streaming (0/9)
+## Level 10: Event-Driven Architecture & Message Streaming (1/9)
 
 - [ ] **Message Brokers vs Event Streaming** (level-10/message-brokers-vs-event-streaming)
-- [ ] **Apache Kafka Internals** (level-10/apache-kafka-internals)
+- [x] **Apache Kafka Internals** (level-10/apache-kafka-internals) — 4 Shorts: [Part 1 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__apache-kafka-internals__part-1-disk-and-segments.mp4) · [Part 2 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__apache-kafka-internals__part-2-zero-copy-and-tls.mp4) · [Part 3 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__apache-kafka-internals__part-3-replication-and-isr.mp4) · [Part 4 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__apache-kafka-internals__part-4-kraft-and-metadata.mp4)
 - [ ] **Kafka Producers and Delivery Guarantees** (level-10/kafka-producers-and-delivery-guarantees)
 - [ ] **Kafka Consumer Groups and Rebalances** (level-10/kafka-consumer-groups-and-rebalances)
 - [ ] **Transactional Outbox and Inbox Patterns** (level-10/transactional-outbox-and-inbox-patterns)

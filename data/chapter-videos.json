@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T01:16:58.873Z",
-  "totalVideos": 174,
+  "updatedAt": "2026-11-25T01:23:48.236Z",
+  "totalVideos": 178,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -3133,6 +3133,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/stateless-authentication-jwt",
       "branchName": "topic/level-9/stateless-authentication-jwt",
       "renderedAt": "2026-11-25T01:16:58.872Z"
+    },
+    {
+      "chapterId": "level-10/apache-kafka-internals",
+      "level": "level-10",
+      "slug": "apache-kafka-internals",
+      "chapterTitle": "Apache Kafka Internals",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-disk-and-segments",
+      "partTitle": "Why Kafka Uses Tiny Heaps",
+      "format": "shorts",
+      "durationSec": 52.6,
+      "file": "level-10/apache-kafka-internals/part-1-disk-and-segments.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__apache-kafka-internals__part-1-disk-and-segments.mp4",
+      "releaseTag": "videos-level-10",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/apache-kafka-internals",
+      "branchName": "topic/level-10/apache-kafka-internals",
+      "renderedAt": "2026-11-25T01:19:56.146Z"
+    },
+    {
+      "chapterId": "level-10/apache-kafka-internals",
+      "level": "level-10",
+      "slug": "apache-kafka-internals",
+      "chapterTitle": "Apache Kafka Internals",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-zero-copy-and-tls",
+      "partTitle": "Zero-Copy Networking Explained",
+      "format": "shorts",
+      "durationSec": 48.1,
+      "file": "level-10/apache-kafka-internals/part-2-zero-copy-and-tls.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__apache-kafka-internals__part-2-zero-copy-and-tls.mp4",
+      "releaseTag": "videos-level-10",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/apache-kafka-internals",
+      "branchName": "topic/level-10/apache-kafka-internals",
+      "renderedAt": "2026-11-25T01:21:14.453Z"
+    },
+    {
+      "chapterId": "level-10/apache-kafka-internals",
+      "level": "level-10",
+      "slug": "apache-kafka-internals",
+      "chapterTitle": "Apache Kafka Internals",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-replication-and-isr",
+      "partTitle": "Replication and ISR Safety",
+      "format": "shorts",
+      "durationSec": 45.7,
+      "file": "level-10/apache-kafka-internals/part-3-replication-and-isr.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__apache-kafka-internals__part-3-replication-and-isr.mp4",
+      "releaseTag": "videos-level-10",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/apache-kafka-internals",
+      "branchName": "topic/level-10/apache-kafka-internals",
+      "renderedAt": "2026-11-25T01:22:28.435Z"
+    },
+    {
+      "chapterId": "level-10/apache-kafka-internals",
+      "level": "level-10",
+      "slug": "apache-kafka-internals",
+      "chapterTitle": "Apache Kafka Internals",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-kraft-and-metadata",
+      "partTitle": "KRaft: The Future of Kafka",
+      "format": "shorts",
+      "durationSec": 50.3,
+      "file": "level-10/apache-kafka-internals/part-4-kraft-and-metadata.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__apache-kafka-internals__part-4-kraft-and-metadata.mp4",
+      "releaseTag": "videos-level-10",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/apache-kafka-internals",
+      "branchName": "topic/level-10/apache-kafka-internals",
+      "renderedAt": "2026-11-25T01:23:48.235Z"
     }
   ]
 }
