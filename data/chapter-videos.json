@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T03:08:51.095Z",
-  "totalVideos": 215,
+  "updatedAt": "2026-11-25T03:18:56.133Z",
+  "totalVideos": 219,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -3871,6 +3871,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-13/jvm-profiling-with-jfr-and-async-profiler",
       "branchName": "topic/level-13/jvm-profiling-with-jfr-and-async-profiler",
       "renderedAt": "2026-11-25T03:08:51.093Z"
+    },
+    {
+      "chapterId": "level-13/system-design-observability",
+      "level": "level-13",
+      "slug": "system-design-observability",
+      "chapterTitle": "System Design: Observability",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-observability-vs-monitoring",
+      "partTitle": "Why Monitoring Isn't Enough",
+      "format": "shorts",
+      "durationSec": 51.1,
+      "file": "level-13/system-design-observability/part-1-observability-vs-monitoring.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__system-design-observability__part-1-observability-vs-monitoring.mp4",
+      "releaseTag": "videos-level-13",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-13/system-design-observability",
+      "branchName": "topic/level-13/system-design-observability",
+      "renderedAt": "2026-11-25T03:15:09.606Z"
+    },
+    {
+      "chapterId": "level-13/system-design-observability",
+      "level": "level-13",
+      "slug": "system-design-observability",
+      "chapterTitle": "System Design: Observability",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-distributed-tracing",
+      "partTitle": "Distributed Tracing & W3C Context",
+      "format": "shorts",
+      "durationSec": 48.8,
+      "file": "level-13/system-design-observability/part-2-distributed-tracing.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__system-design-observability__part-2-distributed-tracing.mp4",
+      "releaseTag": "videos-level-13",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-13/system-design-observability",
+      "branchName": "topic/level-13/system-design-observability",
+      "renderedAt": "2026-11-25T03:16:29.728Z"
+    },
+    {
+      "chapterId": "level-13/system-design-observability",
+      "level": "level-13",
+      "slug": "system-design-observability",
+      "chapterTitle": "System Design: Observability",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-sampling-strategies",
+      "partTitle": "Head vs Tail-Based Sampling",
+      "format": "shorts",
+      "durationSec": 43.3,
+      "file": "level-13/system-design-observability/part-3-sampling-strategies.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__system-design-observability__part-3-sampling-strategies.mp4",
+      "releaseTag": "videos-level-13",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-13/system-design-observability",
+      "branchName": "topic/level-13/system-design-observability",
+      "renderedAt": "2026-11-25T03:17:40.413Z"
+    },
+    {
+      "chapterId": "level-13/system-design-observability",
+      "level": "level-13",
+      "slug": "system-design-observability",
+      "chapterTitle": "System Design: Observability",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-structured-logging",
+      "partTitle": "Structured Logging & MDC Context",
+      "format": "shorts",
+      "durationSec": 45.7,
+      "file": "level-13/system-design-observability/part-4-structured-logging.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__system-design-observability__part-4-structured-logging.mp4",
+      "releaseTag": "videos-level-13",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-13/system-design-observability",
+      "branchName": "topic/level-13/system-design-observability",
+      "renderedAt": "2026-11-25T03:18:56.131Z"
     }
   ]
 }
