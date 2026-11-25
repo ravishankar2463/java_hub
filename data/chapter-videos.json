@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T02:51:08.157Z",
-  "totalVideos": 207,
+  "updatedAt": "2026-11-25T02:58:28.769Z",
+  "totalVideos": 211,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -3727,6 +3727,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-12/google-jib-daemonless-containers",
       "branchName": "topic/level-12/google-jib-daemonless-containers",
       "renderedAt": "2026-11-25T02:51:08.156Z"
+    },
+    {
+      "chapterId": "level-12/kubernetes-k8s-for-java-devs",
+      "level": "level-12",
+      "slug": "kubernetes-k8s-for-java-devs",
+      "chapterTitle": "Kubernetes (K8s) for Java Devs",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-deployment-anatomy",
+      "partTitle": "Spring Boot Pods and Deployments",
+      "format": "shorts",
+      "durationSec": 55.4,
+      "file": "level-12/kubernetes-k8s-for-java-devs/part-1-deployment-anatomy.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__kubernetes-k8s-for-java-devs__part-1-deployment-anatomy.mp4",
+      "releaseTag": "videos-level-12",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-12/kubernetes-k8s-for-java-devs",
+      "branchName": "topic/level-12/kubernetes-k8s-for-java-devs",
+      "renderedAt": "2026-11-25T02:54:46.359Z"
+    },
+    {
+      "chapterId": "level-12/kubernetes-k8s-for-java-devs",
+      "level": "level-12",
+      "slug": "kubernetes-k8s-for-java-devs",
+      "chapterTitle": "Kubernetes (K8s) for Java Devs",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-probes-and-shutdown",
+      "partTitle": "Health Probes & Graceful Shutdown",
+      "format": "shorts",
+      "durationSec": 46.5,
+      "file": "level-12/kubernetes-k8s-for-java-devs/part-2-probes-and-shutdown.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__kubernetes-k8s-for-java-devs__part-2-probes-and-shutdown.mp4",
+      "releaseTag": "videos-level-12",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-12/kubernetes-k8s-for-java-devs",
+      "branchName": "topic/level-12/kubernetes-k8s-for-java-devs",
+      "renderedAt": "2026-11-25T02:56:05.101Z"
+    },
+    {
+      "chapterId": "level-12/kubernetes-k8s-for-java-devs",
+      "level": "level-12",
+      "slug": "kubernetes-k8s-for-java-devs",
+      "chapterTitle": "Kubernetes (K8s) for Java Devs",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-secrets-and-config",
+      "partTitle": "Secrets and Configuration",
+      "format": "shorts",
+      "durationSec": 45.2,
+      "file": "level-12/kubernetes-k8s-for-java-devs/part-3-secrets-and-config.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__kubernetes-k8s-for-java-devs__part-3-secrets-and-config.mp4",
+      "releaseTag": "videos-level-12",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-12/kubernetes-k8s-for-java-devs",
+      "branchName": "topic/level-12/kubernetes-k8s-for-java-devs",
+      "renderedAt": "2026-11-25T02:57:17.916Z"
+    },
+    {
+      "chapterId": "level-12/kubernetes-k8s-for-java-devs",
+      "level": "level-12",
+      "slug": "kubernetes-k8s-for-java-devs",
+      "chapterTitle": "Kubernetes (K8s) for Java Devs",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-helm-and-scaling",
+      "partTitle": "Helm Charts and Scaling",
+      "format": "shorts",
+      "durationSec": 42.6,
+      "file": "level-12/kubernetes-k8s-for-java-devs/part-4-helm-and-scaling.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-12/level-12__kubernetes-k8s-for-java-devs__part-4-helm-and-scaling.mp4",
+      "releaseTag": "videos-level-12",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-12/kubernetes-k8s-for-java-devs",
+      "branchName": "topic/level-12/kubernetes-k8s-for-java-devs",
+      "renderedAt": "2026-11-25T02:58:28.767Z"
     }
   ]
 }
