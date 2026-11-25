@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T00:00:59.241Z",
-  "totalVideos": 138,
+  "updatedAt": "2026-11-25T00:08:08.426Z",
+  "totalVideos": 142,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -2485,6 +2485,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/automated-testing",
       "branchName": "topic/level-8/automated-testing",
       "renderedAt": "2026-11-25T00:00:59.240Z"
+    },
+    {
+      "chapterId": "level-8/build-tools",
+      "level": "level-8",
+      "slug": "build-tools",
+      "chapterTitle": "Build Tools",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-maven-gradle-paradigms",
+      "partTitle": "Maven vs. Gradle: The Build Engine Showdown",
+      "format": "shorts",
+      "durationSec": 53.1,
+      "file": "level-8/build-tools/part-1-maven-gradle-paradigms.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__build-tools__part-1-maven-gradle-paradigms.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/build-tools",
+      "branchName": "topic/level-8/build-tools",
+      "renderedAt": "2026-11-25T00:03:57.782Z"
+    },
+    {
+      "chapterId": "level-8/build-tools",
+      "level": "level-8",
+      "slug": "build-tools",
+      "chapterTitle": "Build Tools",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-dependency-resolution",
+      "partTitle": "Solving Dependency Hell",
+      "format": "shorts",
+      "durationSec": 54.3,
+      "file": "level-8/build-tools/part-2-dependency-resolution.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__build-tools__part-2-dependency-resolution.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/build-tools",
+      "branchName": "topic/level-8/build-tools",
+      "renderedAt": "2026-11-25T00:05:29.355Z"
+    },
+    {
+      "chapterId": "level-8/build-tools",
+      "level": "level-8",
+      "slug": "build-tools",
+      "chapterTitle": "Build Tools",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-gradle-optimization",
+      "partTitle": "Optimizing Build Speed",
+      "format": "shorts",
+      "durationSec": 50.8,
+      "file": "level-8/build-tools/part-3-gradle-optimization.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__build-tools__part-3-gradle-optimization.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/build-tools",
+      "branchName": "topic/level-8/build-tools",
+      "renderedAt": "2026-11-25T00:06:51.353Z"
+    },
+    {
+      "chapterId": "level-8/build-tools",
+      "level": "level-8",
+      "slug": "build-tools",
+      "chapterTitle": "Build Tools",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-final-checklist",
+      "partTitle": "Build Tool Master Checklist",
+      "format": "shorts",
+      "durationSec": 48.3,
+      "file": "level-8/build-tools/part-4-final-checklist.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__build-tools__part-4-final-checklist.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/build-tools",
+      "branchName": "topic/level-8/build-tools",
+      "renderedAt": "2026-11-25T00:08:08.425Z"
     }
   ]
 }
