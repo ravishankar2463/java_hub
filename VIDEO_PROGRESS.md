@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 86 / 116 (74.1%)
-- **Total Shorts Rendered:** 360
+- **Chapters Completed:** 87 / 116 (75.0%)
+- **Total Shorts Rendered:** 364
 - **Last Updated:** 2026-11-25
 
 ---
@@ -159,13 +159,13 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Production Metrics with Micrometer and Prometheus** (level-13/production-metrics-with-micrometer-and-prometheus) — 4 Shorts: [Part 1 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__production-metrics-with-micrometer-and-prometheus__part-1-micrometer-primitives.mp4) · [Part 2 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__production-metrics-with-micrometer-and-prometheus__part-2-percentiles-and-aggregation.mp4) · [Part 3 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__production-metrics-with-micrometer-and-prometheus__part-3-cardinality-guardrails.mp4) · [Part 4 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__production-metrics-with-micrometer-and-prometheus__part-4-slo-and-error-budgets.mp4)
 - [x] **Zero-Downtime Deployments: Blue-Green and Canary** (level-13/zero-downtime-deployments-blue-green-and-canary) — 4 Shorts: [Part 1 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__zero-downtime-deployments-blue-green-and-canary__part-1-blue-green-strategy.mp4) · [Part 2 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__zero-downtime-deployments-blue-green-and-canary__part-2-canary-rollouts.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__zero-downtime-deployments-blue-green-and-canary__part-3-db-migrations.mp4) · [Part 4 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-13/level-13__zero-downtime-deployments-blue-green-and-canary__part-4-graceful-shutdown.mp4)
 
-## Level 14: Enterprise Java & AI Orchestration (1/6)
+## Level 14: Enterprise Java & AI Orchestration (2/6)
 
 - [x] **The AI Landscape for Java: Spring AI** (level-14/the-ai-landscape-for-java-spring-ai) — 4 Shorts: [Part 1 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__the-ai-landscape-for-java-spring-ai__part-1-the-spring-ai-advantage.mp4) · [Part 2 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__the-ai-landscape-for-java-spring-ai__part-2-structured-output.mp4) · [Part 3 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__the-ai-landscape-for-java-spring-ai__part-3-local-ollama.mp4) · [Part 4 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__the-ai-landscape-for-java-spring-ai__part-4-production-guardrails.mp4)
 - [ ] **LLM Integration and Structured Records** (level-14/llm-integration-and-structured-records)
 - [ ] **Vector Databases and Semantic Search** (level-14/vector-databases-and-semantic-search)
 - [ ] **Retrieval-Augmented Generation (RAG)** (level-14/retrieval-augmented-generation-rag)
-- [ ] **LLM Tool Calling and Function Execution** (level-14/llm-tool-calling-and-function-execution)
+- [x] **LLM Tool Calling and Function Execution** (level-14/llm-tool-calling-and-function-execution) — 4 Shorts: [Part 1 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__llm-tool-calling-and-function-execution__part-1-mechanics.mp4) · [Part 2 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__llm-tool-calling-and-function-execution__part-2-loop-control.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__llm-tool-calling-and-function-execution__part-3-security.mp4) · [Part 4 (40s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__llm-tool-calling-and-function-execution__part-4-human-in-the-loop.mp4)
 - [ ] **Multi-Agent Orchestration and Autonomous Systems** (level-14/multi-agent-orchestration-and-autonomous-systems)
 
 ## Level 15: Ultra-Low Latency & Mechanical Sympathy (3/5)
