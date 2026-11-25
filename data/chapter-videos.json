@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T01:45:59.774Z",
-  "totalVideos": 182,
+  "updatedAt": "2026-11-25T01:59:12.233Z",
+  "totalVideos": 186,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -3277,6 +3277,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/message-brokers-vs-event-streaming",
       "branchName": "topic/level-10/message-brokers-vs-event-streaming",
       "renderedAt": "2026-11-25T01:45:59.773Z"
+    },
+    {
+      "chapterId": "level-10/transactional-outbox-and-inbox-patterns",
+      "level": "level-10",
+      "slug": "transactional-outbox-and-inbox-patterns",
+      "chapterTitle": "Transactional Outbox and Inbox Patterns",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-the-dual-write-trap",
+      "partTitle": "Why Dual-Writes Always Fail",
+      "format": "shorts",
+      "durationSec": 56,
+      "file": "level-10/transactional-outbox-and-inbox-patterns/part-1-the-dual-write-trap.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__transactional-outbox-and-inbox-patterns__part-1-the-dual-write-trap.mp4",
+      "releaseTag": "videos-level-10",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/transactional-outbox-and-inbox-patterns",
+      "branchName": "topic/level-10/transactional-outbox-and-inbox-patterns",
+      "renderedAt": "2026-11-25T01:54:55.356Z"
+    },
+    {
+      "chapterId": "level-10/transactional-outbox-and-inbox-patterns",
+      "level": "level-10",
+      "slug": "transactional-outbox-and-inbox-patterns",
+      "chapterTitle": "Transactional Outbox and Inbox Patterns",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-polling-vs-cdc",
+      "partTitle": "Polling vs. Debezium CDC",
+      "format": "shorts",
+      "durationSec": 54.4,
+      "file": "level-10/transactional-outbox-and-inbox-patterns/part-2-polling-vs-cdc.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__transactional-outbox-and-inbox-patterns__part-2-polling-vs-cdc.mp4",
+      "releaseTag": "videos-level-10",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/transactional-outbox-and-inbox-patterns",
+      "branchName": "topic/level-10/transactional-outbox-and-inbox-patterns",
+      "renderedAt": "2026-11-25T01:56:23.545Z"
+    },
+    {
+      "chapterId": "level-10/transactional-outbox-and-inbox-patterns",
+      "level": "level-10",
+      "slug": "transactional-outbox-and-inbox-patterns",
+      "chapterTitle": "Transactional Outbox and Inbox Patterns",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-transactional-inbox",
+      "partTitle": "Handling Duplicates with Inbox",
+      "format": "shorts",
+      "durationSec": 53.2,
+      "file": "level-10/transactional-outbox-and-inbox-patterns/part-3-transactional-inbox.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__transactional-outbox-and-inbox-patterns__part-3-transactional-inbox.mp4",
+      "releaseTag": "videos-level-10",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/transactional-outbox-and-inbox-patterns",
+      "branchName": "topic/level-10/transactional-outbox-and-inbox-patterns",
+      "renderedAt": "2026-11-25T01:57:51.177Z"
+    },
+    {
+      "chapterId": "level-10/transactional-outbox-and-inbox-patterns",
+      "level": "level-10",
+      "slug": "transactional-outbox-and-inbox-patterns",
+      "chapterTitle": "Transactional Outbox and Inbox Patterns",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-retention-and-cleanup",
+      "partTitle": "Retention and Cleanup Strategies",
+      "format": "shorts",
+      "durationSec": 49.8,
+      "file": "level-10/transactional-outbox-and-inbox-patterns/part-4-retention-and-cleanup.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__transactional-outbox-and-inbox-patterns__part-4-retention-and-cleanup.mp4",
+      "releaseTag": "videos-level-10",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/transactional-outbox-and-inbox-patterns",
+      "branchName": "topic/level-10/transactional-outbox-and-inbox-patterns",
+      "renderedAt": "2026-11-25T01:59:12.232Z"
     }
   ]
 }
