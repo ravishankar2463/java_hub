@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T00:46:59.032Z",
-  "totalVideos": 158,
+  "updatedAt": "2026-11-25T00:54:22.668Z",
+  "totalVideos": 162,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -2845,6 +2845,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/graphql-with-netflix-dgs",
       "branchName": "topic/level-9/graphql-with-netflix-dgs",
       "renderedAt": "2026-11-25T00:46:59.031Z"
+    },
+    {
+      "chapterId": "level-9/high-performance-grpc-in-java",
+      "level": "level-9",
+      "slug": "high-performance-grpc-in-java",
+      "chapterTitle": "High-Performance gRPC in Java",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-protobuf-efficiency",
+      "partTitle": "Protobuf vs JSON: The Wire Format",
+      "format": "shorts",
+      "durationSec": 55.7,
+      "file": "level-9/high-performance-grpc-in-java/part-1-protobuf-efficiency.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__high-performance-grpc-in-java__part-1-protobuf-efficiency.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/high-performance-grpc-in-java",
+      "branchName": "topic/level-9/high-performance-grpc-in-java",
+      "renderedAt": "2026-11-25T00:50:05.351Z"
+    },
+    {
+      "chapterId": "level-9/high-performance-grpc-in-java",
+      "level": "level-9",
+      "slug": "high-performance-grpc-in-java",
+      "chapterTitle": "High-Performance gRPC in Java",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-http2-multiplexing",
+      "partTitle": "HTTP/2 Multiplexing & The L4 Trap",
+      "format": "shorts",
+      "durationSec": 56.8,
+      "file": "level-9/high-performance-grpc-in-java/part-2-http2-multiplexing.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__high-performance-grpc-in-java__part-2-http2-multiplexing.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/high-performance-grpc-in-java",
+      "branchName": "topic/level-9/high-performance-grpc-in-java",
+      "renderedAt": "2026-11-25T00:51:36.403Z"
+    },
+    {
+      "chapterId": "level-9/high-performance-grpc-in-java",
+      "level": "level-9",
+      "slug": "high-performance-grpc-in-java",
+      "chapterTitle": "High-Performance gRPC in Java",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-streaming-modes",
+      "partTitle": "Implementing 4 Streaming Modes",
+      "format": "shorts",
+      "durationSec": 49.4,
+      "file": "level-9/high-performance-grpc-in-java/part-3-streaming-modes.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__high-performance-grpc-in-java__part-3-streaming-modes.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/high-performance-grpc-in-java",
+      "branchName": "topic/level-9/high-performance-grpc-in-java",
+      "renderedAt": "2026-11-25T00:52:59.702Z"
+    },
+    {
+      "chapterId": "level-9/high-performance-grpc-in-java",
+      "level": "level-9",
+      "slug": "high-performance-grpc-in-java",
+      "chapterTitle": "High-Performance gRPC in Java",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-interceptors-deadlines",
+      "partTitle": "Deadlines, Auth & Error Handling",
+      "format": "shorts",
+      "durationSec": 49.3,
+      "file": "level-9/high-performance-grpc-in-java/part-4-interceptors-deadlines.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__high-performance-grpc-in-java__part-4-interceptors-deadlines.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/high-performance-grpc-in-java",
+      "branchName": "topic/level-9/high-performance-grpc-in-java",
+      "renderedAt": "2026-11-25T00:54:22.666Z"
     }
   ]
 }
