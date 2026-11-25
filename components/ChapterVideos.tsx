@@ -576,7 +576,7 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
               )}
 
               {/* Active Gesture Shield: once playback starts, allows swiping up/down ANYWHERE
-                  over the video (leaving bottom 56px free for YouTube scrubber) + tap to pause/play */}
+                  over the video + tap to pause/play (YouTube player controls are hidden via controls=0) */}
               {activeSource.kind === "youtube" && hasStartedPlaying && (
                 <div
                   data-testid="shorts-gesture-shield"
@@ -584,7 +584,7 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
                   onTouchMove={handleGestureTouchMove}
                   onTouchEnd={(e) => handleGestureTouchEnd(e, true)}
                   onTouchCancel={handleGestureTouchCancel}
-                  className="absolute inset-x-0 top-0 bottom-14 z-20 touch-none flex items-center justify-center"
+                  className="absolute inset-0 z-20 touch-none flex items-center justify-center"
                 >
                   {!isPlaying && (
                     <div className="w-16 h-16 rounded-full bg-black/65 backdrop-blur-sm text-white flex items-center justify-center border border-white/20">
