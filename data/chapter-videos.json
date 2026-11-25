@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T01:23:48.236Z",
-  "totalVideos": 178,
+  "updatedAt": "2026-11-25T01:45:59.774Z",
+  "totalVideos": 182,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -3205,6 +3205,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/apache-kafka-internals",
       "branchName": "topic/level-10/apache-kafka-internals",
       "renderedAt": "2026-11-25T01:23:48.235Z"
+    },
+    {
+      "chapterId": "level-10/message-brokers-vs-event-streaming",
+      "level": "level-10",
+      "slug": "message-brokers-vs-event-streaming",
+      "chapterTitle": "Message Brokers vs Event Streaming",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-broker-vs-log",
+      "partTitle": "Broker vs Log: Where State Resides",
+      "format": "shorts",
+      "durationSec": 59.1,
+      "file": "level-10/message-brokers-vs-event-streaming/part-1-broker-vs-log.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__message-brokers-vs-event-streaming__part-1-broker-vs-log.mp4",
+      "releaseTag": "videos-level-10",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/message-brokers-vs-event-streaming",
+      "branchName": "topic/level-10/message-brokers-vs-event-streaming",
+      "renderedAt": "2026-11-25T01:41:38.483Z"
+    },
+    {
+      "chapterId": "level-10/message-brokers-vs-event-streaming",
+      "level": "level-10",
+      "slug": "message-brokers-vs-event-streaming",
+      "chapterTitle": "Message Brokers vs Event Streaming",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-push-pull-backpressure",
+      "partTitle": "Push vs Pull Consumption Models",
+      "format": "shorts",
+      "durationSec": 55.7,
+      "file": "level-10/message-brokers-vs-event-streaming/part-2-push-pull-backpressure.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__message-brokers-vs-event-streaming__part-2-push-pull-backpressure.mp4",
+      "releaseTag": "videos-level-10",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/message-brokers-vs-event-streaming",
+      "branchName": "topic/level-10/message-brokers-vs-event-streaming",
+      "renderedAt": "2026-11-25T01:43:09.950Z"
+    },
+    {
+      "chapterId": "level-10/message-brokers-vs-event-streaming",
+      "level": "level-10",
+      "slug": "message-brokers-vs-event-streaming",
+      "chapterTitle": "Message Brokers vs Event Streaming",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-ordering-and-keys",
+      "partTitle": "Ordering Guarantees & Partitioning",
+      "format": "shorts",
+      "durationSec": 55,
+      "file": "level-10/message-brokers-vs-event-streaming/part-3-ordering-and-keys.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__message-brokers-vs-event-streaming__part-3-ordering-and-keys.mp4",
+      "releaseTag": "videos-level-10",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/message-brokers-vs-event-streaming",
+      "branchName": "topic/level-10/message-brokers-vs-event-streaming",
+      "renderedAt": "2026-11-25T01:44:39.228Z"
+    },
+    {
+      "chapterId": "level-10/message-brokers-vs-event-streaming",
+      "level": "level-10",
+      "slug": "message-brokers-vs-event-streaming",
+      "chapterTitle": "Message Brokers vs Event Streaming",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-decision-matrix",
+      "partTitle": "Choosing the Right Tool",
+      "format": "shorts",
+      "durationSec": 50.7,
+      "file": "level-10/message-brokers-vs-event-streaming/part-4-decision-matrix.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-10/level-10__message-brokers-vs-event-streaming__part-4-decision-matrix.mp4",
+      "releaseTag": "videos-level-10",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-10/message-brokers-vs-event-streaming",
+      "branchName": "topic/level-10/message-brokers-vs-event-streaming",
+      "renderedAt": "2026-11-25T01:45:59.773Z"
     }
   ]
 }
