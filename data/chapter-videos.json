@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T03:44:41.669Z",
-  "totalVideos": 228,
+  "updatedAt": "2026-11-25T03:56:48.156Z",
+  "totalVideos": 232,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -4105,6 +4105,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/mechanical-sympathy-and-cpu-architecture",
       "branchName": "topic/level-15/mechanical-sympathy-and-cpu-architecture",
       "renderedAt": "2026-11-25T03:44:41.668Z"
+    },
+    {
+      "chapterId": "level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
+      "level": "level-15",
+      "slug": "the-lmax-disruptor-and-lock-free-ring-buffers",
+      "chapterTitle": "The LMAX Disruptor and Lock-Free Ring Buffers",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-why-standard-queues-fail",
+      "partTitle": "The Hardware Bottlenecks of BlockingQueues",
+      "format": "shorts",
+      "durationSec": 51.1,
+      "file": "level-15/the-lmax-disruptor-and-lock-free-ring-buffers/part-1-why-standard-queues-fail.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__the-lmax-disruptor-and-lock-free-ring-buffers__part-1-why-standard-queues-fail.mp4",
+      "releaseTag": "videos-level-15",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
+      "branchName": "topic/level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
+      "renderedAt": "2026-11-25T03:52:46.446Z"
+    },
+    {
+      "chapterId": "level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
+      "level": "level-15",
+      "slug": "the-lmax-disruptor-and-lock-free-ring-buffers",
+      "chapterTitle": "The LMAX Disruptor and Lock-Free Ring Buffers",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-sequencer-logic",
+      "partTitle": "Single vs Multi-Producer Sequencers",
+      "format": "shorts",
+      "durationSec": 51.7,
+      "file": "level-15/the-lmax-disruptor-and-lock-free-ring-buffers/part-2-sequencer-logic.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__the-lmax-disruptor-and-lock-free-ring-buffers__part-2-sequencer-logic.mp4",
+      "releaseTag": "videos-level-15",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
+      "branchName": "topic/level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
+      "renderedAt": "2026-11-25T03:54:10.406Z"
+    },
+    {
+      "chapterId": "level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
+      "level": "level-15",
+      "slug": "the-lmax-disruptor-and-lock-free-ring-buffers",
+      "chapterTitle": "The LMAX Disruptor and Lock-Free Ring Buffers",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-wait-strategies",
+      "partTitle": "Wait Strategies & CPU Pinning",
+      "format": "shorts",
+      "durationSec": 48.2,
+      "file": "level-15/the-lmax-disruptor-and-lock-free-ring-buffers/part-3-wait-strategies.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__the-lmax-disruptor-and-lock-free-ring-buffers__part-3-wait-strategies.mp4",
+      "releaseTag": "videos-level-15",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
+      "branchName": "topic/level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
+      "renderedAt": "2026-11-25T03:55:28.148Z"
+    },
+    {
+      "chapterId": "level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
+      "level": "level-15",
+      "slug": "the-lmax-disruptor-and-lock-free-ring-buffers",
+      "chapterTitle": "The LMAX Disruptor and Lock-Free Ring Buffers",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-diamond-topology",
+      "partTitle": "Diamond Topology & Implementation",
+      "format": "shorts",
+      "durationSec": 48.4,
+      "file": "level-15/the-lmax-disruptor-and-lock-free-ring-buffers/part-4-diamond-topology.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-15/level-15__the-lmax-disruptor-and-lock-free-ring-buffers__part-4-diamond-topology.mp4",
+      "releaseTag": "videos-level-15",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
+      "branchName": "topic/level-15/the-lmax-disruptor-and-lock-free-ring-buffers",
+      "renderedAt": "2026-11-25T03:56:48.155Z"
     }
   ]
 }
