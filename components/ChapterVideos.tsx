@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   PlayCircle,
   Play,
+  Pause,
   ExternalLink,
   Film,
   Clock,
@@ -11,7 +12,6 @@ import {
   X,
   ChevronUp,
   ChevronDown,
-  CheckCircle2,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -19,6 +19,7 @@ import {
   getYouTubeEmbedUrl,
   getYouTubeThumbnailUrl,
   resolveChapterVideoSource,
+  resolveVerticalSwipeAction,
   type ChapterVideoItem,
 } from "@/lib/chapter-videos";
 
@@ -35,14 +36,16 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
+  const [dragOffsetY, setDragOffsetY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const [initialYouTubeId, setInitialYouTubeId] = useState<string | null>(null);
 
-  const feedRef = useRef<HTMLDivElement | null>(null);
   const persistentIframeRef = useRef<HTMLIFrameElement | null>(null);
   const loadedYouTubeIdRef = useRef<string | null>(null);
-  const touchStartYRef = useRef<number | null>(null);
-  const initialIndexRef = useRef(0);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const isClosingRef = useRef(false);
 
   const sendYouTubeCommand = useCallback(
@@ -53,6 +56,12 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
     },
     []
   );
+
+  const registerYouTubeListener = useCallback(() => {
+    const win = persistentIframeRef.current?.contentWindow;
+    if (!win) return;
+    win.postMessage(JSON.stringify({ event: "listening", id: 1 }), "*");
+  }, []);
 
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {
@@ -65,11 +74,25 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
     });
   }, [sendYouTubeCommand]);
 
+  const togglePlayPause = useCallback(() => {
+    if (isPlaying) {
+      sendYouTubeCommand("pauseVideo");
+      setIsPlaying(false);
+    } else {
+      sendYouTubeCommand("playVideo");
+      setIsPlaying(true);
+    }
+  }, [isPlaying, sendYouTubeCommand]);
+
   const closeFullscreen = useCallback(() => {
     if (isClosingRef.current) return;
     isClosingRef.current = true;
     loadedYouTubeIdRef.current = null;
     setInitialYouTubeId(null);
+    setHasStartedPlaying(false);
+    setIsPlaying(false);
+    setDragOffsetY(0);
+    setIsDragging(false);
     setIsFullscreen(false);
     setTimeout(() => {
       isClosingRef.current = false;
@@ -79,20 +102,23 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
   const openFullscreenAt = useCallback(
     (index: number) => {
       isClosingRef.current = false;
-      initialIndexRef.current = index;
       const target = videos[index] ?? videos[0];
       const ytId = target ? resolveChapterVideoSource(target).youtubeId : null;
       loadedYouTubeIdRef.current = ytId;
       setInitialYouTubeId(ytId);
       setSelectedIndex(index);
       setIsMuted(false);
+      setIsPlaying(false);
+      setHasStartedPlaying(false);
+      setDragOffsetY(0);
+      setIsDragging(false);
       setFailedSrc(null);
       setIsFullscreen(true);
     },
     [videos]
   );
 
-  const scrollToSlide = useCallback(
+  const navigateToPart = useCallback(
     (targetIndex: number) => {
       if (targetIndex < 0 || targetIndex >= videos.length) {
         closeFullscreen();
@@ -100,17 +126,49 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
       }
       setSelectedIndex(targetIndex);
       setFailedSrc(null);
-      const container = feedRef.current;
-      if (container) {
-        // +1 offset accounts for the top swipe-down-to-close sentinel slide
-        container.scrollTo({
-          top: (targetIndex + 1) * container.clientHeight,
-          behavior: "smooth",
-        });
-      }
+      setDragOffsetY(0);
+      setIsDragging(false);
     },
     [videos.length, closeFullscreen]
   );
+
+  // Listen for YouTube IFrame playerState updates (1 = playing, 2 = paused)
+  // so once playback starts on iOS Safari we can enable full-area swipe + tap-to-pause.
+  useEffect(() => {
+    if (!isFullscreen) return;
+
+    const handleMessage = (event: MessageEvent) => {
+      if (
+        typeof event.origin === "string" &&
+        !event.origin.includes("youtube")
+      ) {
+        return;
+      }
+      let data: unknown = event.data;
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          return;
+        }
+      }
+      if (!data || typeof data !== "object") return;
+      const payload = data as {
+        event?: string;
+        info?: { playerState?: number };
+      };
+      const state = payload.info?.playerState;
+      if (state === 1) {
+        setIsPlaying(true);
+        setHasStartedPlaying(true);
+      } else if (state === 2 || state === 0) {
+        setIsPlaying(false);
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [isFullscreen]);
 
   // Switch videos on the persistent YouTube iframe via postMessage so unmuted
   // playback continues seamlessly across Parts 2..N without remounting the iframe.
@@ -135,9 +193,16 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
         sendYouTubeCommand("unMute");
       }
     }
-  }, [isFullscreen, selectedIndex, videos, initialYouTubeId, isMuted, sendYouTubeCommand]);
+  }, [
+    isFullscreen,
+    selectedIndex,
+    videos,
+    initialYouTubeId,
+    isMuted,
+    sendYouTubeCommand,
+  ]);
 
-  // Lock background page scroll & jump to initial slide ONLY when opening fullscreen,
+  // Lock background page scroll while fullscreen Shorts player is open
   // so closing returns to the exact scroll position where the user left off.
   useEffect(() => {
     if (!isFullscreen) return;
@@ -146,14 +211,6 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
     const prevOverscroll = document.body.style.overscrollBehavior;
     document.body.style.overflow = "hidden";
     document.body.style.overscrollBehavior = "none";
-
-    const container = feedRef.current;
-    if (container) {
-      container.scrollTo({
-        top: (initialIndexRef.current + 1) * container.clientHeight,
-        behavior: "instant" as ScrollBehavior,
-      });
-    }
 
     return () => {
       document.body.style.overflow = prevOverflow;
@@ -170,57 +227,84 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
         closeFullscreen();
       } else if (e.key === "ArrowDown" || e.key === "PageDown") {
         e.preventDefault();
-        scrollToSlide(selectedIndex + 1);
+        navigateToPart(selectedIndex + 1);
       } else if (e.key === "ArrowUp" || e.key === "PageUp") {
         e.preventDefault();
-        scrollToSlide(selectedIndex - 1);
+        navigateToPart(selectedIndex - 1);
       } else if (e.key === "m" || e.key === "M") {
         toggleMute();
+      } else if (e.key === " ") {
+        e.preventDefault();
+        togglePlayPause();
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isFullscreen, selectedIndex, closeFullscreen, scrollToSlide, toggleMute]);
+  }, [
+    isFullscreen,
+    selectedIndex,
+    closeFullscreen,
+    navigateToPart,
+    toggleMute,
+    togglePlayPause,
+  ]);
 
-  // Detect scroll-snap slide changes:
-  // scroll index 0 = top sentinel (swipe down on Part 1 -> close)
-  // scroll index 1..videos.length = Part 1..N
-  // scroll index videos.length + 1 = bottom sentinel (swipe up on last part -> close)
-  const handleFeedScroll = useCallback(() => {
-    const container = feedRef.current;
-    if (!container || !isFullscreen) return;
-    const slideHeight = container.clientHeight;
-    if (slideHeight <= 0) return;
-
-    const scrollSlot = Math.round(container.scrollTop / slideHeight);
-    if (scrollSlot <= 0 || scrollSlot >= videos.length + 1) {
-      closeFullscreen();
-      return;
-    }
-    const videoIndex = scrollSlot - 1;
-    if (videoIndex !== selectedIndex) {
-      setSelectedIndex(videoIndex);
-      setFailedSrc(null);
-    }
-  }, [isFullscreen, videos.length, selectedIndex, closeFullscreen]);
-
-  // Direct touch swipe handler on the top/bottom bars (reliable on iOS Safari even over iframes)
-  const handleSwipeTouchStart = (e: React.TouchEvent) => {
-    touchStartYRef.current = e.touches[0]?.clientY ?? null;
+  // Unified touch swipe handlers (used on top bar, bottom bar, edge rails, and active gesture shield).
+  // Paired with touch-action: none so iOS Safari never hijacks vertical swipes for page bounce.
+  const handleGestureTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+    setIsDragging(true);
+    setDragOffsetY(0);
   };
 
-  const handleSwipeTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartYRef.current === null) return;
-    const endY = e.changedTouches[0]?.clientY ?? touchStartYRef.current;
-    const deltaY = touchStartYRef.current - endY;
-    touchStartYRef.current = null;
+  const handleGestureTouchMove = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const touch = e.touches[0];
+    if (!touch) return;
+    const rawDelta = touch.clientY - touchStartRef.current.y;
+    // Clamp live visual drag feedback to ±140px
+    const clamped = Math.max(-140, Math.min(140, rawDelta));
+    setDragOffsetY(clamped);
+  };
 
-    if (deltaY > 45) {
-      scrollToSlide(selectedIndex + 1);
-    } else if (deltaY < -45) {
-      scrollToSlide(selectedIndex - 1);
+  const handleGestureTouchEnd = (
+    e: React.TouchEvent,
+    allowTapToggle = false
+  ) => {
+    if (!touchStartRef.current) return;
+    const touch = e.changedTouches[0];
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    setIsDragging(false);
+    setDragOffsetY(0);
+
+    if (!touch) return;
+    const deltaY = start.y - touch.clientY; // positive = swipe up, negative = swipe down
+    const deltaX = Math.abs(start.x - touch.clientX);
+
+    const action = resolveVerticalSwipeAction(
+      selectedIndex,
+      videos.length,
+      deltaY,
+      45
+    );
+
+    if (action.type === "close") {
+      closeFullscreen();
+    } else if (action.type === "next" || action.type === "prev") {
+      navigateToPart(action.index);
+    } else if (allowTapToggle && Math.abs(deltaY) < 12 && deltaX < 12) {
+      togglePlayPause();
     }
+  };
+
+  const handleGestureTouchCancel = () => {
+    touchStartRef.current = null;
+    setIsDragging(false);
+    setDragOffsetY(0);
   };
 
   if (videos.length === 0) return null;
@@ -239,6 +323,8 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
         loop: true,
       })
     : null;
+  const hasMp4Err =
+    activeSource.kind === "mp4" && failedSrc === activeSource.mp4Url;
 
   return (
     <>
@@ -257,7 +343,7 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
                 {videos.length === 1 ? "Part" : "Parts"})
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-                Tap Play for full-screen Shorts mode — swipe up between parts.
+                Tap Play for full-screen Shorts mode — swipe up or down between parts.
               </p>
             </div>
           </div>
@@ -369,13 +455,15 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
           role="dialog"
           aria-modal="true"
           aria-label={`${active.chapterTitle} Short Summary Videos`}
-          className="fixed inset-0 z-[100] h-[100dvh] bg-black text-white flex flex-col"
+          className="fixed inset-0 z-[100] h-[100dvh] bg-black text-white flex flex-col select-none"
         >
-          {/* Dedicated Top Header Bar */}
+          {/* Dedicated Top Header Bar (swipeable with touch-action: none) */}
           <div
-            onTouchStart={handleSwipeTouchStart}
-            onTouchEnd={handleSwipeTouchEnd}
-            className="shrink-0 z-30 flex items-center justify-between gap-2 px-3.5 pt-[max(0.65rem,env(safe-area-inset-top))] pb-2.5 bg-slate-950 border-b border-white/10"
+            onTouchStart={handleGestureTouchStart}
+            onTouchMove={handleGestureTouchMove}
+            onTouchEnd={(e) => handleGestureTouchEnd(e, false)}
+            onTouchCancel={handleGestureTouchCancel}
+            className="shrink-0 z-30 flex items-center justify-between gap-2 px-3.5 pt-[max(0.65rem,env(safe-area-inset-top))] pb-2.5 bg-slate-950 border-b border-white/10 touch-none"
           >
             <div className="min-w-0 flex items-center gap-2">
               <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-xs font-bold shrink-0">
@@ -433,20 +521,108 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
             </div>
           </div>
 
-          {/* Middle Stage */}
+          {/* Middle Video Stage with live drag feedback + iOS-safe touch swipe zones */}
           <div className="relative flex-1 min-h-0 flex items-center justify-center bg-black overflow-hidden">
-            {/* Persistent YouTube IFrame (stays mounted across parts so unmuted playback persists on swipe) */}
-            {persistentEmbedUrl && activeSource.kind === "youtube" && (
-              <div className="relative z-10 w-full h-full max-w-[calc(100dvh*9/16)] sm:aspect-[9/16] overflow-hidden bg-slate-950">
+            <div
+              style={{
+                transform: `translate3d(0, ${dragOffsetY}px, 0)`,
+                transition: isDragging ? "none" : "transform 200ms ease-out",
+              }}
+              className="relative z-10 w-full h-full max-w-[calc(100dvh*9/16)] sm:aspect-[9/16] overflow-hidden bg-slate-950"
+            >
+              {persistentEmbedUrl && activeSource.kind === "youtube" ? (
                 <iframe
                   ref={persistentIframeRef}
                   src={persistentEmbedUrl}
+                  onLoad={registerYouTubeListener}
                   title={`${active.chapterTitle} — Part ${active.partNumber}: ${active.partTitle}`}
                   className="w-full h-full border-0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   referrerPolicy="strict-origin-when-cross-origin"
                   allowFullScreen
                 />
+              ) : hasMp4Err ? (
+                <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center gap-3 bg-slate-950 text-slate-200">
+                  <AlertCircle className="w-9 h-9 text-amber-400" />
+                  <div className="text-sm font-semibold text-white">
+                    Inline playback unavailable on this browser
+                  </div>
+                  <p className="text-xs leading-relaxed text-slate-400 max-w-xs">
+                    This part is queued for YouTube Shorts. On iOS Safari, open the MP4 directly to watch it now.
+                  </p>
+                  <a
+                    href={activeSource.externalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
+                  >
+                    <span>Open MP4</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              ) : (
+                <video
+                  key={activeSource.mp4Url}
+                  autoPlay
+                  muted={isMuted}
+                  controls
+                  playsInline
+                  preload="auto"
+                  onError={() => setFailedSrc(activeSource.mp4Url)}
+                  className="w-full h-full object-cover"
+                >
+                  <source src={activeSource.mp4Url} type="video/mp4" />
+                </video>
+              )}
+
+              {/* Active Gesture Shield: once playback starts, allows swiping up/down ANYWHERE
+                  over the video (leaving bottom 56px free for YouTube scrubber) + tap to pause/play */}
+              {activeSource.kind === "youtube" && hasStartedPlaying && (
+                <div
+                  data-testid="shorts-gesture-shield"
+                  onTouchStart={handleGestureTouchStart}
+                  onTouchMove={handleGestureTouchMove}
+                  onTouchEnd={(e) => handleGestureTouchEnd(e, true)}
+                  onTouchCancel={handleGestureTouchCancel}
+                  className="absolute inset-x-0 top-0 bottom-14 z-20 touch-none flex items-center justify-center"
+                >
+                  {!isPlaying && (
+                    <div className="w-16 h-16 rounded-full bg-black/65 backdrop-blur-sm text-white flex items-center justify-center border border-white/20">
+                      <Play className="w-7 h-7 fill-current ml-0.5" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Always-active Left & Right Edge Swipe Rails (so swiping works even BEFORE first play tap on iOS Safari) */}
+              <div
+                data-testid="shorts-swipe-rail-left"
+                onTouchStart={handleGestureTouchStart}
+                onTouchMove={handleGestureTouchMove}
+                onTouchEnd={(e) => handleGestureTouchEnd(e, false)}
+                onTouchCancel={handleGestureTouchCancel}
+                className="absolute inset-y-0 left-0 w-12 z-20 touch-none"
+              />
+              <div
+                data-testid="shorts-swipe-rail-right"
+                onTouchStart={handleGestureTouchStart}
+                onTouchMove={handleGestureTouchMove}
+                onTouchEnd={(e) => handleGestureTouchEnd(e, false)}
+                onTouchCancel={handleGestureTouchCancel}
+                className="absolute inset-y-0 right-0 w-12 z-20 touch-none"
+              />
+            </div>
+
+            {/* Drag direction hint banner while swiping */}
+            {isDragging && Math.abs(dragOffsetY) > 25 && (
+              <div className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 rounded-full bg-black/80 border border-white/15 text-xs font-semibold text-emerald-300 backdrop-blur-sm">
+                {dragOffsetY < 0
+                  ? isLastActive
+                    ? "Release to return to guide"
+                    : `Release for Part ${active.partNumber + 1}`
+                  : selectedIndex === 0
+                    ? "Release to return to guide"
+                    : `Release for Part ${active.partNumber - 1}`}
               </div>
             )}
 
@@ -454,7 +630,7 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
             <div className="absolute right-2.5 sm:right-5 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-2">
               <button
                 type="button"
-                onClick={() => scrollToSlide(selectedIndex - 1)}
+                onClick={() => navigateToPart(selectedIndex - 1)}
                 aria-label={
                   selectedIndex === 0
                     ? "Close and return to guide"
@@ -470,7 +646,7 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
                   <button
                     key={v.partSlug}
                     type="button"
-                    onClick={() => scrollToSlide(idx)}
+                    onClick={() => navigateToPart(idx)}
                     aria-label={`Jump to Part ${v.partNumber}`}
                     className={`w-1.5 rounded-full transition-all cursor-pointer ${
                       idx === selectedIndex
@@ -483,7 +659,7 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
 
               <button
                 type="button"
-                onClick={() => scrollToSlide(selectedIndex + 1)}
+                onClick={() => navigateToPart(selectedIndex + 1)}
                 aria-label={
                   isLastActive ? "Finish and return to guide" : "Next part"
                 }
@@ -491,110 +667,41 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
               >
                 <ChevronDown className="w-5 h-5" />
               </button>
-            </div>
 
-            {/* Scroll-snap feed (handles MP4 slides and outer-margin swipe gestures) */}
-            <div
-              ref={feedRef}
-              onScroll={handleFeedScroll}
-              className={`absolute inset-0 overflow-y-auto snap-y snap-mandatory overscroll-contain scroll-smooth ${
-                activeSource.kind === "youtube" ? "z-0" : "z-20"
-              }`}
-            >
-              {/* Top Sentinel Slide — Swiping down on Part 1 closes back to the guide */}
-              <div className="w-full h-full snap-start snap-always flex flex-col items-center justify-center gap-3 bg-black text-white px-6 text-center">
-                <p className="text-xs text-slate-400">Returning to your guide…</p>
+              {activeSource.kind === "youtube" && hasStartedPlaying && (
                 <button
                   type="button"
-                  onClick={closeFullscreen}
-                  className="px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
+                  onClick={togglePlayPause}
+                  aria-label={isPlaying ? "Pause video" : "Play video"}
+                  className="mt-1 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 border border-white/15 text-white flex items-center justify-center backdrop-blur-sm cursor-pointer transition-all"
                 >
-                  Back to Guide
+                  {isPlaying ? (
+                    <Pause className="w-4 h-4" />
+                  ) : (
+                    <Play className="w-4 h-4 fill-current ml-0.5" />
+                  )}
                 </button>
-              </div>
-
-              {videos.map((vid, idx) => {
-                const isActive = idx === selectedIndex;
-                const src = resolveChapterVideoSource(vid);
-                const hasMp4Err = src.kind === "mp4" && failedSrc === src.mp4Url;
-
-                return (
-                  <div
-                    key={vid.partSlug}
-                    className="relative w-full h-full snap-start snap-always flex items-center justify-center bg-transparent overflow-hidden"
-                  >
-                    {src.kind === "mp4" && isActive && (
-                      <div className="relative w-full h-full max-w-[calc(100dvh*9/16)] sm:aspect-[9/16] overflow-hidden bg-slate-950">
-                        {hasMp4Err ? (
-                          <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center gap-3 bg-slate-950 text-slate-200">
-                            <AlertCircle className="w-9 h-9 text-amber-400" />
-                            <div className="text-sm font-semibold text-white">
-                              Inline playback unavailable on this browser
-                            </div>
-                            <p className="text-xs leading-relaxed text-slate-400 max-w-xs">
-                              This part is queued for YouTube Shorts. On iOS Safari, open the MP4 directly to watch it now.
-                            </p>
-                            <a
-                              href={src.externalUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
-                            >
-                              <span>Open MP4</span>
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          </div>
-                        ) : (
-                          <video
-                            key={src.mp4Url}
-                            autoPlay
-                            muted={isMuted}
-                            controls
-                            playsInline
-                            preload="auto"
-                            onError={() => setFailedSrc(src.mp4Url)}
-                            className="w-full h-full object-cover"
-                          >
-                            <source src={src.mp4Url} type="video/mp4" />
-                          </video>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* End Sentinel Slide — Swiping up past the last part closes back to the guide */}
-              <div className="w-full h-full snap-start snap-always flex flex-col items-center justify-center gap-3 bg-black text-white px-6 text-center">
-                <CheckCircle2 className="w-10 h-10 text-emerald-400" />
-                <div className="text-base font-bold">
-                  All {videos.length} parts completed
-                </div>
-                <p className="text-xs text-slate-400">Returning to your guide…</p>
-                <button
-                  type="button"
-                  onClick={closeFullscreen}
-                  className="mt-2 px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold cursor-pointer"
-                >
-                  Back to Guide
-                </button>
-              </div>
+              )}
             </div>
           </div>
 
-          {/* Dedicated Bottom Swipe Bar */}
+          {/* Dedicated Bottom Swipe Bar (large thumb-friendly touch-action: none swipe zone) */}
           <div
-            onTouchStart={handleSwipeTouchStart}
-            onTouchEnd={handleSwipeTouchEnd}
-            className="shrink-0 z-30 px-4 pt-2.5 pb-[max(0.85rem,env(safe-area-inset-bottom))] bg-slate-950 border-t border-white/10 flex flex-col items-center text-center gap-2"
+            data-testid="shorts-bottom-swipe-bar"
+            onTouchStart={handleGestureTouchStart}
+            onTouchMove={handleGestureTouchMove}
+            onTouchEnd={(e) => handleGestureTouchEnd(e, false)}
+            onTouchCancel={handleGestureTouchCancel}
+            className="shrink-0 z-30 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] bg-slate-950 border-t border-white/10 flex flex-col items-center text-center gap-2 touch-none"
           >
+            <div className="w-10 h-1 rounded-full bg-white/25 mb-0.5" />
             <div className="text-xs sm:text-sm font-semibold text-white/95 line-clamp-1 max-w-md">
               {active.partTitle}
             </div>
 
             <button
               type="button"
-              onClick={() => scrollToSlide(selectedIndex + 1)}
+              onClick={() => navigateToPart(selectedIndex + 1)}
               className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/12 hover:bg-white/20 text-emerald-300 text-xs font-semibold cursor-pointer transition-colors"
             >
               <span>
