@@ -34,23 +34,25 @@ function formatDuration(sec: number): string {
 export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [initialYouTubeId, setInitialYouTubeId] = useState<string | null>(null);
 
   const feedRef = useRef<HTMLDivElement | null>(null);
-  const activeIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const persistentIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const loadedYouTubeIdRef = useRef<string | null>(null);
   const touchStartYRef = useRef<number | null>(null);
   const initialIndexRef = useRef(0);
   const isClosingRef = useRef(false);
 
-  const sendYouTubeCommand = useCallback((func: string) => {
-    const win = activeIframeRef.current?.contentWindow;
-    if (!win) return;
-    win.postMessage(
-      JSON.stringify({ event: "command", func, args: [] }),
-      "*"
-    );
-  }, []);
+  const sendYouTubeCommand = useCallback(
+    (func: string, args: unknown[] = []) => {
+      const win = persistentIframeRef.current?.contentWindow;
+      if (!win) return;
+      win.postMessage(JSON.stringify({ event: "command", func, args }), "*");
+    },
+    []
+  );
 
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {
@@ -66,20 +68,29 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
   const closeFullscreen = useCallback(() => {
     if (isClosingRef.current) return;
     isClosingRef.current = true;
+    loadedYouTubeIdRef.current = null;
+    setInitialYouTubeId(null);
     setIsFullscreen(false);
     setTimeout(() => {
       isClosingRef.current = false;
     }, 150);
   }, []);
 
-  const openFullscreenAt = useCallback((index: number) => {
-    isClosingRef.current = false;
-    initialIndexRef.current = index;
-    setSelectedIndex(index);
-    setIsMuted(true);
-    setFailedSrc(null);
-    setIsFullscreen(true);
-  }, []);
+  const openFullscreenAt = useCallback(
+    (index: number) => {
+      isClosingRef.current = false;
+      initialIndexRef.current = index;
+      const target = videos[index] ?? videos[0];
+      const ytId = target ? resolveChapterVideoSource(target).youtubeId : null;
+      loadedYouTubeIdRef.current = ytId;
+      setInitialYouTubeId(ytId);
+      setSelectedIndex(index);
+      setIsMuted(false);
+      setFailedSrc(null);
+      setIsFullscreen(true);
+    },
+    [videos]
+  );
 
   const scrollToSlide = useCallback(
     (targetIndex: number) => {
@@ -88,7 +99,6 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
         return;
       }
       setSelectedIndex(targetIndex);
-      setIsMuted(true);
       setFailedSrc(null);
       const container = feedRef.current;
       if (container) {
@@ -101,6 +111,31 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
     },
     [videos.length, closeFullscreen]
   );
+
+  // Switch videos on the persistent YouTube iframe via postMessage so unmuted
+  // playback continues seamlessly across Parts 2..N without remounting the iframe.
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const current = videos[selectedIndex];
+    if (!current) return;
+    const nextYtId = resolveChapterVideoSource(current).youtubeId;
+
+    if (!nextYtId) return;
+
+    if (!initialYouTubeId) {
+      loadedYouTubeIdRef.current = nextYtId;
+      setInitialYouTubeId(nextYtId);
+      return;
+    }
+
+    if (loadedYouTubeIdRef.current !== nextYtId) {
+      loadedYouTubeIdRef.current = nextYtId;
+      sendYouTubeCommand("loadVideoById", [nextYtId]);
+      if (!isMuted) {
+        sendYouTubeCommand("unMute");
+      }
+    }
+  }, [isFullscreen, selectedIndex, videos, initialYouTubeId, isMuted, sendYouTubeCommand]);
 
   // Lock background page scroll & jump to initial slide ONLY when opening fullscreen,
   // so closing returns to the exact scroll position where the user left off.
@@ -166,7 +201,6 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
     const videoIndex = scrollSlot - 1;
     if (videoIndex !== selectedIndex) {
       setSelectedIndex(videoIndex);
-      setIsMuted(true);
       setFailedSrc(null);
     }
   }, [isFullscreen, videos.length, selectedIndex, closeFullscreen]);
@@ -197,6 +231,14 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
     ? getYouTubeThumbnailUrl(activeSource.youtubeId)
     : null;
   const isLastActive = selectedIndex === videos.length - 1;
+  const persistentEmbedUrl = initialYouTubeId
+    ? getYouTubeEmbedUrl(initialYouTubeId, {
+        autoplay: true,
+        mute: false,
+        enableJsApi: true,
+        loop: true,
+      })
+    : null;
 
   return (
     <>
@@ -329,7 +371,7 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
           aria-label={`${active.chapterTitle} Short Summary Videos`}
           className="fixed inset-0 z-[100] h-[100dvh] bg-black text-white flex flex-col"
         >
-          {/* Dedicated Top Header Bar (no overlap with YouTube title overlay) */}
+          {/* Dedicated Top Header Bar */}
           <div
             onTouchStart={handleSwipeTouchStart}
             onTouchEnd={handleSwipeTouchEnd}
@@ -391,8 +433,23 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
             </div>
           </div>
 
-          {/* Middle Scroll-Snap Video Stage */}
-          <div className="relative flex-1 min-h-0">
+          {/* Middle Stage */}
+          <div className="relative flex-1 min-h-0 flex items-center justify-center bg-black overflow-hidden">
+            {/* Persistent YouTube IFrame (stays mounted across parts so unmuted playback persists on swipe) */}
+            {persistentEmbedUrl && activeSource.kind === "youtube" && (
+              <div className="relative z-10 w-full h-full max-w-[calc(100dvh*9/16)] sm:aspect-[9/16] overflow-hidden bg-slate-950">
+                <iframe
+                  ref={persistentIframeRef}
+                  src={persistentEmbedUrl}
+                  title={`${active.chapterTitle} — Part ${active.partNumber}: ${active.partTitle}`}
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  allowFullScreen
+                />
+              </div>
+            )}
+
             {/* Right-side Shorts Navigation Arrows */}
             <div className="absolute right-2.5 sm:right-5 top-1/2 -translate-y-1/2 z-30 flex flex-col items-center gap-2">
               <button
@@ -436,10 +493,13 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
               </button>
             </div>
 
+            {/* Scroll-snap feed (handles MP4 slides and outer-margin swipe gestures) */}
             <div
               ref={feedRef}
               onScroll={handleFeedScroll}
-              className="w-full h-full overflow-y-auto snap-y snap-mandatory overscroll-contain scroll-smooth"
+              className={`absolute inset-0 overflow-y-auto snap-y snap-mandatory overscroll-contain scroll-smooth ${
+                activeSource.kind === "youtube" ? "z-0" : "z-20"
+              }`}
             >
               {/* Top Sentinel Slide — Swiping down on Part 1 closes back to the guide */}
               <div className="w-full h-full snap-start snap-always flex flex-col items-center justify-center gap-3 bg-black text-white px-6 text-center">
@@ -456,38 +516,16 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
               {videos.map((vid, idx) => {
                 const isActive = idx === selectedIndex;
                 const src = resolveChapterVideoSource(vid);
-                const ytAutoplayUrl = src.youtubeId
-                  ? getYouTubeEmbedUrl(src.youtubeId, {
-                      autoplay: true,
-                      mute: true,
-                      enableJsApi: true,
-                      loop: true,
-                    })
-                  : null;
-                const thumbUrl = src.youtubeId
-                  ? getYouTubeThumbnailUrl(src.youtubeId)
-                  : null;
                 const hasMp4Err = src.kind === "mp4" && failedSrc === src.mp4Url;
 
                 return (
                   <div
                     key={vid.partSlug}
-                    className="relative w-full h-full snap-start snap-always flex items-center justify-center bg-black overflow-hidden"
+                    className="relative w-full h-full snap-start snap-always flex items-center justify-center bg-transparent overflow-hidden"
                   >
-                    <div className="relative w-full h-full max-w-[calc(100dvh*9/16)] sm:aspect-[9/16] overflow-hidden bg-slate-950">
-                      {isActive ? (
-                        src.kind === "youtube" && ytAutoplayUrl ? (
-                          <iframe
-                            ref={activeIframeRef}
-                            key={ytAutoplayUrl}
-                            src={ytAutoplayUrl}
-                            title={`${vid.chapterTitle} — Part ${vid.partNumber}: ${vid.partTitle}`}
-                            className="w-full h-full border-0"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                            referrerPolicy="strict-origin-when-cross-origin"
-                            allowFullScreen
-                          />
-                        ) : hasMp4Err ? (
+                    {src.kind === "mp4" && isActive && (
+                      <div className="relative w-full h-full max-w-[calc(100dvh*9/16)] sm:aspect-[9/16] overflow-hidden bg-slate-950">
+                        {hasMp4Err ? (
                           <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center gap-3 bg-slate-950 text-slate-200">
                             <AlertCircle className="w-9 h-9 text-amber-400" />
                             <div className="text-sm font-semibold text-white">
@@ -519,18 +557,9 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
                           >
                             <source src={src.mp4Url} type="video/mp4" />
                           </video>
-                        )
-                      ) : thumbUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={thumbUrl}
-                          alt={vid.partTitle}
-                          className="w-full h-full object-cover opacity-50"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-slate-950" />
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -553,7 +582,7 @@ export function ChapterVideos({ videos }: { videos: ChapterVideoItem[] }) {
             </div>
           </div>
 
-          {/* Dedicated Bottom Swipe Bar (zero overlap with video captions) */}
+          {/* Dedicated Bottom Swipe Bar */}
           <div
             onTouchStart={handleSwipeTouchStart}
             onTouchEnd={handleSwipeTouchEnd}
