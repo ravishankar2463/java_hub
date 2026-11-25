@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 36 / 116 (31.0%)
-- **Total Shorts Rendered:** 150
+- **Chapters Completed:** 37 / 116 (31.9%)
+- **Total Shorts Rendered:** 154
 - **Last Updated:** 2026-11-25
 
 ---
@@ -96,7 +96,7 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **NoSQL Databases** (level-7/nosql-databases)
 - [x] **Full-Text Search with Elasticsearch** (level-7/full-text-search-with-elasticsearch) — 5 Shorts: [Part 1 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-1-inverted-index-basics.mp4) · [Part 2 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-2-bm25-and-segments.mp4) · [Part 3 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-3-spring-data-mapping.mp4) · [Part 4 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-4-bulk-indexing.mp4) · [Part 5 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-7/level-7__full-text-search-with-elasticsearch__part-5-cdc-sync.mp4)
 
-## Level 8: Enterprise Spring Boot 3 Deep Dive (4/9)
+## Level 8: Enterprise Spring Boot 3 Deep Dive (5/9)
 
 - [x] **Build Tools** (level-8/build-tools) — 4 Shorts: [Part 1 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__build-tools__part-1-maven-gradle-paradigms.mp4) · [Part 2 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__build-tools__part-2-dependency-resolution.mp4) · [Part 3 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__build-tools__part-3-gradle-optimization.mp4) · [Part 4 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__build-tools__part-4-final-checklist.mp4)
 - [ ] **Spring Core Internals** (level-8/spring-core-internals)
@@ -105,7 +105,7 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **Spring Data JPA** (level-8/spring-data-jpa)
 - [x] **Custom Spring Boot Starters & Auto-Configurations** (level-8/custom-spring-boot-starters-auto-configurations) — 4 Shorts: [Part 1 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__custom-spring-boot-starters-auto-configurations__part-1-starter-anatomy.mp4) · [Part 2 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__custom-spring-boot-starters-auto-configurations__part-2-conditional-logic.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__custom-spring-boot-starters-auto-configurations__part-3-type-safe-config.mp4) · [Part 4 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__custom-spring-boot-starters-auto-configurations__part-4-testing-starters.mp4)
 - [ ] **Spring Batch: Chunk Processing** (level-8/spring-batch-chunk-processing)
-- [ ] **Spring Events, Caching, & Scheduling** (level-8/spring-events-caching-scheduling)
+- [x] **Spring Events, Caching, & Scheduling** (level-8/spring-events-caching-scheduling) — 4 Shorts: [Part 1 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-1-spring-events.mp4) · [Part 2 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-2-transactional-events.mp4) · [Part 3 (42s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-3-caching.mp4) · [Part 4 (39s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-4-scheduling.mp4)
 - [x] **Automated Testing** (level-8/automated-testing) — 4 Shorts: [Part 1 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-1-testing-trophy.mp4) · [Part 2 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-2-mocking-and-slices.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-3-testcontainers.mp4) · [Part 4 (41s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-4-transactional-traps.mp4)
 
 ## Level 9: Enterprise Security & Advanced API Protocols (0/7)

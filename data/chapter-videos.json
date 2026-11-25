@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T00:22:45.199Z",
-  "totalVideos": 150,
+  "updatedAt": "2026-11-25T00:39:43.008Z",
+  "totalVideos": 154,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -2701,6 +2701,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/custom-spring-boot-starters-auto-configurations",
       "branchName": "topic/level-8/custom-spring-boot-starters-auto-configurations",
       "renderedAt": "2026-11-25T00:22:45.198Z"
+    },
+    {
+      "chapterId": "level-8/spring-events-caching-scheduling",
+      "level": "level-8",
+      "slug": "spring-events-caching-scheduling",
+      "chapterTitle": "Spring Events, Caching, & Scheduling",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-spring-events",
+      "partTitle": "Decoupling with Spring Events",
+      "format": "shorts",
+      "durationSec": 43,
+      "file": "level-8/spring-events-caching-scheduling/part-1-spring-events.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-1-spring-events.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/spring-events-caching-scheduling",
+      "branchName": "topic/level-8/spring-events-caching-scheduling",
+      "renderedAt": "2026-11-25T00:36:19.370Z"
+    },
+    {
+      "chapterId": "level-8/spring-events-caching-scheduling",
+      "level": "level-8",
+      "slug": "spring-events-caching-scheduling",
+      "chapterTitle": "Spring Events, Caching, & Scheduling",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-transactional-events",
+      "partTitle": "Transactional Event Listeners",
+      "format": "shorts",
+      "durationSec": 41,
+      "file": "level-8/spring-events-caching-scheduling/part-2-transactional-events.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-2-transactional-events.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/spring-events-caching-scheduling",
+      "branchName": "topic/level-8/spring-events-caching-scheduling",
+      "renderedAt": "2026-11-25T00:37:28.840Z"
+    },
+    {
+      "chapterId": "level-8/spring-events-caching-scheduling",
+      "level": "level-8",
+      "slug": "spring-events-caching-scheduling",
+      "chapterTitle": "Spring Events, Caching, & Scheduling",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-caching",
+      "partTitle": "Declarative Caching & Stampedes",
+      "format": "shorts",
+      "durationSec": 41.7,
+      "file": "level-8/spring-events-caching-scheduling/part-3-caching.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-3-caching.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/spring-events-caching-scheduling",
+      "branchName": "topic/level-8/spring-events-caching-scheduling",
+      "renderedAt": "2026-11-25T00:38:37.832Z"
+    },
+    {
+      "chapterId": "level-8/spring-events-caching-scheduling",
+      "level": "level-8",
+      "slug": "spring-events-caching-scheduling",
+      "chapterTitle": "Spring Events, Caching, & Scheduling",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-scheduling",
+      "partTitle": "Clustered Scheduling with ShedLock",
+      "format": "shorts",
+      "durationSec": 38.7,
+      "file": "level-8/spring-events-caching-scheduling/part-4-scheduling.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__spring-events-caching-scheduling__part-4-scheduling.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/spring-events-caching-scheduling",
+      "branchName": "topic/level-8/spring-events-caching-scheduling",
+      "renderedAt": "2026-11-25T00:39:43.007Z"
     }
   ]
 }
