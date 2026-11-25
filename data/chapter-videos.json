@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T00:39:43.008Z",
-  "totalVideos": 154,
+  "updatedAt": "2026-11-25T00:46:59.032Z",
+  "totalVideos": 158,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -2773,6 +2773,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/spring-events-caching-scheduling",
       "branchName": "topic/level-8/spring-events-caching-scheduling",
       "renderedAt": "2026-11-25T00:39:43.007Z"
+    },
+    {
+      "chapterId": "level-9/graphql-with-netflix-dgs",
+      "level": "level-9",
+      "slug": "graphql-with-netflix-dgs",
+      "chapterTitle": "GraphQL with Netflix DGS",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-schema-first",
+      "partTitle": "Schema-First API Contracts",
+      "format": "shorts",
+      "durationSec": 53.2,
+      "file": "level-9/graphql-with-netflix-dgs/part-1-schema-first.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__graphql-with-netflix-dgs__part-1-schema-first.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/graphql-with-netflix-dgs",
+      "branchName": "topic/level-9/graphql-with-netflix-dgs",
+      "renderedAt": "2026-11-25T00:42:58.204Z"
+    },
+    {
+      "chapterId": "level-9/graphql-with-netflix-dgs",
+      "level": "level-9",
+      "slug": "graphql-with-netflix-dgs",
+      "chapterTitle": "GraphQL with Netflix DGS",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-resolvers",
+      "partTitle": "Resolving Data & Subscriptions",
+      "format": "shorts",
+      "durationSec": 52.2,
+      "file": "level-9/graphql-with-netflix-dgs/part-2-resolvers.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__graphql-with-netflix-dgs__part-2-resolvers.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/graphql-with-netflix-dgs",
+      "branchName": "topic/level-9/graphql-with-netflix-dgs",
+      "renderedAt": "2026-11-25T00:44:23.163Z"
+    },
+    {
+      "chapterId": "level-9/graphql-with-netflix-dgs",
+      "level": "level-9",
+      "slug": "graphql-with-netflix-dgs",
+      "chapterTitle": "GraphQL with Netflix DGS",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-dataloader",
+      "partTitle": "Solving the N+1 Problem",
+      "format": "shorts",
+      "durationSec": 48,
+      "file": "level-9/graphql-with-netflix-dgs/part-3-dataloader.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__graphql-with-netflix-dgs__part-3-dataloader.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/graphql-with-netflix-dgs",
+      "branchName": "topic/level-9/graphql-with-netflix-dgs",
+      "renderedAt": "2026-11-25T00:45:41.300Z"
+    },
+    {
+      "chapterId": "level-9/graphql-with-netflix-dgs",
+      "level": "level-9",
+      "slug": "graphql-with-netflix-dgs",
+      "chapterTitle": "GraphQL with Netflix DGS",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-federation-security",
+      "partTitle": "Federation & Security",
+      "format": "shorts",
+      "durationSec": 47.4,
+      "file": "level-9/graphql-with-netflix-dgs/part-4-federation-security.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-9/level-9__graphql-with-netflix-dgs__part-4-federation-security.mp4",
+      "releaseTag": "videos-level-9",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-9/graphql-with-netflix-dgs",
+      "branchName": "topic/level-9/graphql-with-netflix-dgs",
+      "renderedAt": "2026-11-25T00:46:59.031Z"
     }
   ]
 }
