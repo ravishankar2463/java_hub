@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 53 / 116 (45.7%)
-- **Total Shorts Rendered:** 219
+- **Chapters Completed:** 54 / 116 (46.6%)
+- **Total Shorts Rendered:** 223
 - **Last Updated:** 2026-11-25
 
 ---
@@ -159,9 +159,9 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **Production Metrics with Micrometer and Prometheus** (level-13/production-metrics-with-micrometer-and-prometheus)
 - [ ] **Zero-Downtime Deployments: Blue-Green and Canary** (level-13/zero-downtime-deployments-blue-green-and-canary)
 
-## Level 14: Enterprise Java & AI Orchestration (0/6)
+## Level 14: Enterprise Java & AI Orchestration (1/6)
 
-- [ ] **The AI Landscape for Java: Spring AI** (level-14/the-ai-landscape-for-java-spring-ai)
+- [x] **The AI Landscape for Java: Spring AI** (level-14/the-ai-landscape-for-java-spring-ai) — 4 Shorts: [Part 1 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__the-ai-landscape-for-java-spring-ai__part-1-the-spring-ai-advantage.mp4) · [Part 2 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__the-ai-landscape-for-java-spring-ai__part-2-structured-output.mp4) · [Part 3 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__the-ai-landscape-for-java-spring-ai__part-3-local-ollama.mp4) · [Part 4 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__the-ai-landscape-for-java-spring-ai__part-4-production-guardrails.mp4)
 - [ ] **LLM Integration and Structured Records** (level-14/llm-integration-and-structured-records)
 - [ ] **Vector Databases and Semantic Search** (level-14/vector-databases-and-semantic-search)
 - [ ] **Retrieval-Augmented Generation (RAG)** (level-14/retrieval-augmented-generation-rag)

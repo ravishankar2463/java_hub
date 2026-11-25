@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T03:18:56.133Z",
-  "totalVideos": 219,
+  "updatedAt": "2026-11-25T03:36:39.901Z",
+  "totalVideos": 223,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -3943,6 +3943,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-13/system-design-observability",
       "branchName": "topic/level-13/system-design-observability",
       "renderedAt": "2026-11-25T03:18:56.131Z"
+    },
+    {
+      "chapterId": "level-14/the-ai-landscape-for-java-spring-ai",
+      "level": "level-14",
+      "slug": "the-ai-landscape-for-java-spring-ai",
+      "chapterTitle": "The AI Landscape for Java: Spring AI",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-the-spring-ai-advantage",
+      "partTitle": "Why Spring AI Beats Hand-Rolled Clients",
+      "format": "shorts",
+      "durationSec": 57.1,
+      "file": "level-14/the-ai-landscape-for-java-spring-ai/part-1-the-spring-ai-advantage.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__the-ai-landscape-for-java-spring-ai__part-1-the-spring-ai-advantage.mp4",
+      "releaseTag": "videos-level-14",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-14/the-ai-landscape-for-java-spring-ai",
+      "branchName": "topic/level-14/the-ai-landscape-for-java-spring-ai",
+      "renderedAt": "2026-11-25T03:32:37.365Z"
+    },
+    {
+      "chapterId": "level-14/the-ai-landscape-for-java-spring-ai",
+      "level": "level-14",
+      "slug": "the-ai-landscape-for-java-spring-ai",
+      "chapterTitle": "The AI Landscape for Java: Spring AI",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-structured-output",
+      "partTitle": "Type-Safe AI with Structured Output",
+      "format": "shorts",
+      "durationSec": 51.5,
+      "file": "level-14/the-ai-landscape-for-java-spring-ai/part-2-structured-output.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__the-ai-landscape-for-java-spring-ai__part-2-structured-output.mp4",
+      "releaseTag": "videos-level-14",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-14/the-ai-landscape-for-java-spring-ai",
+      "branchName": "topic/level-14/the-ai-landscape-for-java-spring-ai",
+      "renderedAt": "2026-11-25T03:34:03.621Z"
+    },
+    {
+      "chapterId": "level-14/the-ai-landscape-for-java-spring-ai",
+      "level": "level-14",
+      "slug": "the-ai-landscape-for-java-spring-ai",
+      "chapterTitle": "The AI Landscape for Java: Spring AI",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-local-ollama",
+      "partTitle": "Local AI Development with Ollama",
+      "format": "shorts",
+      "durationSec": 48.4,
+      "file": "level-14/the-ai-landscape-for-java-spring-ai/part-3-local-ollama.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__the-ai-landscape-for-java-spring-ai__part-3-local-ollama.mp4",
+      "releaseTag": "videos-level-14",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-14/the-ai-landscape-for-java-spring-ai",
+      "branchName": "topic/level-14/the-ai-landscape-for-java-spring-ai",
+      "renderedAt": "2026-11-25T03:35:22.893Z"
+    },
+    {
+      "chapterId": "level-14/the-ai-landscape-for-java-spring-ai",
+      "level": "level-14",
+      "slug": "the-ai-landscape-for-java-spring-ai",
+      "chapterTitle": "The AI Landscape for Java: Spring AI",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-production-guardrails",
+      "partTitle": "Production Guardrails & Observability",
+      "format": "shorts",
+      "durationSec": 46.9,
+      "file": "level-14/the-ai-landscape-for-java-spring-ai/part-4-production-guardrails.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-14/level-14__the-ai-landscape-for-java-spring-ai__part-4-production-guardrails.mp4",
+      "releaseTag": "videos-level-14",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-14/the-ai-landscape-for-java-spring-ai",
+      "branchName": "topic/level-14/the-ai-landscape-for-java-spring-ai",
+      "renderedAt": "2026-11-25T03:36:39.900Z"
     }
   ]
 }
