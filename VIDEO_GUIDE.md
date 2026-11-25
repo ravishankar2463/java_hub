@@ -13,7 +13,10 @@ java_hub/content/roadmap/level-<N>/<slug>.md     (Source of truth)
 java_hub_resources/video-studio/storyboards/level-<N>/<slug>.json
         │
         ▼  Kokoro-82M (local ONNX TTS) + Procedural SFX + Remotion (9:16)
-java_hub_resources/videos/level-<N>/<slug>/part-*.mp4
+java_hub_resources/videos/level-<N>/<slug>/part-*.mp4   (gitignored local render)
+        │
+        ▼  --publish-release uploads to GitHub Releases (videos-level-<N>)
+https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-<N>/...
 java_hub_resources/videos/manifest.json
         │
         ▼  Auto-synced to website
@@ -38,14 +41,17 @@ Follow this 5-step checklist for every chapter in [`VIDEO_PROGRESS.md`](./VIDEO_
    - `terminal` — Simulated bash terminal with typed commands & bytecode/output reveals
    - `compare` — Stacked `❌ BUG / ✅ SAFE` or before/after comparison cards
    - `cta` — Recap checklist, `git checkout topic/<level>/<slug>` lab command, and next-part teaser
-4. **Render locally** (generates Kokoro-82M voiceover, procedural SFX, `.mp4` files, updates `videos/manifest.json`, and syncs `java_hub/data/chapter-videos.json`):
+4. **Render locally & publish to GitHub Releases** (generates Kokoro-82M voiceover, procedural SFX, `.mp4` files, uploads MP4 assets to the `videos-level-<N>` GitHub Release, updates `videos/manifest.json`, and syncs `java_hub/data/chapter-videos.json`):
    ```powershell
    cd ..\java_hub_resources\video-studio
-   npm run generate -- --chapter level-<N>/<slug>
+   npm run generate -- --chapter level-<N>/<slug> --publish-release
    ```
-5. **Verify, update [`VIDEO_PROGRESS.md`](./VIDEO_PROGRESS.md), and push both repos**:
-   - Check off the chapter in `VIDEO_PROGRESS.md` with its part count and links.
-   - Commit & push `java_hub_resources` (storyboards + MP4s + `videos/manifest.json`).
+5. **Verify, regenerate [`VIDEO_PROGRESS.md`](./VIDEO_PROGRESS.md), and push both repos**:
+   - Regenerate `VIDEO_PROGRESS.md` from `data/roadmap.ts` and `data/chapter-videos.json`:
+     ```powershell
+     node --experimental-strip-types scripts/update-video-progress.mjs
+     ```
+   - Commit & push `java_hub_resources` (storyboards + `videos/manifest.json`; `.mp4` files stay gitignored and hosted on GitHub Releases).
    - Commit & push `java_hub` (`data/chapter-videos.json` + `VIDEO_PROGRESS.md`).
 
 ---
@@ -70,7 +76,10 @@ cd ..\java_hub_resources\video-studio
 # List all 116 chapters and see which have storyboards
 npm run list
 
-# Render all parts of a chapter
+# Render all parts of a chapter and upload to GitHub Releases
+npm run generate -- --chapter level-0/anatomy-of-a-java-program --publish-release
+
+# Render all parts locally without uploading
 npm run generate -- --chapter level-0/anatomy-of-a-java-program
 
 # Render only Part 1
@@ -78,4 +87,8 @@ npm run generate -- --chapter level-0/anatomy-of-a-java-program --part 1
 
 # Open interactive Remotion preview in browser
 npm run studio
+
+# Regenerate VIDEO_PROGRESS.md in java_hub
+cd ..\..\java_hub
+node --experimental-strip-types scripts/update-video-progress.mjs
 ```
