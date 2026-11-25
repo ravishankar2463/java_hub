@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-25T02:06:37.516Z",
-  "totalVideos": 190,
+  "updatedAt": "2026-11-25T02:13:44.709Z",
+  "totalVideos": 194,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -3421,6 +3421,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-11/api-gateways-and-service-discovery",
       "branchName": "topic/level-11/api-gateways-and-service-discovery",
       "renderedAt": "2026-11-25T02:06:37.514Z"
+    },
+    {
+      "chapterId": "level-11/contract-testing-with-pact",
+      "level": "level-11",
+      "slug": "contract-testing-with-pact",
+      "chapterTitle": "Contract Testing with Pact",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-the-contract-gap",
+      "partTitle": "Why Unit Tests Fail Microservices",
+      "format": "shorts",
+      "durationSec": 55,
+      "file": "level-11/contract-testing-with-pact/part-1-the-contract-gap.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-1-the-contract-gap.mp4",
+      "releaseTag": "videos-level-11",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-11/contract-testing-with-pact",
+      "branchName": "topic/level-11/contract-testing-with-pact",
+      "renderedAt": "2026-11-25T02:09:39.702Z"
+    },
+    {
+      "chapterId": "level-11/contract-testing-with-pact",
+      "level": "level-11",
+      "slug": "contract-testing-with-pact",
+      "chapterTitle": "Contract Testing with Pact",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-provider-verification",
+      "partTitle": "Provider Verification & State Management",
+      "format": "shorts",
+      "durationSec": 51.6,
+      "file": "level-11/contract-testing-with-pact/part-2-provider-verification.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-2-provider-verification.mp4",
+      "releaseTag": "videos-level-11",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-11/contract-testing-with-pact",
+      "branchName": "topic/level-11/contract-testing-with-pact",
+      "renderedAt": "2026-11-25T02:11:04.177Z"
+    },
+    {
+      "chapterId": "level-11/contract-testing-with-pact",
+      "level": "level-11",
+      "slug": "contract-testing-with-pact",
+      "chapterTitle": "Contract Testing with Pact",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-async-contracts",
+      "partTitle": "Kafka & Message Contracts",
+      "format": "shorts",
+      "durationSec": 52.9,
+      "file": "level-11/contract-testing-with-pact/part-3-async-contracts.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-3-async-contracts.mp4",
+      "releaseTag": "videos-level-11",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-11/contract-testing-with-pact",
+      "branchName": "topic/level-11/contract-testing-with-pact",
+      "renderedAt": "2026-11-25T02:12:30.275Z"
+    },
+    {
+      "chapterId": "level-11/contract-testing-with-pact",
+      "level": "level-11",
+      "slug": "contract-testing-with-pact",
+      "chapterTitle": "Contract Testing with Pact",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-ci-cd-gating",
+      "partTitle": "CI/CD Gating with Pact Broker",
+      "format": "shorts",
+      "durationSec": 45.1,
+      "file": "level-11/contract-testing-with-pact/part-4-ci-cd-gating.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-4-ci-cd-gating.mp4",
+      "releaseTag": "videos-level-11",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-11/contract-testing-with-pact",
+      "branchName": "topic/level-11/contract-testing-with-pact",
+      "renderedAt": "2026-11-25T02:13:44.708Z"
     }
   ]
 }

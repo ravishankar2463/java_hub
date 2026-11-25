@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 46 / 116 (39.7%)
-- **Total Shorts Rendered:** 190
+- **Chapters Completed:** 47 / 116 (40.5%)
+- **Total Shorts Rendered:** 194
 - **Last Updated:** 2026-11-25
 
 ---
@@ -130,7 +130,7 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **Resilient Event Processing and Dead Letter Queues** (level-10/resilient-event-processing-and-dead-letter-queues)
 - [ ] **Stateful Stream Processing with Kafka Streams** (level-10/stateful-stream-processing-with-kafka-streams)
 
-## Level 11: Distributed Systems & Microservices Patterns (1/8)
+## Level 11: Distributed Systems & Microservices Patterns (2/8)
 
 - [ ] **Microservice Principles** (level-11/microservice-principles)
 - [x] **API Gateways and Service Discovery** (level-11/api-gateways-and-service-discovery) — 4 Shorts: [Part 1 (56s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__api-gateways-and-service-discovery__part-1-gateway-anatomy.mp4) · [Part 2 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__api-gateways-and-service-discovery__part-2-rate-limiting.mp4) · [Part 3 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__api-gateways-and-service-discovery__part-3-discovery-models.mp4) · [Part 4 (49s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__api-gateways-and-service-discovery__part-4-tracing-and-pitfalls.mp4)
@@ -139,7 +139,7 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [ ] **Distributed Transactions** (level-11/distributed-transactions)
 - [ ] **Long-Running Workflows with Temporal** (level-11/long-running-workflows-with-temporal)
 - [ ] **Distributed Rate Limiting and Throttling** (level-11/distributed-rate-limiting-and-throttling)
-- [ ] **Contract Testing with Pact** (level-11/contract-testing-with-pact)
+- [x] **Contract Testing with Pact** (level-11/contract-testing-with-pact) — 4 Shorts: [Part 1 (55s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-1-the-contract-gap.mp4) · [Part 2 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-2-provider-verification.mp4) · [Part 3 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-3-async-contracts.mp4) · [Part 4 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-11/level-11__contract-testing-with-pact__part-4-ci-cd-gating.mp4)
 
 ## Level 12: Cloud-Native, Kubernetes & DevOps (0/6)
 
