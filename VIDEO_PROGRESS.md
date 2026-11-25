@@ -6,8 +6,8 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 
 ## Overall Progress
 
-- **Chapters Completed:** 62 / 116 (53.4%)
-- **Total Shorts Rendered:** 257
+- **Chapters Completed:** 63 / 116 (54.3%)
+- **Total Shorts Rendered:** 262
 - **Last Updated:** 2026-11-25
 
 ---
@@ -35,13 +35,13 @@ See [VIDEO_GUIDE.md](./VIDEO_GUIDE.md) for the exact workflow, beat types, and r
 - [x] **Advanced Class Design** (level-1/advanced-class-design) — 4 Shorts: [Part 1 (57s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__advanced-class-design__part-1-static-vs-inner-classes.mp4) · [Part 2 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__advanced-class-design__part-2-local-and-anonymous-classes.mp4) · [Part 3 (58s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__advanced-class-design__part-3-java-16-records-and-defensive-copying.mp4) · [Part 4 (65s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__advanced-class-design__part-4-serialization-and-record-patterns.mp4)
 - [x] **Sealed Classes and Pattern Matching** (level-1/sealed-classes-and-pattern-matching) — 4 Shorts: [Part 1 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__sealed-classes-and-pattern-matching__part-1-the-sealed-revolution.mp4) · [Part 2 (55s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__sealed-classes-and-pattern-matching__part-2-exhaustive-pattern-matching.mp4) · [Part 3 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__sealed-classes-and-pattern-matching__part-3-jvm-internals.mp4) · [Part 4 (61s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-1/level-1__sealed-classes-and-pattern-matching__part-4-visitor-vs-sealed.mp4)
 
-## Level 2: The Core Master (Part 1) (2/7)
+## Level 2: The Core Master (Part 1) (3/7)
 
 - [x] **Exception Handling** (level-2/exception-handling) — 4 Shorts: [Part 1 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__exception-handling__part-1-throwable-hierarchy.mp4) · [Part 2 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__exception-handling__part-2-try-catch-finally.mp4) · [Part 3 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__exception-handling__part-3-try-with-resources.mp4) · [Part 4 (43s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__exception-handling__part-4-performance-and-design.mp4)
 - [x] **Enums** (level-2/enums) — 5 Shorts: [Part 1 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__enums__part-1-enum-internals.mp4) · [Part 2 (46s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__enums__part-2-enum-data-logic.mp4) · [Part 3 (47s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__enums__part-3-switch-expressions.mp4) · [Part 4 (45s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__enums__part-4-persistence-pitfalls.mp4) · [Part 5 (48s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__enums__part-5-specialized-collections.mp4)
 - [ ] **The String Constant Pool & StringBuilders** (level-2/the-string-constant-pool-stringbuilders)
 - [ ] **Modern Core APIs** (level-2/modern-core-apis)
-- [ ] **I/O and NIO.2** (level-2/io-and-nio2)
+- [x] **I/O and NIO.2** (level-2/io-and-nio2) — 5 Shorts: [Part 1 (54s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__io-and-nio2__part-1-streams-and-encoding.mp4) · [Part 2 (53s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__io-and-nio2__part-2-nio2-files.mp4) · [Part 3 (52s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__io-and-nio2__part-3-channels-and-buffers.mp4) · [Part 4 (51s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__io-and-nio2__part-4-zero-copy-and-mmap.mp4) · [Part 5 (50s)](https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-2/level-2__io-and-nio2__part-5-serialization-security.mp4)
 - [ ] **Network Socket Programming** (level-2/network-socket-programming)
 - [ ] **Regular Expressions and ReDoS Defense** (level-2/regular-expressions-and-redos-defense)
 
