@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-11-24T23:54:00.464Z",
-  "totalVideos": 134,
+  "updatedAt": "2026-11-25T00:00:59.241Z",
+  "totalVideos": 138,
   "videos": [
     {
       "chapterId": "level-0/anatomy-of-a-java-program",
@@ -2413,6 +2413,78 @@
       "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-7/relational-database-fundamentals-advanced-sql",
       "branchName": "topic/level-7/relational-database-fundamentals-advanced-sql",
       "renderedAt": "2026-11-24T23:54:00.463Z"
+    },
+    {
+      "chapterId": "level-8/automated-testing",
+      "level": "level-8",
+      "slug": "automated-testing",
+      "chapterTitle": "Automated Testing",
+      "partNumber": 1,
+      "totalParts": 4,
+      "partSlug": "part-1-testing-trophy",
+      "partTitle": "Stop Chasing 100% Coverage",
+      "format": "shorts",
+      "durationSec": 47,
+      "file": "level-8/automated-testing/part-1-testing-trophy.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-1-testing-trophy.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/automated-testing",
+      "branchName": "topic/level-8/automated-testing",
+      "renderedAt": "2026-11-24T23:57:16.293Z"
+    },
+    {
+      "chapterId": "level-8/automated-testing",
+      "level": "level-8",
+      "slug": "automated-testing",
+      "chapterTitle": "Automated Testing",
+      "partNumber": 2,
+      "totalParts": 4,
+      "partSlug": "part-2-mocking-and-slices",
+      "partTitle": "Mockito and Web Slices",
+      "format": "shorts",
+      "durationSec": 47.6,
+      "file": "level-8/automated-testing/part-2-mocking-and-slices.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-2-mocking-and-slices.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/automated-testing",
+      "branchName": "topic/level-8/automated-testing",
+      "renderedAt": "2026-11-24T23:58:34.243Z"
+    },
+    {
+      "chapterId": "level-8/automated-testing",
+      "level": "level-8",
+      "slug": "automated-testing",
+      "chapterTitle": "Automated Testing",
+      "partNumber": 3,
+      "totalParts": 4,
+      "partSlug": "part-3-testcontainers",
+      "partTitle": "Real Databases with Testcontainers",
+      "format": "shorts",
+      "durationSec": 46.5,
+      "file": "level-8/automated-testing/part-3-testcontainers.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-3-testcontainers.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/automated-testing",
+      "branchName": "topic/level-8/automated-testing",
+      "renderedAt": "2026-11-24T23:59:50.348Z"
+    },
+    {
+      "chapterId": "level-8/automated-testing",
+      "level": "level-8",
+      "slug": "automated-testing",
+      "chapterTitle": "Automated Testing",
+      "partNumber": 4,
+      "totalParts": 4,
+      "partSlug": "part-4-transactional-traps",
+      "partTitle": "The @Transactional Trap",
+      "format": "shorts",
+      "durationSec": 40.9,
+      "file": "level-8/automated-testing/part-4-transactional-traps.mp4",
+      "videoUrl": "https://github.com/ravishankar2463/java_hub_resources/releases/download/videos-level-8/level-8__automated-testing__part-4-transactional-traps.mp4",
+      "releaseTag": "videos-level-8",
+      "roadmapUrl": "https://ravishankar2463.github.io/java_hub/roadmap/level-8/automated-testing",
+      "branchName": "topic/level-8/automated-testing",
+      "renderedAt": "2026-11-25T00:00:59.240Z"
     }
   ]
 }
